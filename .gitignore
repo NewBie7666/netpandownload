@@ -1,0 +1,11 @@
+node_modules/
+dist/
+dist-electron/
+dist-server/
+release/
+.env
+.DS_Store
+npm-debug.log*
+*.log
+.dev-*.pid
+.dev-server.pid
