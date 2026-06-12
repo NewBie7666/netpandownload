@@ -1,29 +1,34 @@
-# Providers Placeholder
+# Providers
 
-This directory is reserved for a future Provider system.
+This directory contains the V0.6 Provider boundary.
 
 Current status:
 
-- No Provider system is enabled yet
+- Provider registry is enabled
+- Quark is the only registered Provider
 - Current Quark logic still lives in `server/services/quark/*`
 - Current Quark adapter still lives in `server/adapters/quarkApi.ts`
-- This round does not migrate any runtime code into this directory
+- V0.6 wraps Quark behavior without fully migrating adapter internals
 
-Future responsibility:
+Provider responsibility:
 
 - Match an input link or source
-- Resolve it into one or more downloadable resources
+- Resolve a share into normalized files
+- List provider folders
+- Return provider download results
 - Normalize source-specific behavior behind a common boundary
 
-Design sketch only, not a current code contract:
+Current code contract:
 
 ```ts
 interface Provider {
   id: string
   name: string
   match(input: string): boolean
-  resolve(input: string): Promise<ResolvedResource[]>
+  resolveShare(input: ResolveShareInput): Promise<ShareResult>
+  list(input: ListInput): Promise<ListResult>
+  getDownload(input: DownloadInput): Promise<DownloadResult>
 }
 ```
 
-The sketch above is only a planning note. It is not active in the current codebase.
+`match(input)` must be source-specific and conservative. The Quark Provider only matches Quark share links. Future Bilibili matching must use its own rules.

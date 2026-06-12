@@ -37,24 +37,24 @@ Bilibili support would introduce additional complexity around auth, DASH resourc
 Do not implement Bilibili in this round.
 
 ### Reason
-The provider boundary and downloader engine do not exist yet, so adding Bilibili now would couple new media logic to an unstable architecture.
+The downloader engine and first Provider boundary now exist, but Bilibili still adds separate auth, DASH, merge, and compliance concerns that should be handled after the Quark Provider wrapper has stabilized.
 
 ### Consequence
-Bilibili remains future work after provider and downloader foundations are in place.
+Bilibili remains future work after the Provider boundary is validated with Quark and the downloader workflow remains stable.
 
-## ADR-004 - Keep current Quark code outside the future Provider directory for now
+## ADR-004 - Wrap Quark with a first-stage Provider before moving internals
 
 ### Context
 Current Quark MVP behavior is already working through `server/services/quark/*`, `server/adapters/quarkApi.ts`, and `/api/quark/*`.
 
 ### Decision
-Do not migrate current Quark code into a new Provider abstraction in this round.
+Introduce a Quark Provider wrapper in `V0.6`, but keep Quark services and adapter internals in their current locations.
 
 ### Reason
-Early migration would add regression risk without immediate product benefit.
+Provider registration is needed before adding new sources, but moving the working Quark adapter internals at the same time would add avoidable regression risk.
 
 ### Consequence
-The working Quark code remains in place. Provider migration is deferred to `V0.6`.
+The Provider Registry is active and Quark is the first Provider. Existing Quark services/adapters remain the runtime implementation until a later, safer migration.
 
 ## ADR-005 - Keep `/api/quark/*` unchanged in the current stage
 
@@ -65,7 +65,7 @@ The current frontend and backend both depend on the existing Quark API paths.
 Keep `/api/quark/*` unchanged in this round.
 
 ### Reason
-The goal is direction setting and documentation, not API redesign.
+Provider abstraction is internal architecture work, not an API redesign.
 
 ### Consequence
 Current frontend behavior and integration points remain compatible while the long-term architecture is clarified.

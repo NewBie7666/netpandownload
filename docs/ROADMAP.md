@@ -68,7 +68,10 @@ Abstract Quark-specific logic behind a Provider boundary so multiple content sou
 ### Acceptance Criteria
 - A Provider contract exists for matching and resolving resources
 - Current Quark capability is represented through the new Provider boundary
+- `GET /api/providers/debug` exposes registered Provider status for local validation
+- Unsupported inputs return a readable `unsupported_provider` error
 - Existing user-visible Quark behavior remains functionally compatible
+- Existing `/api/quark/*` routes remain available and compatible
 
 ## V0.7 - Bilibili Provider
 

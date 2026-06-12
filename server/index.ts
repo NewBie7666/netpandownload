@@ -7,6 +7,7 @@ import { config, setRuntimePort } from './config.js'
 import { downloadsRouter } from './routes/downloads.js'
 import { AppError, fail } from './http.js'
 import { quarkRouter } from './routes/quark.js'
+import { providersRouter } from './routes/providers.js'
 
 export const app = express()
 const __filename = fileURLToPath(import.meta.url)
@@ -32,6 +33,7 @@ app.get('/api/health', (_req, res) => {
 
 app.use('/api/quark', quarkRouter)
 app.use('/api/downloads', downloadsRouter)
+app.use('/api/providers', providersRouter)
 
 if (desktopStaticEnabled) {
   app.use(express.static(desktopStaticDir))

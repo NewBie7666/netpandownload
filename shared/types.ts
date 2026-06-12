@@ -72,6 +72,12 @@ export interface DownloadSettingsResult {
   defaultDownloadDir: string
 }
 
+export interface ProviderDebugResult {
+  registered: string[]
+  matchedInput?: string
+  lastResolveStatus?: 'ok' | 'error'
+}
+
 export interface AddDownloadRequest {
   url: string
   fileName?: string

@@ -9,12 +9,19 @@ The current project runs as a local desktop-capable MVP:
 - `Local Express backend` remains the local API boundary.
 - `Quark-specific services` stay under `server/services/quark/*`.
 - `Quark adapter` stays under `server/adapters/quarkApi.ts`.
+- `Provider registry` is active with Quark as the first registered Provider.
 - `aria2` JSON-RPC control logic lives under `server/downloader/*`.
 - Download settings are stored in `data/settings.json` for plain development mode and under Electron `userData` for desktop mode.
 
 Electron shell and aria2 control logic are active. The aria2 sidecar starts only when `aria2c.exe` exists in the expected resource path.
 
-Provider abstraction, Bilibili support, ffmpeg merge, auto-update, and installer distribution are still future work.
+Bilibili support, ffmpeg merge, auto-update, and installer distribution are still future work.
+
+## Provider Status
+
+| Provider | API dependency | Downloader | Notes |
+| --- | --- | --- | --- |
+| Quark | `/api/quark/*` | aria2 / Proxy | V0.6 first-stage Provider wrapper |
 
 ## Current Download Data Flow
 
@@ -71,8 +78,10 @@ Local disk
 - `/api/downloads/*` endpoints expose local task control for the desktop downloader.
 
 ### Provider system
-- Future abstraction layer for converting an input link into one or more downloadable resources.
-- Current Quark code is not migrated yet.
+- Active abstraction layer for matching supported inputs and routing share/list/download operations to a Provider.
+- Current Quark Provider wraps existing Quark services instead of moving adapter internals.
+- `match(input)` must be source-specific and conservative. Quark only matches Quark share links.
+- Any future `ResolvedResource.raw` field is internal only; the frontend must not depend on or display it by default.
 - Bilibili is a future provider, not part of the current runtime.
 
 ### Downloader engine
@@ -90,10 +99,10 @@ Local disk
 
 - Current Quark code remains in `server/services/quark/*`.
 - Current Quark adapter remains in `server/adapters/quarkApi.ts`.
-- Current `/api/quark/*` routes remain unchanged.
-- Provider migration is postponed until `V0.6`.
+- Current `/api/quark/*` routes remain unchanged as the compatibility API.
+- The Quark Provider is a V0.6 wrapper over existing services, not a full adapter migration.
 
-This avoids breaking the working MVP before the provider boundary is stable.
+This keeps the working MVP stable while the Provider boundary becomes the internal direction for new sources.
 
 ## Future Bilibili Position
 
@@ -114,7 +123,7 @@ Compliance boundary for future Bilibili work:
 
 ## Why the Current Code Stays in Place
 
-The current MVP already has working Quark parsing and download logic. Moving it into a new provider abstraction now would increase regression risk without unlocking immediate user value.
+The current MVP already has working Quark parsing and download logic. Fully moving adapter internals into a new provider abstraction now would increase regression risk without unlocking immediate user value.
 
 The transition order stays:
 

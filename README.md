@@ -5,7 +5,7 @@ Current versions of this project run as a local Quark MVP with both:
 - `Web + Local Express` development mode
 - `Electron + Local Express` desktop-shell mode
 
-The long-term product direction is a **local desktop download client**. The Electron shell, local backend lifecycle, aria2 RPC control path, download task APIs, and download task UI are now implemented. **Bilibili provider support, ffmpeg integration, Provider abstraction migration, auto-update, and installer distribution are still not implemented**.
+The long-term product direction is a **local desktop download client**. The Electron shell, local backend lifecycle, Provider registry, Quark Provider wrapper, aria2 RPC control path, download task APIs, and download task UI are now implemented. **Bilibili provider support, ffmpeg integration, auto-update, and installer distribution are still not implemented**.
 
 ## Current State
 
@@ -13,6 +13,7 @@ The long-term product direction is a **local desktop download client**. The Elec
 - Backend: `Express + TypeScript`
 - Desktop shell: `Electron`
 - Current API surface stays under `/api/quark/*`
+- Provider registry is enabled with Quark as the first Provider
 - Supports:
   - Quark share parsing
   - File listing
@@ -112,7 +113,7 @@ powershell -ExecutionPolicy Bypass -File scripts/prepare-aria2.ps1
 
 - This does **not** include Bilibili support
 - This does **not** include ffmpeg merging
-- This does **not** include Provider abstraction migration
+- This does **not** include a Provider UI selector
 - This does **not** include auto-update
 - This does **not** include installer distribution
 - This does **not** change existing `/api/quark/*` routes
@@ -125,7 +126,7 @@ powershell -ExecutionPolicy Bypass -File scripts/prepare-aria2.ps1
 
 ## Compatibility Notes
 
-- Existing Quark code remains in `server/services/quark/*` and `server/adapters/quarkApi.ts`
-- Provider abstraction is a future step, not part of the current runtime
+- Existing Quark code remains in `server/services/quark/*` and `server/adapters/quarkApi.ts`; the V0.6 Quark Provider is a first-stage wrapper
+- Provider debug status is available at `GET /api/providers/debug`
 - Current download behavior supports both browser delivery and embedded aria2 delivery
 - Electron manages the local desktop shell, backend lifecycle, and aria2 sidecar lifecycle
