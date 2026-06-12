@@ -5,6 +5,7 @@ import { spawn } from 'node:child_process'
 import type {
   AddDownloadRequest,
   AddDownloadResult,
+  DownloadHealthResult,
   DownloadResult,
   DownloadTask,
   DownloadTasksResult,
@@ -202,6 +203,17 @@ export async function listDownloadTasks(): Promise<DownloadTasksResult> {
     enabled: true,
     defaultDir,
     tasks
+  }
+}
+
+export async function getDownloadHealth(): Promise<DownloadHealthResult> {
+  const availability = getAria2Availability()
+  const defaultDir = await ensureDownloadDir()
+
+  return {
+    enabled: availability.enabled,
+    message: availability.enabled ? undefined : availability.message,
+    defaultDir
   }
 }
 

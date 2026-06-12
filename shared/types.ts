@@ -61,6 +61,12 @@ export interface DownloadTasksResult {
   tasks: DownloadTask[]
 }
 
+export interface DownloadHealthResult {
+  enabled: boolean
+  message?: string
+  defaultDir: string
+}
+
 export interface AddDownloadRequest {
   url: string
   fileName?: string

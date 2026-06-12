@@ -3,13 +3,12 @@
 ## V0.3.x - Web MVP Closing
 
 ### Goal
-Stabilize the current `Web + Local Express` Quark MVP around parsing, QR login, link resolution, proxy download, and mock-mode validation.
+Stabilize the `Web + Local Express` Quark MVP around parsing, QR login, link resolution, proxy download, and mock-mode validation.
 
 ### Not in Scope
-- No Electron shell
-- No aria2 integration
 - No Bilibili provider
 - No ffmpeg merge workflow
+- No provider abstraction migration
 
 ### Acceptance Criteria
 - Quark share parsing works through existing `/api/quark/*`
@@ -21,10 +20,9 @@ Stabilize the current `Web + Local Express` Quark MVP around parsing, QR login, 
 ## V0.4 - Electron Desktop Shell
 
 ### Goal
-Wrap the existing local app in an Electron shell without replacing the current Vue renderer or local Express backend.
+Wrap the existing local app in an Electron shell without replacing the Vue renderer or local Express backend.
 
 ### Not in Scope
-- No aria2
 - No Bilibili
 - No provider abstraction migration
 - No downloader rewrite
@@ -38,19 +36,23 @@ Wrap the existing local app in an Electron shell without replacing the current V
 ## V0.5 - Embedded aria2 Downloader
 
 ### Goal
-Introduce an embedded downloader engine based on aria2 for multithreaded local downloads and basic task management.
+Introduce aria2 JSON-RPC control for multithreaded local downloads and basic task management.
 
 ### Not in Scope
 - No Bilibili provider
 - No full provider abstraction rewrite
 - No ffmpeg merge workflow
+- No auto-update
+- No installer distribution
 
 ### Acceptance Criteria
 - Electron starts aria2 as a local sidecar when `aria2c.exe` is present
 - The backend exposes local download task APIs under `/api/downloads/*`
+- The backend exposes downloader health at `/api/downloads/health`
 - Existing Quark download results can be handed to aria2 without changing `/api/quark/*`
 - Basic task lifecycle is visible: active, waiting, paused, error, complete, removed
 - The app remains usable when `aria2c.exe` is missing
+- Source code does not commit `aria2c.exe`; release builds can include it when prepared before packaging
 
 ## V0.6 - Provider Architecture
 
@@ -76,7 +78,7 @@ Add a Bilibili provider on top of the Provider system.
 - No payment bypass
 - No membership bypass
 - No region restriction bypass
-- No bulk搬运 tool positioning
+- No bulk redistribution tool positioning
 
 ### Acceptance Criteria
 - Provider can identify supported Bilibili inputs
@@ -103,4 +105,4 @@ Add optional ffmpeg-based merge capabilities and improve the local download task
 - Do not implement membership bypass
 - Do not implement region restriction bypass
 - Do not implement DRM bypass
-- Do not position the project as a bulk搬运 tool
+- Do not position the project as a bulk redistribution tool

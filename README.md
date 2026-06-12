@@ -5,7 +5,7 @@ Current versions of this project run as a local Quark MVP with both:
 - `Web + Local Express` development mode
 - `Electron + Local Express` desktop-shell mode
 
-The long-term product direction is a **local desktop download client**. The minimal Electron shell and embedded aria2 downloader integration are now included, but **Bilibili provider support, ffmpeg integration, and Provider abstraction are still not implemented**.
+The long-term product direction is a **local desktop download client**. The Electron shell, local backend lifecycle, aria2 RPC control path, download task APIs, and download task UI are now implemented. **Bilibili provider support, ffmpeg integration, Provider abstraction migration, auto-update, and installer distribution are still not implemented**.
 
 ## Current State
 
@@ -19,9 +19,10 @@ The long-term product direction is a **local desktop download client**. The mini
   - Folder navigation
   - QR login session flow
   - Download link resolution
-  - Save-to-drive fallback for restricted cases
-  - Proxy download for large files
-  - Embedded aria2 task control in the desktop client
+  - Save-to-drive fallback for supported restricted files
+  - Local proxy download for links that require login state
+  - Optional aria2 delivery for local multithreaded downloads
+  - Download task API and UI in the desktop client
   - Mock mode for local validation
 
 ## Long-Term Direction
@@ -83,19 +84,32 @@ QUARK_MOCK=false
 
 ## Embedded Downloader
 
-- The desktop client can use embedded `aria2` for multithreaded local downloads
+- The desktop client can control local `aria2` through JSON-RPC for multithreaded downloads
 - `aria2c.exe` must exist at `resources/aria2/win/aria2c.exe`
+- The source repository does not commit `aria2c.exe`
+- Developers can prepare it with:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/prepare-aria2.ps1
+```
+
+- Official portable release builds should run the prepare script before `npm run dist:win` so the packaged app includes `aria2c.exe`
 - Default download directory: `Downloads/QuarkDownloads`
 - If `aria2c.exe` is missing:
   - Quark parsing still works
   - Browser download still works
+  - Local proxy download still works
   - The built-in downloader is shown as unavailable
 - Large files are better suited to the built-in downloader than normal browser download
+- Downloader health is available at `GET /api/downloads/health`
 
 ## Current Boundaries
 
 - This does **not** include Bilibili support
 - This does **not** include ffmpeg merging
+- This does **not** include Provider abstraction migration
+- This does **not** include auto-update
+- This does **not** include installer distribution
 - This does **not** change existing `/api/quark/*` routes
 
 ## Project Docs

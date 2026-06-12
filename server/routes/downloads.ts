@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { ok } from '../http.js'
 import {
   addDownloadTask,
+  getDownloadHealth,
   getDownloadTaskStatus,
   listDownloadTasks,
   openDownloadDirectory,
@@ -24,6 +25,15 @@ downloadsRouter.post('/add', async (req, res, next) => {
 downloadsRouter.get('/active', async (_req, res, next) => {
   try {
     const result = await listDownloadTasks()
+    res.json(ok(result))
+  } catch (error) {
+    next(error)
+  }
+})
+
+downloadsRouter.get('/health', async (_req, res, next) => {
+  try {
+    const result = await getDownloadHealth()
     res.json(ok(result))
   } catch (error) {
     next(error)
