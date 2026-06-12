@@ -23,6 +23,8 @@ The long-term product direction is a **local desktop download client**. The Elec
   - Local proxy download for links that require login state
   - Optional aria2 delivery for local multithreaded downloads
   - Download task API and UI in the desktop client
+  - Configurable download directory
+  - Download task removal with optional local file deletion
   - Mock mode for local validation
 
 ## Long-Term Direction
@@ -95,6 +97,9 @@ powershell -ExecutionPolicy Bypass -File scripts/prepare-aria2.ps1
 
 - Official portable release builds should run the prepare script before `npm run dist:win` so the packaged app includes `aria2c.exe`
 - Default download directory: `Downloads/QuarkDownloads`
+- Users can change the download directory from the desktop UI. Development mode stores this in `data/settings.json`; Electron desktop mode stores it under Electron `userData`.
+- Removing a task supports two modes: remove only the aria2 task record, or remove the task record and its local file.
+- Local file deletion is restricted to files that belong to the aria2 task and are inside the configured or default download directory.
 - If `aria2c.exe` is missing:
   - Quark parsing still works
   - Browser download still works

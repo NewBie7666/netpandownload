@@ -67,6 +67,11 @@ export interface DownloadHealthResult {
   defaultDir: string
 }
 
+export interface DownloadSettingsResult {
+  downloadDir: string
+  defaultDownloadDir: string
+}
+
 export interface AddDownloadRequest {
   url: string
   fileName?: string
@@ -75,6 +80,10 @@ export interface AddDownloadRequest {
 
 export interface AddDownloadResult {
   gid: string
+}
+
+export interface RemoveDownloadRequest {
+  deleteFile?: boolean
 }
 
 export interface OpenDownloadDirResult {

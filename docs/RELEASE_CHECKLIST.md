@@ -1,4 +1,4 @@
-# V0.5.3 Release Checklist
+# V0.5.4 Release Checklist
 
 This checklist records release readiness for the Electron + Local Express + aria2 portable desktop MVP.
 
@@ -22,6 +22,52 @@ This checklist records release readiness for the Electron + Local Express + aria
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/prepare-aria2.ps1
 ```
+
+## Download Directory Settings
+
+Expected behavior:
+
+- First run uses `Downloads/QuarkDownloads`.
+- Desktop users can choose a download directory from the task panel.
+- Development / plain Express mode stores settings in `data/settings.json`.
+- Electron desktop mode stores settings under Electron `userData`.
+- New aria2 tasks use the configured directory unless a one-off `dir` is passed to `/api/downloads/add`.
+
+Validation:
+
+- [ ] `GET /api/downloads/settings` returns the effective directory and default directory.
+- [ ] `POST /api/downloads/settings` creates and saves a valid directory.
+- [ ] `/api/downloads/health` reports the configured directory in `defaultDir`.
+- [ ] `/api/downloads/active` reports the configured directory in `defaultDir`.
+- [ ] A newly added aria2 task uses the configured directory.
+- [ ] "Open download directory" opens the configured directory.
+
+Result:
+
+- Status: passed on 2026-06-12.
+- Notes: `POST /api/downloads/settings` saved `D:\codeproject\qarkzhuanlianjie\tmp\v054-downloads-2`; `/health`, `/active`, and a newly added aria2 task all reported that directory. Portable mode returned the default user Downloads directory before any desktop setting was saved.
+
+## Task Removal Behavior
+
+Expected behavior:
+
+- Removing a task without `deleteFile` keeps the local file.
+- Removing a task with `deleteFile=true` deletes only the aria2 task file.
+- The backend never accepts an arbitrary frontend file path.
+- File deletion is limited to the configured or default download directory.
+
+Validation:
+
+- [ ] `POST /api/downloads/remove/:gid` with `{ "deleteFile": false }` removes only the record.
+- [ ] `POST /api/downloads/remove/:gid` with `{ "deleteFile": true }` removes the record and local file.
+- [ ] Directory deletion is rejected.
+- [ ] Files outside allowed download directories are rejected.
+- [ ] Completed, paused, and error tasks return either success or a readable error.
+
+Result:
+
+- Status: partially passed on 2026-06-12.
+- Notes: `{ "deleteFile": false }` removed the aria2 task record successfully. `{ "deleteFile": true }` returned readable `download_file_missing` for the mock URL because no real local file was created. Real local-file deletion still needs a long-running or completed real download artifact to validate end to end.
 
 ## No aria2 Scenario
 
@@ -147,11 +193,11 @@ Result:
 - Status: passed on 2026-06-12.
 - Notes: Closed the portable app and verified no app-owned Quark, node, or aria2 processes remained.
 
-## V0.5.3 Validation Record
+## V0.5.4 Validation Record
 
-- Commit: `v0.5.3 release checklist and downloader status cleanup`
-- Tag: `v0.5.3`
-- Build result: `npm run build` passed.
-- Electron dev result: started in no-aria2, aria2-enabled, and mock modes; long-running command timed out as expected after startup, while API health checks passed.
-- Portable result: `npm run dist:win` passed, portable exe launched, and download health returned `enabled=true`.
-- Known limitations: Real 1GB+ Quark download was blocked by `download_restricted` for the available test share, so the real large-file aria2 transfer could not be observed for 1-3 minutes in this run.
+- Commit:
+- Tag:
+- Build result: `npm run build` and `npm run build:electron` passed.
+- Electron dev result: started in mock mode; long-running command timed out as expected after startup, while API checks passed.
+- Portable result: `npm run dist:win` passed, portable exe launched, download health returned `enabled=true`, and settings API responded on the actual backend port.
+- Known limitations: `deleteFile=true` was validated for readable error behavior with mock tasks but not against a completed real local file in this run. Real 1GB+ Quark download remains subject to Quark risk control and login state.

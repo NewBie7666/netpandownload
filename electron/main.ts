@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain } from 'electron'
 import { randomBytes } from 'node:crypto'
 import { spawn, type ChildProcessByStdio } from 'node:child_process'
 import { access } from 'node:fs/promises'
@@ -12,6 +12,7 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const appRoot = path.resolve(__dirname, '..', '..')
 const distServerEntry = path.resolve(appRoot, 'dist-server', 'server', 'index.js')
+const preloadEntry = path.resolve(__dirname, 'preload.js')
 const defaultBackendPort = 3000
 const aria2RpcPort = 16800
 let backendPort = defaultBackendPort
@@ -44,6 +45,7 @@ function createWindow() {
     show: false,
     autoHideMenuBar: true,
     webPreferences: {
+      preload: preloadEntry,
       contextIsolation: true,
       nodeIntegration: false
     }
@@ -227,6 +229,7 @@ async function startBackend() {
   process.env.QUARK_EMBEDDED_SERVER = 'true'
   process.env.QUARK_DESKTOP_STATIC = process.env.ELECTRON_RENDERER_URL ? 'false' : 'true'
   process.env.QUARK_DESKTOP_ROOT = appRoot
+  process.env.NETPAN_DATA_DIR = path.join(app.getPath('userData'), 'data')
 
   try {
     const serverModule = await import(pathToFileURL(distServerEntry).href)
@@ -322,6 +325,14 @@ async function bootstrapDesktop() {
   createWindow()
   await mainWindow?.loadURL(getRendererUrl())
 }
+
+ipcMain.handle('select-download-dir', async () => {
+  const result = await dialog.showOpenDialog({
+    properties: ['openDirectory']
+  })
+
+  return result.canceled ? null : result.filePaths[0] || null
+})
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {

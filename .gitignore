@@ -9,5 +9,6 @@ npm-debug.log*
 *.log
 .dev-*.pid
 .dev-server.pid
+data/settings.json
 src/*.v05-broken-backup.*
 resources/aria2/win/aria2c.exe

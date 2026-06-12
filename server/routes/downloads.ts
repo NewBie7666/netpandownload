@@ -3,12 +3,14 @@ import { ok } from '../http.js'
 import {
   addDownloadTask,
   getDownloadHealth,
+  getDownloadSettings,
   getDownloadTaskStatus,
   listDownloadTasks,
   openDownloadDirectory,
   pauseDownloadTask,
   removeDownloadTask,
-  resumeDownloadTask
+  resumeDownloadTask,
+  updateDownloadSettings
 } from '../downloader/downloadService.js'
 
 export const downloadsRouter = Router()
@@ -34,6 +36,24 @@ downloadsRouter.get('/active', async (_req, res, next) => {
 downloadsRouter.get('/health', async (_req, res, next) => {
   try {
     const result = await getDownloadHealth()
+    res.json(ok(result))
+  } catch (error) {
+    next(error)
+  }
+})
+
+downloadsRouter.get('/settings', async (_req, res, next) => {
+  try {
+    const result = await getDownloadSettings()
+    res.json(ok(result))
+  } catch (error) {
+    next(error)
+  }
+})
+
+downloadsRouter.post('/settings', async (req, res, next) => {
+  try {
+    const result = await updateDownloadSettings(req.body)
     res.json(ok(result))
   } catch (error) {
     next(error)
@@ -69,7 +89,7 @@ downloadsRouter.post('/resume/:gid', async (req, res, next) => {
 
 downloadsRouter.post('/remove/:gid', async (req, res, next) => {
   try {
-    const result = await removeDownloadTask(String(req.params.gid || ''))
+    const result = await removeDownloadTask(String(req.params.gid || ''), req.body)
     res.json(ok(result))
   } catch (error) {
     next(error)

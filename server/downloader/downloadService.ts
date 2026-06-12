@@ -1,4 +1,4 @@
-import { mkdir } from 'node:fs/promises'
+import { mkdir, rm, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import path from 'node:path'
 import { spawn } from 'node:child_process'
@@ -6,13 +6,20 @@ import type {
   AddDownloadRequest,
   AddDownloadResult,
   DownloadHealthResult,
+  DownloadSettingsResult,
   DownloadResult,
   DownloadTask,
   DownloadTasksResult,
-  OpenDownloadDirResult
+  OpenDownloadDirResult,
+  RemoveDownloadRequest
 } from '../../shared/types.js'
 import { getRuntimePort } from '../config.js'
 import { AppError } from '../http.js'
+import {
+  getConfiguredDownloadDir,
+  getDownloadSettings as readDownloadSettings,
+  saveDownloadSettings
+} from './settings.js'
 import {
   aria2AddUri,
   aria2Pause,
@@ -48,6 +55,10 @@ export function getDefaultDownloadDir() {
 async function ensureDownloadDir(dir = getDefaultDownloadDir()) {
   await mkdir(dir, { recursive: true })
   return dir
+}
+
+async function getEffectiveDownloadDir() {
+  return ensureDownloadDir(await getConfiguredDownloadDir(getDefaultDownloadDir()))
 }
 
 function buildLocalBackendBaseUrl() {
@@ -153,6 +164,50 @@ function normalizeTask(task: Aria2TaskPayload): DownloadTask {
   }
 }
 
+function isPathInside(childPath: string, parentPath: string) {
+  const relative = path.relative(path.resolve(parentPath), path.resolve(childPath))
+  return Boolean(relative) && !relative.startsWith('..') && !path.isAbsolute(relative)
+}
+
+async function ensureSafeFileDeletePath(filePath: string) {
+  const resolvedFilePath = path.resolve(filePath)
+  const allowedDirs = [
+    await getEffectiveDownloadDir(),
+    await ensureDownloadDir(getDefaultDownloadDir())
+  ]
+
+  if (!allowedDirs.some((dir) => isPathInside(resolvedFilePath, dir))) {
+    throw new AppError('download_file_delete_forbidden', '只能删除下载目录内的任务文件', 403)
+  }
+
+  let fileStat
+  try {
+    fileStat = await stat(resolvedFilePath)
+  } catch {
+    throw new AppError('download_file_missing', '未找到该任务对应的本地文件')
+  }
+
+  if (!fileStat.isFile()) {
+    throw new AppError('download_file_delete_forbidden', '只能删除普通文件，不能删除目录', 403)
+  }
+
+  return resolvedFilePath
+}
+
+async function deleteTaskFile(task: Aria2TaskPayload) {
+  const filePath = String(task.files?.[0]?.path || '').trim()
+  if (!filePath) {
+    throw new AppError('download_file_missing', '未找到该任务对应的本地文件路径')
+  }
+
+  const safePath = await ensureSafeFileDeletePath(filePath)
+  try {
+    await rm(safePath, { force: false })
+  } catch {
+    throw new AppError('download_file_delete_failed', '删除本地文件失败')
+  }
+}
+
 export async function addDownloadTask(input: AddDownloadRequest): Promise<AddDownloadResult> {
   if (!getAria2Availability().enabled) {
     throw new AppError('aria2_unavailable', getAria2Availability().message, 503)
@@ -161,7 +216,7 @@ export async function addDownloadTask(input: AddDownloadRequest): Promise<AddDow
   const normalizedUrl = normalizeRequestedDownloadUrl(input.url)
   ensureDownloadUrlAllowed(input.url, normalizedUrl)
 
-  const dir = await ensureDownloadDir(input.dir || getDefaultDownloadDir())
+  const dir = await ensureDownloadDir(input.dir || (await getEffectiveDownloadDir()))
   const options = getDefaultDownloadOptions(input.fileName, dir)
   const rpcOptions = options.out ? options : { ...options, out: undefined }
   const sanitizedOptions = Object.entries(rpcOptions).reduce<Record<string, string>>(
@@ -180,7 +235,7 @@ export async function addDownloadTask(input: AddDownloadRequest): Promise<AddDow
 
 export async function listDownloadTasks(): Promise<DownloadTasksResult> {
   const availability = getAria2Availability()
-  const defaultDir = await ensureDownloadDir()
+  const defaultDir = await getEffectiveDownloadDir()
 
   if (!availability.enabled) {
     return {
@@ -208,13 +263,21 @@ export async function listDownloadTasks(): Promise<DownloadTasksResult> {
 
 export async function getDownloadHealth(): Promise<DownloadHealthResult> {
   const availability = getAria2Availability()
-  const defaultDir = await ensureDownloadDir()
+  const defaultDir = await getEffectiveDownloadDir()
 
   return {
     enabled: availability.enabled,
     message: availability.enabled ? undefined : availability.message,
     defaultDir
   }
+}
+
+export async function getDownloadSettings(): Promise<DownloadSettingsResult> {
+  return readDownloadSettings(getDefaultDownloadDir())
+}
+
+export async function updateDownloadSettings(input: { downloadDir?: string }): Promise<DownloadSettingsResult> {
+  return saveDownloadSettings(input, getDefaultDownloadDir())
 }
 
 export async function getDownloadTaskStatus(gid: string) {
@@ -246,13 +309,17 @@ export async function resumeDownloadTask(gid: string) {
   return { gid }
 }
 
-export async function removeDownloadTask(gid: string) {
+export async function removeDownloadTask(gid: string, input: RemoveDownloadRequest = {}) {
   const availability = getAria2Availability()
   if (!availability.enabled) {
     throw new AppError('aria2_unavailable', availability.message, 503)
   }
 
   const task = await aria2TellStatus(gid)
+  if (input.deleteFile) {
+    await deleteTaskFile(task)
+  }
+
   if (task.status === 'complete' || task.status === 'error' || task.status === 'removed') {
     await aria2RemoveDownloadResult(gid)
   } else {
@@ -263,7 +330,7 @@ export async function removeDownloadTask(gid: string) {
 }
 
 export async function openDownloadDirectory(): Promise<OpenDownloadDirResult> {
-  const dir = await ensureDownloadDir()
+  const dir = await getEffectiveDownloadDir()
   spawn('explorer.exe', [dir], {
     detached: true,
     stdio: 'ignore'

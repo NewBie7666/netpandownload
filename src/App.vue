@@ -6,7 +6,8 @@ import {
   openDownloadDir,
   pauseDownloadTask,
   removeDownloadTask,
-  resumeDownloadTask
+  resumeDownloadTask,
+  saveDownloadSettings
 } from './api/downloads'
 import {
   createQuarkAuthQrcode,
@@ -30,6 +31,14 @@ interface PathItem {
   name: string
 }
 
+declare global {
+  interface Window {
+    desktopApi?: {
+      selectDownloadDir: () => Promise<string | null>
+    }
+  }
+}
+
 const shareUrl = ref('')
 const passcode = ref('')
 const shareId = ref('')
@@ -51,6 +60,7 @@ const downloaderEnabled = ref(false)
 const downloaderMessage = ref('')
 const downloaderDefaultDir = ref('')
 const taskActionGid = ref('')
+const deleteTaskDialog = ref<DownloadTask | null>(null)
 
 let authPollTimer: number | undefined
 let taskPollTimer: number | undefined
@@ -338,16 +348,44 @@ async function toggleDownloadTask(task: DownloadTask) {
   }
 }
 
-async function deleteDownloadTask(task: DownloadTask) {
+function requestDeleteDownloadTask(task: DownloadTask) {
+  deleteTaskDialog.value = task
+}
+
+async function confirmDeleteDownloadTask(deleteFile: boolean) {
+  const task = deleteTaskDialog.value
+  if (!task) return
+
   clearMessages()
   taskActionGid.value = task.gid
   try {
-    await removeDownloadTask(task.gid)
+    await removeDownloadTask(task.gid, { deleteFile })
+    noticeMessage.value = deleteFile ? '下载记录和本地文件已删除' : '下载记录已删除'
+    deleteTaskDialog.value = null
     await refreshDownloadTasks(true)
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '删除下载任务失败'
   } finally {
     taskActionGid.value = ''
+  }
+}
+
+async function selectDownloadDirectory() {
+  clearMessages()
+  if (!window.desktopApi?.selectDownloadDir) {
+    errorMessage.value = '请在桌面客户端中选择下载目录'
+    return
+  }
+
+  try {
+    const selectedDir = await window.desktopApi.selectDownloadDir()
+    if (!selectedDir) return
+    const result = await saveDownloadSettings(selectedDir)
+    downloaderDefaultDir.value = result.downloadDir
+    noticeMessage.value = `下载目录已设置为：${result.downloadDir}`
+    await refreshDownloadTasks(true)
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : '设置下载目录失败'
   }
 }
 
@@ -506,7 +544,10 @@ onBeforeUnmount(() => {
             <p class="path-text">内置下载器：{{ downloaderEnabled ? '可用' : '不可用' }}</p>
             <p class="path-text">默认下载目录：{{ downloaderDefaultDir || '正在读取下载目录...' }}</p>
           </div>
-          <button class="ghost-button" type="button" @click="openDownloaderDir">打开下载目录</button>
+          <div class="task-header-actions">
+            <button class="ghost-button" type="button" @click="selectDownloadDirectory">选择下载目录</button>
+            <button class="ghost-button" type="button" @click="openDownloaderDir">打开下载目录</button>
+          </div>
         </div>
 
         <div v-if="!downloaderEnabled" class="downloader-status">
@@ -553,7 +594,7 @@ onBeforeUnmount(() => {
                     class="ghost-button"
                     type="button"
                     :disabled="taskActionGid === task.gid"
-                    @click="deleteDownloadTask(task)"
+                    @click="requestDeleteDownloadTask(task)"
                   >
                     删除
                   </button>
@@ -628,6 +669,28 @@ onBeforeUnmount(() => {
           </button>
           <button class="primary-button" type="button" @click="useBuiltInDownloader">
             用内置下载器下载
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="deleteTaskDialog" class="modal-mask" @click.self="deleteTaskDialog = null">
+      <div class="modal delete-modal">
+        <div class="modal-header">
+          <h3>删除下载任务</h3>
+          <button class="icon-button" type="button" aria-label="关闭" @click="deleteTaskDialog = null">
+            x
+          </button>
+        </div>
+        <p class="modal-file">{{ deleteTaskDialog.fileName }}</p>
+        <p class="delete-note">请选择删除方式。本地文件只会在确认后删除。</p>
+        <div class="modal-actions">
+          <button class="ghost-button" type="button" @click="deleteTaskDialog = null">取消</button>
+          <button class="ghost-button" type="button" @click="confirmDeleteDownloadTask(false)">
+            只删除记录
+          </button>
+          <button class="danger-button" type="button" @click="confirmDeleteDownloadTask(true)">
+            删除记录并删除本地文件
           </button>
         </div>
       </div>

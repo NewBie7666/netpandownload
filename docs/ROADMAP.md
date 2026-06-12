@@ -51,6 +51,8 @@ Introduce aria2 JSON-RPC control for multithreaded local downloads and basic tas
 - The backend exposes downloader health at `/api/downloads/health`
 - Existing Quark download results can be handed to aria2 without changing `/api/quark/*`
 - Basic task lifecycle is visible: active, waiting, paused, error, complete, removed
+- Users can configure the default download directory
+- Removing a task can either keep or delete the local file, with backend path safety checks
 - The app remains usable when `aria2c.exe` is missing
 - Source code does not commit `aria2c.exe`; release builds can include it when prepared before packaging
 

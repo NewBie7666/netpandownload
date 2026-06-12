@@ -2,9 +2,11 @@ import type {
   AddDownloadResult,
   AddDownloadRequest,
   ApiResponse,
+  DownloadSettingsResult,
   DownloadTask,
   DownloadTasksResult,
-  OpenDownloadDirResult
+  OpenDownloadDirResult,
+  RemoveDownloadRequest
 } from '../../shared/types'
 
 async function postJson<T>(url: string, body: unknown): Promise<T> {
@@ -43,6 +45,14 @@ export function fetchDownloadTasks() {
   return getJson<DownloadTasksResult>('/api/downloads/active')
 }
 
+export function fetchDownloadSettings() {
+  return getJson<DownloadSettingsResult>('/api/downloads/settings')
+}
+
+export function saveDownloadSettings(downloadDir: string) {
+  return postJson<DownloadSettingsResult>('/api/downloads/settings', { downloadDir })
+}
+
 export function fetchDownloadTaskStatus(gid: string) {
   return getJson<DownloadTask>(`/api/downloads/status/${encodeURIComponent(gid)}`)
 }
@@ -55,8 +65,8 @@ export function resumeDownloadTask(gid: string) {
   return postJson<{ gid: string }>(`/api/downloads/resume/${encodeURIComponent(gid)}`, {})
 }
 
-export function removeDownloadTask(gid: string) {
-  return postJson<{ gid: string }>(`/api/downloads/remove/${encodeURIComponent(gid)}`, {})
+export function removeDownloadTask(gid: string, payload: RemoveDownloadRequest = {}) {
+  return postJson<{ gid: string }>(`/api/downloads/remove/${encodeURIComponent(gid)}`, payload)
 }
 
 export function openDownloadDir() {
