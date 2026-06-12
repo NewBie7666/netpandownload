@@ -113,6 +113,28 @@ Use `yt-dlp` as a local sidecar so the Bilibili Provider can parse public resour
 - Bilibili `DownloadResult` can be handed to `/api/downloads/add`
 - Quark Provider and `/api/quark/*` remain compatible
 
+## V0.8.1 - Provider Main Entry and UI Access
+
+### Goal
+Make the Provider API the main frontend resource flow so users can paste either a Quark share link or a Bilibili video link in the same input.
+
+### Not in Scope
+- No ffmpeg merge workflow
+- No Bilibili login state
+- No paid/member/region/DRM bypass
+- No complex Provider selector UI
+- No changes to `/api/quark/*`
+- No changes to `/api/downloads/*`
+
+### Acceptance Criteria
+- `POST /api/providers/resolve` returns `{ providerId, share }`
+- `POST /api/providers/list` returns `{ providerId, list }`
+- `POST /api/providers/download` returns `{ providerId, download }`
+- The Vue main flow uses `/api/providers/*`
+- Quark links still parse and browse normally
+- Bilibili links enter the Bilibili Provider path and show either real public-resource results or stable fallback behavior
+- Existing `/api/quark/*` and `/api/downloads/*` remain compatible
+
 ## V0.9 - ffmpeg Merge and Download Task Enhancements
 
 ### Goal

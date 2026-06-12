@@ -35,6 +35,23 @@ export interface DownloadResult {
   cached: boolean
 }
 
+export type ProviderId = 'quark' | 'bilibili'
+
+export interface ProviderShareResult {
+  providerId: ProviderId
+  share: ShareResult
+}
+
+export interface ProviderListResult {
+  providerId: ProviderId
+  list: ListResult
+}
+
+export interface ProviderDownloadResult {
+  providerId: ProviderId
+  download: DownloadResult
+}
+
 export type DownloadTaskStatus =
   | 'active'
   | 'waiting'

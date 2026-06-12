@@ -157,13 +157,33 @@ Validation:
 - [ ] `GET /api/providers/debug` returns `registered: ["quark", "bilibili"]`.
 - [ ] `GET /api/providers/debug?input=<quark-share-url>` reports Quark as matched.
 - [ ] `GET /api/providers/debug?input=<bilibili-url>` reports Bilibili as matched.
+- [ ] `POST /api/providers/resolve` returns `{ providerId, share }`.
+- [ ] `POST /api/providers/list` returns `{ providerId, list }`.
+- [ ] `POST /api/providers/download` returns `{ providerId, download }`.
 - [ ] Unsupported input returns `unsupported_provider` from resolve debug.
 - [ ] Provider Registry does not alter `/api/quark/*` response contracts.
 
 Result:
 
 - Status: passed on 2026-06-12.
-- Notes: `GET /api/providers/debug` returned `["quark", "bilibili"]`. Quark input matched `quark`; Bilibili input matched `bilibili`; unsupported input returned `unsupported_provider` with a readable Chinese message. Existing `/api/quark/share` returned the expected mock response under `QUARK_MOCK=true`.
+- Notes: `GET /api/providers/debug` returned `["quark", "bilibili"]`. Quark input matched `quark`; Bilibili input matched `bilibili`; unsupported input returned `unsupported_provider` with a readable Chinese message. V0.8.1 adds formal Provider entry points for frontend use while keeping debug routes for smoke validation.
+
+## Provider UI Entry
+
+Validation:
+
+- [ ] The primary input label is `资源链接`.
+- [ ] The placeholder mentions both Quark share links and Bilibili video links.
+- [ ] Quark link input uses `/api/providers/resolve` and returns `providerId=quark`.
+- [ ] Bilibili link input uses `/api/providers/resolve` and returns `providerId=bilibili` or stable fallback behavior.
+- [ ] Folder navigation uses `/api/providers/list`.
+- [ ] Download link generation uses `/api/providers/download`.
+- [ ] Existing QR login controls remain visible for Quark use cases.
+
+Result:
+
+- Status: passed on 2026-06-12.
+- Notes: Browser UI showed `资源链接`, placeholder for Quark/Bilibili input, and `解析资源`. Quark input listed mock Quark files. Bilibili input entered the Provider path and listed Bilibili mock fallback files. Download modal still opened with browser download, copy, and built-in downloader actions.
 
 ## Bilibili Provider
 
@@ -279,3 +299,14 @@ Result:
 - Portable result: Portable exe launched, download health returned `enabled=true`, and Provider debug returned both providers.
 - Provider result: Bilibili match and mock fallback passed; real yt-dlp parse was blocked by Bilibili HTTP 412 for the sampled URL.
 - Known limitations: No ffmpeg/DASH merge, no Bilibili login state, no paid/member/region/DRM handling, and real Bilibili parsing may fallback when Bilibili rejects anonymous yt-dlp requests.
+
+## V0.8.1 Validation Record
+
+- Commit:
+- Tag:
+- Build result: `npm run build`, `npm run build:electron`, and `npm run dist:win` passed.
+- Electron dev result: `npm run electron:dev` stayed running through startup; `/api/health` and `/api/providers/debug` passed on port `3000`; cleanup left no app-owned node/electron/aria2 process.
+- Portable result: `npm run dist:win` generated the portable package.
+- Provider result: Formal `/api/providers/resolve`, `/api/providers/list`, and `/api/providers/download` passed for Quark mock flow and Bilibili mock fallback flow.
+- UI result: Main input now supports resource links. Quark and Bilibili UI flows both reached the file list; Bilibili download modal opened from Provider download.
+- Known limitations: Real Bilibili parsing is still subject to yt-dlp/Bilibili HTTP 412 behavior in this environment. No ffmpeg/DASH merge, Bilibili login state, paid/member/region/DRM support.

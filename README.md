@@ -5,14 +5,15 @@ Current versions of this project run as a local Quark MVP with both:
 - `Web + Local Express` development mode
 - `Electron + Local Express` desktop-shell mode
 
-The long-term product direction is a **local desktop download client**. The Electron shell, local backend lifecycle, Provider registry, Quark Provider wrapper, Bilibili Provider with `yt-dlp` sidecar support, aria2 RPC control path, download task APIs, and download task UI are now implemented. **Bilibili DASH merge, member/paid/region/DRM handling, ffmpeg integration, auto-update, and installer distribution are still not implemented**.
+The long-term product direction is a **local desktop download client**. The Electron shell, local backend lifecycle, Provider registry, unified Provider API, Quark Provider wrapper, Bilibili Provider with `yt-dlp` sidecar support, aria2 RPC control path, download task APIs, and download task UI are now implemented. **Bilibili DASH merge, member/paid/region/DRM handling, ffmpeg integration, auto-update, and installer distribution are still not implemented**.
 
 ## Current State
 
 - Frontend: `Vite + Vue + TypeScript`
 - Backend: `Express + TypeScript`
 - Desktop shell: `Electron`
-- Current API surface stays under `/api/quark/*`
+- The main resource flow now uses `/api/providers/*`
+- Existing `/api/quark/*` routes remain as compatibility APIs
 - Provider registry is enabled with Quark and Bilibili Providers
 - Supports:
   - Quark share parsing
@@ -28,6 +29,7 @@ The long-term product direction is a **local desktop download client**. The Elec
   - Download task removal with optional local file deletion
   - Bilibili public-resource parsing through local `yt-dlp.exe` when available
   - Bilibili mock fallback when `yt-dlp.exe` is missing or parsing fails
+  - Unified resource input for Quark share links and Bilibili video links
   - Mock mode for local validation
 
 ## Long-Term Direction
@@ -125,10 +127,28 @@ powershell -ExecutionPolicy Bypass -File scripts/prepare-ytdlp.ps1
 - If `yt-dlp.exe` is missing or parsing fails, the Provider falls back to stable mock data so registry and downloader handoff tests still work.
 - DASH audio/video merge, member-only content, paid content, region-restricted content, DRM-protected content, and login-state handling are not supported in this version.
 
+## Provider API
+
+The current frontend resource flow uses the Provider API:
+
+```http
+POST /api/providers/resolve
+POST /api/providers/list
+POST /api/providers/download
+```
+
+Responses wrap the existing contracts:
+
+- `resolve` returns `{ providerId, share }`
+- `list` returns `{ providerId, list }`
+- `download` returns `{ providerId, download }`
+
+`/api/quark/*` remains available and compatible for existing callers.
+
 ## Current Boundaries
 
 - This does **not** include ffmpeg merging
-- This does **not** include a Provider UI selector
+- This does **not** include a complex Provider UI selector; source detection is automatic from the resource link
 - This does **not** include auto-update
 - This does **not** include installer distribution
 - This does **not** change existing `/api/quark/*` routes
@@ -144,5 +164,6 @@ powershell -ExecutionPolicy Bypass -File scripts/prepare-ytdlp.ps1
 - Existing Quark code remains in `server/services/quark/*` and `server/adapters/quarkApi.ts`; the V0.6 Quark Provider is a first-stage wrapper
 - Bilibili Provider uses `yt-dlp` for real public-resource parsing when available and keeps mock fallback for validation
 - Provider debug status is available at `GET /api/providers/debug`
+- Provider main entry is available at `/api/providers/resolve`, `/api/providers/list`, and `/api/providers/download`
 - Current download behavior supports both browser delivery and embedded aria2 delivery
 - Electron manages the local desktop shell, backend lifecycle, and aria2 sidecar lifecycle

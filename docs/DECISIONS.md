@@ -69,3 +69,17 @@ Provider abstraction is internal architecture work, not an API redesign.
 
 ### Consequence
 Current frontend behavior and integration points remain compatible while the long-term architecture is clarified.
+
+## ADR-006 - Use `/api/providers/*` as the new main resource flow
+
+### Context
+Quark and Bilibili Providers are both registered, but the UI was still wired to Quark-specific routes.
+
+### Decision
+Introduce `/api/providers/resolve`, `/api/providers/list`, and `/api/providers/download` as the main resource flow for the frontend while keeping `/api/quark/*` unchanged.
+
+### Reason
+This lets users paste Quark or Bilibili links into the same resource input without adding a complex Provider selector or breaking existing Quark integrations.
+
+### Consequence
+The frontend now stores the matched `providerId` and passes it through list/download calls. Existing Quark routes remain available as compatibility APIs.

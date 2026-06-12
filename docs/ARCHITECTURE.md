@@ -10,6 +10,7 @@ The current project runs as a local desktop-capable MVP:
 - `Quark-specific services` stay under `server/services/quark/*`.
 - `Quark adapter` stays under `server/adapters/quarkApi.ts`.
 - `Provider registry` is active with Quark and Bilibili providers.
+- `/api/providers/*` is the main resource API for resolve, list, and download.
 - `aria2` JSON-RPC control logic lives under `server/downloader/*`.
 - Download settings are stored in `data/settings.json` for plain development mode and under Electron `userData` for desktop mode.
 
@@ -21,8 +22,8 @@ Bilibili public-resource parsing through `yt-dlp`, Provider registry, Electron s
 
 | Provider | API dependency | Downloader | Notes |
 | --- | --- | --- | --- |
-| Quark | `/api/quark/*` | aria2 / Proxy | Real main flow |
-| Bilibili | `yt-dlp` sidecar, mock fallback | aria2 direct handoff | V0.8 public-resource parsing |
+| Quark | `/api/providers/*`, compatible `/api/quark/*` | aria2 / Proxy | Real main flow |
+| Bilibili | `/api/providers/*`, `yt-dlp` sidecar, mock fallback | aria2 direct handoff | V0.8.1 UI-accessible Provider flow |
 
 ## Current Download Data Flow
 
@@ -72,10 +73,12 @@ Local disk
 ### Vue renderer
 - Keeps the existing UI role for link input, file browsing, auth status, link resolution, and download task actions.
 - Current UI remains a Chinese tool-style workflow, not a downloader dashboard rewrite.
+- The primary input is now a resource link input. It uses automatic Provider matching for Quark and Bilibili without adding a complex Provider selector.
 
 ### Local Express backend
 - Owns parsing, session handling, Quark integration, download proxying, and local downloader coordination.
-- Existing `/api/quark/*` endpoints remain the current Quark contract.
+- `/api/providers/resolve`, `/api/providers/list`, and `/api/providers/download` are the current main resource contract.
+- Existing `/api/quark/*` endpoints remain the Quark compatibility contract.
 - `/api/downloads/*` endpoints expose local task control for the desktop downloader.
 
 ### Provider system

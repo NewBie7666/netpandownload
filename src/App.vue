@@ -11,16 +11,19 @@ import {
 } from './api/downloads'
 import {
   createQuarkAuthQrcode,
-  fetchDownloadUrl,
-  fetchFolderFiles,
   fetchQuarkAuthStatus,
-  fetchShareFiles,
   logoutQuarkAuth
 } from './api/quark'
+import {
+  fetchProviderDownload,
+  listProviderFiles,
+  resolveProviderResource
+} from './api/providers'
 import type {
   DownloadResult,
   DownloadTask,
   DownloadTasksResult,
+  ProviderId,
   QuarkAuthQrcodeResult,
   QuarkAuthStatusResult,
   QuarkFile
@@ -41,6 +44,7 @@ declare global {
 
 const shareUrl = ref('')
 const passcode = ref('')
+const currentProviderId = ref<ProviderId | ''>('')
 const shareId = ref('')
 const stoken = ref('')
 const files = ref<QuarkFile[]>([])
@@ -72,35 +76,49 @@ function clearMessages() {
   noticeMessage.value = ''
 }
 
-function normalizeShareUrlInput(value: string) {
+function normalizeResourceUrlInput(value: string) {
   const trimmed = String(value || '').trim().replace(/^['"]|['"]$/g, '')
   if (!trimmed) return ''
 
   if (/^pan\.quark\.cn\/s\//i.test(trimmed)) {
     return `https://${trimmed}`
   }
+  if (/^(www\.)?bilibili\.com\//i.test(trimmed) || /^b23\.tv\//i.test(trimmed)) {
+    return `https://${trimmed}`
+  }
 
   const matched = trimmed.match(/https?:\/\/pan\.quark\.cn\/s\/[^\s"'<>]+/i)
+    || trimmed.match(/https?:\/\/(?:www\.)?bilibili\.com\/[^\s"'<>]+/i)
+    || trimmed.match(/https?:\/\/b23\.tv\/[^\s"'<>]+/i)
   return matched ? matched[0] : trimmed
 }
 
-function validateQuarkUrl(value: string) {
-  const trimmed = normalizeShareUrlInput(value)
-  if (!trimmed) return '请输入夸克分享链接'
+function validateResourceUrl(value: string) {
+  const trimmed = normalizeResourceUrlInput(value)
+  if (!trimmed) return '请输入资源链接'
 
   try {
     const url = new URL(trimmed)
-    if (!/pan\.quark\.cn$/i.test(url.hostname)) {
-      return '仅支持夸克分享链接'
+    if (/pan\.quark\.cn$/i.test(url.hostname)) {
+      if (!/\/s\/[^/?#]+/.test(url.pathname)) {
+        return '未识别到夸克分享 ID'
+      }
+      return ''
     }
-    if (!/\/s\/[^/?#]+/.test(url.pathname)) {
-      return '未识别到夸克分享 ID'
+    if (/^(www\.)?bilibili\.com$/i.test(url.hostname)) {
+      if (/^\/video\/BV[0-9A-Za-z]+/i.test(url.pathname) || /^\/bangumi\/play\//i.test(url.pathname)) {
+        return ''
+      }
+      return '未识别到支持的 B 站视频链接'
+    }
+    if (/^b23\.tv$/i.test(url.hostname) && url.pathname.length > 1) {
+      return ''
     }
   } catch {
-    return '分享链接格式不正确'
+    return '资源链接格式不正确'
   }
 
-  return ''
+  return '当前不支持该链接来源'
 }
 
 function formatSize(size: number) {
@@ -153,8 +171,8 @@ function stopTaskPolling() {
 async function loadShare() {
   clearMessages()
   downloadDialog.value = null
-  const normalizedShareUrl = normalizeShareUrlInput(shareUrl.value)
-  const validationError = validateQuarkUrl(normalizedShareUrl)
+  const normalizedShareUrl = normalizeResourceUrlInput(shareUrl.value)
+  const validationError = validateResourceUrl(normalizedShareUrl)
   if (validationError) {
     errorMessage.value = validationError
     return
@@ -163,29 +181,33 @@ async function loadShare() {
   loading.value = true
   try {
     shareUrl.value = normalizedShareUrl
-    const result = await fetchShareFiles(normalizedShareUrl, passcode.value.trim())
-    shareId.value = result.shareId
-    stoken.value = result.stoken
-    files.value = result.files
+    const result = await resolveProviderResource(normalizedShareUrl, passcode.value.trim(), authSessionId.value)
+    currentProviderId.value = result.providerId
+    shareId.value = result.share.shareId
+    stoken.value = result.share.stoken
+    files.value = result.share.files
     pathStack.value = []
-    noticeMessage.value = `已获取 ${result.files.length} 个文件`
+    noticeMessage.value = `已通过 ${result.providerId === 'quark' ? '夸克' : 'Bilibili'} 获取 ${result.share.files.length} 个文件`
   } catch (error) {
+    currentProviderId.value = ''
+    shareId.value = ''
+    stoken.value = ''
     files.value = []
     pathStack.value = []
-    errorMessage.value = error instanceof Error ? error.message : '获取文件列表失败'
+    errorMessage.value = error instanceof Error ? error.message : '解析资源失败'
   } finally {
     loading.value = false
   }
 }
 
 async function enterFolder(file: QuarkFile) {
-  if (!file.isDir || !shareId.value || !stoken.value) return
+  if (!file.isDir || !currentProviderId.value || !shareId.value || !stoken.value) return
   clearMessages()
   folderLoadingFid.value = file.fid
   try {
-    const result = await fetchFolderFiles(shareId.value, stoken.value, file.fid)
+    const result = await listProviderFiles(currentProviderId.value, shareId.value, stoken.value, file.fid)
     pathStack.value = [...pathStack.value, { fid: file.fid, name: file.name }]
-    files.value = result.files
+    files.value = result.list.files
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '进入文件夹失败'
   } finally {
@@ -194,15 +216,15 @@ async function enterFolder(file: QuarkFile) {
 }
 
 async function goBack() {
-  if (!canGoBack.value || !shareId.value || !stoken.value) return
+  if (!canGoBack.value || !currentProviderId.value || !shareId.value || !stoken.value) return
   clearMessages()
   loading.value = true
   try {
     const nextStack = pathStack.value.slice(0, -1)
     const parent = nextStack[nextStack.length - 1]
-    const result = await fetchFolderFiles(shareId.value, stoken.value, parent?.fid)
+    const result = await listProviderFiles(currentProviderId.value, shareId.value, stoken.value, parent?.fid)
     pathStack.value = nextStack
-    files.value = result.files
+    files.value = result.list.files
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '返回上一级失败'
   } finally {
@@ -211,12 +233,19 @@ async function goBack() {
 }
 
 async function openDownload(file: QuarkFile) {
-  if (file.isDir || !shareId.value || !stoken.value) return
+  if (file.isDir || !currentProviderId.value || !shareId.value || !stoken.value) return
   clearMessages()
   downloadDialog.value = null
   downloadLoadingFid.value = file.fid
   try {
-    downloadDialog.value = await fetchDownloadUrl(shareId.value, stoken.value, file, authSessionId.value)
+    const result = await fetchProviderDownload(
+      currentProviderId.value,
+      shareId.value,
+      stoken.value,
+      file,
+      authSessionId.value
+    )
+    downloadDialog.value = result.download
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '获取下载链接失败'
   } finally {
@@ -429,12 +458,12 @@ onBeforeUnmount(() => {
     <main class="container">
       <section class="panel parser-panel">
         <div class="form-row">
-          <label for="share-url">分享链接</label>
+          <label for="share-url">资源链接</label>
           <input
             id="share-url"
             v-model="shareUrl"
             type="text"
-            placeholder="请输入夸克分享链接"
+            placeholder="请输入夸克分享链接或 B 站视频链接"
             :disabled="loading"
           />
         </div>
@@ -444,13 +473,13 @@ onBeforeUnmount(() => {
             id="passcode"
             v-model="passcode"
             type="text"
-            placeholder="可不填；如需要请输入提取码"
+            placeholder="夸克链接可填；B 站链接无需填写"
             :disabled="loading"
           />
         </div>
         <div class="actions">
           <button class="primary-button" type="button" :disabled="loading" @click="loadShare">
-            {{ loading ? '获取中...' : '获取文件列表' }}
+            {{ loading ? '解析中...' : '解析资源' }}
           </button>
           <button
             v-if="!authSessionId"

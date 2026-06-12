@@ -6,6 +6,8 @@ Current status:
 
 - Provider registry is enabled
 - Quark and Bilibili are registered Providers
+- `/api/providers/resolve`, `/api/providers/list`, and `/api/providers/download` are the main Provider entry points
+- `/api/quark/*` remains as a compatibility API
 - Current Quark logic still lives in `server/services/quark/*`
 - Current Quark adapter still lives in `server/adapters/quarkApi.ts`
 - V0.6 wraps Quark behavior without fully migrating adapter internals
@@ -19,6 +21,12 @@ Provider responsibility:
 - List provider folders
 - Return provider download results
 - Normalize source-specific behavior behind a common boundary
+
+API wrappers:
+
+- `resolve` wraps `ShareResult` as `{ providerId, share }`
+- `list` wraps `ListResult` as `{ providerId, list }`
+- `download` wraps `DownloadResult` as `{ providerId, download }`
 
 Current code contract:
 
