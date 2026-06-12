@@ -1,15 +1,15 @@
-# V0.5.4 Release Checklist
+# V0.8 Release Checklist
 
-This checklist records release readiness for the Electron + Local Express + aria2 portable desktop MVP.
+This checklist records release readiness for the Electron + Local Express + Quark + aria2 + Provider desktop MVP.
 
 ## Scope Boundaries
 
 - Do not change `/api/quark/*`.
-- Do not add Bilibili support.
-- Do not add Provider abstraction.
-- Do not add ffmpeg.
-- Do not add installer distribution or auto-update.
 - Do not redesign the UI.
+- Do not add ffmpeg merge.
+- Do not handle paid, member-only, region-locked, or DRM-protected Bilibili content.
+- Do not add installer distribution or auto-update.
+- Do not expose Cookie, UA, Referer, aria2 RPC secret, or sidecar internals to the frontend.
 
 ## Pre-Packaging Checks
 
@@ -17,10 +17,17 @@ This checklist records release readiness for the Electron + Local Express + aria
 - [ ] Dependencies are installed.
 - [ ] `.env` is local only and not committed.
 - [ ] `resources/aria2/win/aria2c.exe` is ignored by Git.
+- [ ] `resources/yt-dlp/win/yt-dlp.exe` is ignored by Git.
 - [ ] If the release should include the built-in downloader, run:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/prepare-aria2.ps1
+```
+
+- [ ] If the release should include real Bilibili parsing, run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/prepare-ytdlp.ps1
 ```
 
 ## Download Directory Settings
@@ -44,8 +51,8 @@ Validation:
 
 Result:
 
-- Status: passed on 2026-06-12.
-- Notes: `POST /api/downloads/settings` saved `D:\codeproject\qarkzhuanlianjie\tmp\v054-downloads-2`; `/health`, `/active`, and a newly added aria2 task all reported that directory. Portable mode returned the default user Downloads directory before any desktop setting was saved.
+- Status: not rerun in V0.8.
+- Notes: V0.8 does not change download directory logic. Keep V0.5.4 validation as the baseline unless this module changes.
 
 ## Task Removal Behavior
 
@@ -66,8 +73,8 @@ Validation:
 
 Result:
 
-- Status: partially passed on 2026-06-12.
-- Notes: `{ "deleteFile": false }` removed the aria2 task record successfully. `{ "deleteFile": true }` returned readable `download_file_missing` for the mock URL because no real local file was created. Real local-file deletion still needs a long-running or completed real download artifact to validate end to end.
+- Status: not rerun in V0.8.
+- Notes: V0.8 does not change task removal logic. Keep V0.5.4 validation as the baseline unless this module changes.
 
 ## No aria2 Scenario
 
@@ -85,15 +92,15 @@ powershell -ExecutionPolicy Bypass -File scripts/prepare-aria2.ps1
 
 Validation:
 
-- [x] `/api/health` returns `ok=true`.
-- [x] `/api/downloads/health` returns `enabled=false`.
-- [x] `/api/downloads/active` returns `enabled=false`.
-- [x] Quark share parsing works.
+- [ ] `/api/health` returns `ok=true`.
+- [ ] `/api/downloads/health` returns `enabled=false`.
+- [ ] `/api/downloads/active` returns `enabled=false`.
+- [ ] Quark share parsing works.
 
 Result:
 
-- Status: passed on 2026-06-12.
-- Notes: Temporarily moved `resources/aria2/win/aria2c.exe` aside. App started, Quark stayed usable, and the download task panel showed the setup command.
+- Status: not rerun in V0.8.
+- Notes: V0.8 test environment already had `aria2c.exe` prepared before desktop validation.
 
 ## aria2 Available Scenario
 
@@ -102,40 +109,107 @@ Expected behavior:
 - `aria2c.exe --version` succeeds.
 - Electron starts aria2 as a local sidecar.
 - `/api/downloads/health` returns `enabled=true`.
-- Mock download links can be added to aria2.
+- Download links authorized by the app can be added to aria2.
 - Pause / resume / remove should be tested on an active task. Very short tasks may finish too quickly to pause.
 
 Validation:
 
-- [x] `resources/aria2/win/aria2c.exe --version` succeeds.
-- [x] `/api/downloads/health` returns `enabled=true`.
-- [x] `/api/downloads/active` returns `enabled=true`.
-- [x] `/api/downloads/add` creates a task.
-- [x] `/api/downloads/status/:gid` returns task status.
-- [x] `/api/downloads/pause/:gid` works on an active task.
-- [x] `/api/downloads/resume/:gid` works on a paused task.
-- [x] `/api/downloads/remove/:gid` removes or clears the task.
+- [ ] `resources/aria2/win/aria2c.exe --version` succeeds.
+- [ ] `/api/downloads/health` returns `enabled=true`.
+- [ ] `/api/downloads/active` returns `enabled=true`.
+- [ ] `/api/downloads/add` creates a task.
+- [ ] `/api/downloads/status/:gid` returns task status.
+- [ ] `/api/downloads/pause/:gid` works on an active task.
+- [ ] `/api/downloads/resume/:gid` works on a paused task.
+- [ ] `/api/downloads/remove/:gid` removes or clears the task.
 
 Result:
 
 - Status: passed on 2026-06-12.
-- Notes: `prepare-aria2.ps1` verified aria2 1.37.0. Mock download task created gid `9309cc1565c68287`; status, pause, resume, and remove all returned success.
+- Notes: `prepare-aria2.ps1` verified aria2 1.37.0. Electron dev and portable both reported `/api/downloads/health` with `enabled=true`. A Bilibili Provider mock fallback URL was accepted by `/api/downloads/add` and the created task was removed successfully.
+
+## yt-dlp Sidecar
+
+Expected behavior:
+
+- Git source does not include `yt-dlp.exe`.
+- Developers prepare it with `scripts/prepare-ytdlp.ps1`.
+- Portable releases may include it when the prepare script is run before packaging.
+- If it is missing, Bilibili Provider falls back to mock data and Quark stays usable.
+
+Validation:
+
+- [ ] `resources/yt-dlp/win/yt-dlp.exe` is ignored by Git.
+- [ ] `powershell -ExecutionPolicy Bypass -File scripts/prepare-ytdlp.ps1` succeeds.
+- [ ] `resources/yt-dlp/win/yt-dlp.exe --version` succeeds.
+- [ ] Missing `yt-dlp.exe` does not prevent Electron startup.
+- [ ] Missing `yt-dlp.exe` does not affect `/api/quark/*` or `/api/downloads/*`.
+
+Result:
+
+- Status: partially passed on 2026-06-12.
+- Notes: `prepare-ytdlp.ps1` downloaded `yt-dlp.exe` and verified version `2026.06.09`. Packaged `release/win-unpacked/resources/yt-dlp/win/yt-dlp.exe` exists. A direct yt-dlp test against `https://www.bilibili.com/video/BV1GJ411x7h7` returned Bilibili HTTP 412 in this network, so Provider fallback behavior was exercised instead of a successful real parse.
+
+## Provider Registry
+
+Validation:
+
+- [ ] `GET /api/providers/debug` returns `registered: ["quark", "bilibili"]`.
+- [ ] `GET /api/providers/debug?input=<quark-share-url>` reports Quark as matched.
+- [ ] `GET /api/providers/debug?input=<bilibili-url>` reports Bilibili as matched.
+- [ ] Unsupported input returns `unsupported_provider` from resolve debug.
+- [ ] Provider Registry does not alter `/api/quark/*` response contracts.
+
+Result:
+
+- Status: passed on 2026-06-12.
+- Notes: `GET /api/providers/debug` returned `["quark", "bilibili"]`. Quark input matched `quark`; Bilibili input matched `bilibili`; unsupported input returned `unsupported_provider` with a readable Chinese message. Existing `/api/quark/share` returned the expected mock response under `QUARK_MOCK=true`.
+
+## Bilibili Provider
+
+Supported in V0.8:
+
+- Public Bilibili videos or bangumi URLs that `yt-dlp` can resolve without login or merge.
+- Stable mock fallback when the sidecar is unavailable or parsing fails.
+- Download handoff to aria2 through existing `/api/downloads/add` authorization.
+
+Not supported in V0.8:
+
+- Paid content.
+- Member-only content.
+- Region-locked content.
+- DRM-protected content.
+- DASH video/audio merge requiring ffmpeg.
+- Bilibili login state.
+
+Validation:
+
+- [ ] `/api/providers/debug/resolve` returns a standard `ShareResult` for a Bilibili URL or stable mock fallback.
+- [ ] `/api/providers/debug/list` returns a standard `ListResult`.
+- [ ] `/api/providers/debug/download` returns a standard `DownloadResult` for supported single-file streams.
+- [ ] `bilibili_dash_unsupported` is returned for resources that require ffmpeg merge.
+- [ ] Bilibili `downloadUrl` can be submitted to `/api/downloads/add`.
+
+Result:
+
+- Status: partially passed on 2026-06-12.
+- Notes: `/api/providers/debug/resolve`, `/debug/list`, and `/debug/download` returned standard `ShareResult`, `ListResult`, and `DownloadResult` using mock fallback. Real yt-dlp resolution was blocked by Bilibili HTTP 412 for the sampled public URL in this environment. The fallback `downloadUrl` was registered and accepted by `/api/downloads/add` while aria2 was enabled.
 
 ## Quark Main Flow
 
 Validation:
 
-- [x] `/api/health`
-- [x] `/api/quark/share`
-- [x] `/api/quark/list`
-- [x] `/api/quark/download`
+- [ ] `/api/health`
+- [ ] `/api/quark/share`
+- [ ] `/api/quark/list`
+- [ ] `/api/quark/download`
 - [ ] `/api/quark/download-proxy`
-- [x] `QUARK_MOCK=true`
+- [ ] `QUARK_MOCK=true`
 
 Result:
 
 - Status: partially passed on 2026-06-12.
-- Notes: Real share parsing and folder listing passed for `https://pan.quark.cn/s/01dc6a062f17#/list/share`. Both `.nsp` files in that share returned `download_restricted`, so no valid proxy token was available for a successful real proxy call in this run. Mock mode covered `/api/quark/download` success and downloader handoff.
+- Notes: `/api/health` and `/api/quark/share` passed under `QUARK_MOCK=true`. V0.8 does not change `/api/quark/*`; deeper real Quark download/proxy regression was not rerun in this pass.
 
 ## Real Large File Regression
 
@@ -155,8 +229,8 @@ If Quark risk control, login state, token expiry, or CDN callback auth blocks th
 
 Result:
 
-- Status: blocked by Quark restriction on 2026-06-12.
-- Notes: The 3.51 GB file `[本体v1.0.0][010015100B514000][16.0.3][中文].nsp` resolved in the file list, but `/api/quark/download` returned `download_restricted`: `该文件被夸克限制直链下载。普通小文件可正常解析；此类文件可能需要更高登录态、转存后下载，或被风控限制。` No proxy URL was issued, so aria2 could not be exercised against this real file in this run.
+- Status: not rerun in V0.8.
+- Notes: V0.8 does not change Quark proxy download behavior. Large-file regression remains dependent on Quark login state, risk control, and CDN callback authorization.
 
 ## Portable Package
 
@@ -169,35 +243,39 @@ Port handling:
 
 Validation:
 
-- [x] `npm run dist:win` succeeds.
-- [x] A portable exe is generated under `release/`.
-- [x] If `release/win-unpacked` exists, it contains the aria2 resource when `aria2c.exe` was prepared before packaging.
-- [x] Launch the portable exe.
-- [x] `/api/downloads/health` on the actual backend port returns `enabled=true` when packaged with aria2.
+- [ ] `npm run dist:win` succeeds.
+- [ ] A portable exe is generated under `release/`.
+- [ ] If `release/win-unpacked` exists, it contains aria2 resource when `aria2c.exe` was prepared before packaging.
+- [ ] If `release/win-unpacked` exists, it contains yt-dlp resource when `yt-dlp.exe` was prepared before packaging.
+- [ ] Launch the portable exe.
+- [ ] `/api/downloads/health` on the actual backend port returns `enabled=true` when packaged with aria2.
+- [ ] Provider debug on the actual backend port returns both providers.
 
 Result:
 
 - Status: passed on 2026-06-12.
-- Notes: `release/Quark Desktop MVP 0.1.0.exe` was generated. `release/win-unpacked/resources/aria2/win/aria2c.exe` exists. Launched portable exe and probed actual backend port `3000`; `/api/downloads/health` returned `enabled=true`.
+- Notes: `npm run dist:win` succeeded. `release/Quark Desktop MVP 0.1.0.exe` was generated. `release/win-unpacked/resources/aria2/win/aria2c.exe` and `release/win-unpacked/resources/yt-dlp/win/yt-dlp.exe` exist. Portable started on actual backend port `3000`; `/api/downloads/health` returned `enabled=true`; Provider debug returned both providers.
 
 ## Process Cleanup
 
 After closing the desktop client:
 
-- [x] The Express backend started by the app exits.
-- [x] The `aria2c.exe` process started by the app exits.
-- [x] Task Manager does not show an aria2 process left by this app.
+- [ ] The Express backend started by the app exits.
+- [ ] The `aria2c.exe` process started by the app exits.
+- [ ] No app-owned `yt-dlp.exe` process remains.
+- [ ] Task Manager does not show sidecar processes left by this app.
 
 Result:
 
 - Status: passed on 2026-06-12.
-- Notes: Closed the portable app and verified no app-owned Quark, node, or aria2 processes remained.
+- Notes: After closing the portable app, no app-owned `node.exe`, `electron.exe`, `aria2c.exe`, or `yt-dlp.exe` processes remained.
 
-## V0.5.4 Validation Record
+## V0.8 Validation Record
 
 - Commit:
 - Tag:
-- Build result: `npm run build` and `npm run build:electron` passed.
-- Electron dev result: started in mock mode; long-running command timed out as expected after startup, while API checks passed.
-- Portable result: `npm run dist:win` passed, portable exe launched, download health returned `enabled=true`, and settings API responded on the actual backend port.
-- Known limitations: `deleteFile=true` was validated for readable error behavior with mock tasks but not against a completed real local file in this run. Real 1GB+ Quark download remains subject to Quark risk control and login state.
+- Build result: `npm run build`, `npm run build:electron`, and `npm run dist:win` passed.
+- Electron dev result: `npm run electron:dev` stayed running through the startup window; `/api/health`, `/api/downloads/health`, and `/api/providers/debug` passed on the actual development backend.
+- Portable result: Portable exe launched, download health returned `enabled=true`, and Provider debug returned both providers.
+- Provider result: Bilibili match and mock fallback passed; real yt-dlp parse was blocked by Bilibili HTTP 412 for the sampled URL.
+- Known limitations: No ffmpeg/DASH merge, no Bilibili login state, no paid/member/region/DRM handling, and real Bilibili parsing may fallback when Bilibili rejects anonymous yt-dlp requests.

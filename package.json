@@ -60,6 +60,13 @@
         "filter": [
           "**/*"
         ]
+      },
+      {
+        "from": "resources/yt-dlp",
+        "to": "yt-dlp",
+        "filter": [
+          "**/*"
+        ]
       }
     ],
     "win": {

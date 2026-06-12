@@ -9,7 +9,8 @@ Current status:
 - Current Quark logic still lives in `server/services/quark/*`
 - Current Quark adapter still lives in `server/adapters/quarkApi.ts`
 - V0.6 wraps Quark behavior without fully migrating adapter internals
-- V0.7 Bilibili is mock-only and does not call real Bilibili APIs
+- V0.8 Bilibili uses `yt-dlp.exe` for public-resource parsing when available
+- Bilibili keeps mock fallback when `yt-dlp.exe` is missing or parsing fails
 
 Provider responsibility:
 
@@ -32,4 +33,4 @@ interface Provider {
 }
 ```
 
-`match(input)` must be source-specific and conservative. The Quark Provider only matches Quark share links. The Bilibili Provider only matches known Bilibili URL shapes and returns mock data until a later real integration phase.
+`match(input)` must be source-specific and conservative. The Quark Provider only matches Quark share links. The Bilibili Provider only matches known Bilibili URL shapes, calls local `yt-dlp.exe` for public resources, and does not implement member/paid/region/DRM bypass behavior.

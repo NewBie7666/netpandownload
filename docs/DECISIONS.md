@@ -28,19 +28,19 @@ Multithreaded downloading belongs to the dedicated downloader phase, not to the 
 ### Consequence
 Current downloads stay browser-driven or proxy-driven until `V0.5`. In `V0.5`, aria2 is introduced as a local sidecar rather than as a remote service.
 
-## ADR-003 - Keep Bilibili real parsing out of the current stage
+## ADR-003 - Add Bilibili through yt-dlp before custom parsing
 
 ### Context
 Bilibili support would introduce additional complexity around auth, DASH resources, merge flows, and compliance boundaries.
 
 ### Decision
-Only add a Bilibili Mock Provider in `V0.7`; do not implement real Bilibili parsing or download extraction in this round.
+Use `yt-dlp` as the first real Bilibili parsing sidecar in `V0.8`, while keeping mock fallback and avoiding custom Bilibili API parsing.
 
 ### Reason
-The downloader engine and Provider boundary now exist, but real Bilibili support still adds separate auth, DASH, merge, and compliance concerns.
+The downloader engine and Provider boundary now exist. `yt-dlp` gives a stable command-line JSON boundary for public-resource parsing without committing to custom Bilibili API behavior yet.
 
 ### Consequence
-Bilibili matching and mock outputs can validate multi-provider architecture now. Real Bilibili support remains future work after the mock boundary and downloader workflow stay stable.
+Bilibili can parse public resources when `yt-dlp.exe` is available. DASH merge, member/paid/region/DRM handling, and login-state support remain future work.
 
 ## ADR-004 - Wrap Quark with a first-stage Provider before moving internals
 

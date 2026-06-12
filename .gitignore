@@ -12,3 +12,4 @@ npm-debug.log*
 data/settings.json
 src/*.v05-broken-backup.*
 resources/aria2/win/aria2c.exe
+resources/yt-dlp/win/yt-dlp.exe

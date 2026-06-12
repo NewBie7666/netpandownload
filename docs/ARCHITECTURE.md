@@ -15,14 +15,14 @@ The current project runs as a local desktop-capable MVP:
 
 Electron shell and aria2 control logic are active. The aria2 sidecar starts only when `aria2c.exe` exists in the expected resource path.
 
-Real Bilibili parsing/download, ffmpeg merge, auto-update, and installer distribution are still future work.
+Bilibili public-resource parsing through `yt-dlp`, Provider registry, Electron shell, and aria2 control are active. Bilibili DASH merge, member/paid/region/DRM handling, auto-update, and installer distribution are still future work.
 
 ## Provider Status
 
 | Provider | API dependency | Downloader | Notes |
 | --- | --- | --- | --- |
 | Quark | `/api/quark/*` | aria2 / Proxy | Real main flow |
-| Bilibili | Mock only | aria2 mock handoff | V0.7 minimal Provider validation |
+| Bilibili | `yt-dlp` sidecar, mock fallback | aria2 direct handoff | V0.8 public-resource parsing |
 
 ## Current Download Data Flow
 
@@ -83,7 +83,7 @@ Local disk
 - Current Quark Provider wraps existing Quark services instead of moving adapter internals.
 - `match(input)` must be source-specific and conservative. Quark only matches Quark share links.
 - Any future `ResolvedResource.raw` field is internal only; the frontend must not depend on or display it by default.
-- Bilibili is currently mock-only. Real Bilibili APIs, auth, DASH, and download parsing are future work.
+- Bilibili uses a local `yt-dlp.exe` sidecar when available and falls back to mock data when unavailable or unsupported.
 
 ### Downloader engine
 - Current state: browser download, local proxy stream, or aria2 task delivery.
@@ -107,11 +107,11 @@ This keeps the working MVP stable while the Provider boundary becomes the intern
 
 ## Bilibili Position
 
-Bilibili is registered as a V0.7 Mock Provider only. It validates matching, registry behavior, and downloader handoff without claiming real Bilibili download support.
+Bilibili is registered as a V0.8 Provider. It validates matching, uses `yt-dlp` for public-resource metadata/direct URL extraction where possible, and falls back to mock data when the sidecar is unavailable or parsing fails.
 
-Real Bilibili support should only be considered after:
+Remaining Bilibili work should only be considered after:
 
-1. the mock Provider boundary is stable
+1. the `yt-dlp` sidecar path is stable
 2. the downloader workflow remains stable
 3. DASH and optional ffmpeg handling are deliberately designed
 

@@ -93,13 +93,33 @@ Add a Bilibili Mock Provider on top of the Provider system.
 - Mock download output can be handed to the local downloader authorization path
 - The implementation does not introduce bypass behavior for paid, member-only, DRM-protected, or region-locked content
 
-## V0.8 - ffmpeg Merge and Download Task Enhancements
+## V0.8 - Bilibili yt-dlp Provider
+
+### Goal
+Use `yt-dlp` as a local sidecar so the Bilibili Provider can parse public resources and return downloader-compatible results.
+
+### Not in Scope
+- No member-only or paid-content support
+- No region restriction bypass
+- No DRM bypass
+- No DASH audio/video merge
+- No ffmpeg pipeline
+- No Provider UI selector
+
+### Acceptance Criteria
+- `scripts/prepare-ytdlp.ps1` prepares and verifies `resources/yt-dlp/win/yt-dlp.exe`
+- Bilibili Provider uses `yt-dlp` when available
+- Bilibili Provider falls back to mock data when `yt-dlp` is missing or parsing fails
+- Bilibili `DownloadResult` can be handed to `/api/downloads/add`
+- Quark Provider and `/api/quark/*` remain compatible
+
+## V0.9 - ffmpeg Merge and Download Task Enhancements
 
 ### Goal
 Add optional ffmpeg-based merge capabilities and improve the local download task model.
 
 ### Not in Scope
-- No platform expansion beyond the supported providers already implemented
+- No bypass of unsupported provider restrictions
 
 ### Acceptance Criteria
 - Audio/video merge can be triggered where applicable
