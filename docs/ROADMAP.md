@@ -76,9 +76,11 @@ Abstract Quark-specific logic behind a Provider boundary so multiple content sou
 ## V0.7 - Bilibili Provider
 
 ### Goal
-Add a Bilibili provider on top of the Provider system.
+Add a Bilibili Mock Provider on top of the Provider system.
 
 ### Not in Scope
+- No real Bilibili API integration
+- No real Bilibili download link extraction
 - No DRM bypass
 - No payment bypass
 - No membership bypass
@@ -87,7 +89,8 @@ Add a Bilibili provider on top of the Provider system.
 
 ### Acceptance Criteria
 - Provider can identify supported Bilibili inputs
-- Provider only assists with content the user already has rights to access
+- Provider returns stable mock `ShareResult`, `ListResult`, and `DownloadResult`
+- Mock download output can be handed to the local downloader authorization path
 - The implementation does not introduce bypass behavior for paid, member-only, DRM-protected, or region-locked content
 
 ## V0.8 - ffmpeg Merge and Download Task Enhancements

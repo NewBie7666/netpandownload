@@ -75,6 +75,7 @@ export interface DownloadSettingsResult {
 export interface ProviderDebugResult {
   registered: string[]
   matchedInput?: string
+  matchedProvider?: string
   lastResolveStatus?: 'ok' | 'error'
 }
 

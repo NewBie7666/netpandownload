@@ -5,7 +5,7 @@ import type {
   ShareResult
 } from '../../shared/types.js'
 
-export type ProviderId = 'quark'
+export type ProviderId = 'quark' | 'bilibili'
 
 export interface ResolveShareInput {
   shareUrl: string

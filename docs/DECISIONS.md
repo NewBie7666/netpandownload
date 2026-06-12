@@ -28,19 +28,19 @@ Multithreaded downloading belongs to the dedicated downloader phase, not to the 
 ### Consequence
 Current downloads stay browser-driven or proxy-driven until `V0.5`. In `V0.5`, aria2 is introduced as a local sidecar rather than as a remote service.
 
-## ADR-003 - Do not implement Bilibili in the current stage
+## ADR-003 - Keep Bilibili real parsing out of the current stage
 
 ### Context
 Bilibili support would introduce additional complexity around auth, DASH resources, merge flows, and compliance boundaries.
 
 ### Decision
-Do not implement Bilibili in this round.
+Only add a Bilibili Mock Provider in `V0.7`; do not implement real Bilibili parsing or download extraction in this round.
 
 ### Reason
-The downloader engine and first Provider boundary now exist, but Bilibili still adds separate auth, DASH, merge, and compliance concerns that should be handled after the Quark Provider wrapper has stabilized.
+The downloader engine and Provider boundary now exist, but real Bilibili support still adds separate auth, DASH, merge, and compliance concerns.
 
 ### Consequence
-Bilibili remains future work after the Provider boundary is validated with Quark and the downloader workflow remains stable.
+Bilibili matching and mock outputs can validate multi-provider architecture now. Real Bilibili support remains future work after the mock boundary and downloader workflow stay stable.
 
 ## ADR-004 - Wrap Quark with a first-stage Provider before moving internals
 

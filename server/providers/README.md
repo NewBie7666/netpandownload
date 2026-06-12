@@ -5,10 +5,11 @@ This directory contains the V0.6 Provider boundary.
 Current status:
 
 - Provider registry is enabled
-- Quark is the only registered Provider
+- Quark and Bilibili are registered Providers
 - Current Quark logic still lives in `server/services/quark/*`
 - Current Quark adapter still lives in `server/adapters/quarkApi.ts`
 - V0.6 wraps Quark behavior without fully migrating adapter internals
+- V0.7 Bilibili is mock-only and does not call real Bilibili APIs
 
 Provider responsibility:
 
@@ -31,4 +32,4 @@ interface Provider {
 }
 ```
 
-`match(input)` must be source-specific and conservative. The Quark Provider only matches Quark share links. Future Bilibili matching must use its own rules.
+`match(input)` must be source-specific and conservative. The Quark Provider only matches Quark share links. The Bilibili Provider only matches known Bilibili URL shapes and returns mock data until a later real integration phase.

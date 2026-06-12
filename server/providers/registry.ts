@@ -1,10 +1,12 @@
 import type { ProviderDebugResult } from '../../shared/types.js'
 import { AppError } from '../http.js'
+import { bilibiliProvider } from './bilibiliProvider.js'
 import { quarkProvider } from './quarkProvider.js'
 import type { Provider, ProviderId } from './types.js'
 
-const providers: Provider[] = [quarkProvider]
+const providers: Provider[] = [quarkProvider, bilibiliProvider]
 let matchedInput: string | undefined
+let matchedProvider: string | undefined
 let lastResolveStatus: ProviderDebugResult['lastResolveStatus']
 
 export function listProviders() {
@@ -23,6 +25,7 @@ export function findProviderByInput(input: string) {
   const provider = providers.find((item) => item.match(input))
   if (provider) {
     matchedInput = String(input || '').trim()
+    matchedProvider = provider.id
   }
   return provider
 }
@@ -44,6 +47,7 @@ export function getProviderDebug(): ProviderDebugResult {
   return {
     registered: providers.map((provider) => provider.id),
     matchedInput,
+    matchedProvider,
     lastResolveStatus
   }
 }

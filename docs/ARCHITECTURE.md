@@ -9,19 +9,20 @@ The current project runs as a local desktop-capable MVP:
 - `Local Express backend` remains the local API boundary.
 - `Quark-specific services` stay under `server/services/quark/*`.
 - `Quark adapter` stays under `server/adapters/quarkApi.ts`.
-- `Provider registry` is active with Quark as the first registered Provider.
+- `Provider registry` is active with Quark and Bilibili providers.
 - `aria2` JSON-RPC control logic lives under `server/downloader/*`.
 - Download settings are stored in `data/settings.json` for plain development mode and under Electron `userData` for desktop mode.
 
 Electron shell and aria2 control logic are active. The aria2 sidecar starts only when `aria2c.exe` exists in the expected resource path.
 
-Bilibili support, ffmpeg merge, auto-update, and installer distribution are still future work.
+Real Bilibili parsing/download, ffmpeg merge, auto-update, and installer distribution are still future work.
 
 ## Provider Status
 
 | Provider | API dependency | Downloader | Notes |
 | --- | --- | --- | --- |
-| Quark | `/api/quark/*` | aria2 / Proxy | V0.6 first-stage Provider wrapper |
+| Quark | `/api/quark/*` | aria2 / Proxy | Real main flow |
+| Bilibili | Mock only | aria2 mock handoff | V0.7 minimal Provider validation |
 
 ## Current Download Data Flow
 
@@ -82,7 +83,7 @@ Local disk
 - Current Quark Provider wraps existing Quark services instead of moving adapter internals.
 - `match(input)` must be source-specific and conservative. Quark only matches Quark share links.
 - Any future `ResolvedResource.raw` field is internal only; the frontend must not depend on or display it by default.
-- Bilibili is a future provider, not part of the current runtime.
+- Bilibili is currently mock-only. Real Bilibili APIs, auth, DASH, and download parsing are future work.
 
 ### Downloader engine
 - Current state: browser download, local proxy stream, or aria2 task delivery.
@@ -104,13 +105,15 @@ Local disk
 
 This keeps the working MVP stable while the Provider boundary becomes the internal direction for new sources.
 
-## Future Bilibili Position
+## Bilibili Position
 
-Bilibili is planned as a future provider only after:
+Bilibili is registered as a V0.7 Mock Provider only. It validates matching, registry behavior, and downloader handoff without claiming real Bilibili download support.
 
-1. the desktop shell is stable
-2. the downloader engine is stable
-3. the provider abstraction is stable
+Real Bilibili support should only be considered after:
+
+1. the mock Provider boundary is stable
+2. the downloader workflow remains stable
+3. DASH and optional ffmpeg handling are deliberately designed
 
 Compliance boundary for future Bilibili work:
 
