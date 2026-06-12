@@ -503,13 +503,15 @@ onBeforeUnmount(() => {
         <div class="table-header">
           <div>
             <h2>下载任务</h2>
-            <p class="path-text">{{ downloaderDefaultDir ? '默认下载目录已配置' : '正在读取下载目录...' }}</p>
+            <p class="path-text">内置下载器：{{ downloaderEnabled ? '可用' : '不可用' }}</p>
+            <p class="path-text">默认下载目录：{{ downloaderDefaultDir || '正在读取下载目录...' }}</p>
           </div>
           <button class="ghost-button" type="button" @click="openDownloaderDir">打开下载目录</button>
         </div>
 
         <div v-if="!downloaderEnabled" class="downloader-status">
-          {{ downloaderMessage || '内置下载器不可用' }}
+          <p>{{ downloaderMessage || '内置下载器不可用' }}</p>
+          <p class="setup-command">powershell -ExecutionPolicy Bypass -File scripts/prepare-aria2.ps1</p>
         </div>
 
         <div v-else class="table-wrap">

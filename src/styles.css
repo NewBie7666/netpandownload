@@ -336,6 +336,23 @@ textarea {
   font-size: 14px;
 }
 
+.downloader-status p + p {
+  margin-top: 10px;
+}
+
+.setup-command {
+  display: inline-block;
+  max-width: 100%;
+  padding: 8px 10px;
+  overflow-x: auto;
+  color: #065f46;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  border-radius: 6px;
+  font-family: Consolas, "Courier New", monospace;
+  white-space: nowrap;
+}
+
 .task-progress {
   display: flex;
   align-items: center;
