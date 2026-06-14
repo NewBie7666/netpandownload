@@ -12,6 +12,7 @@ import {
   providerError,
   providerOk
 } from './providerResponse.js'
+import { normalizeBiliEpisodes, type BiliEpisode } from './bilibili/bilibiliNormalizer.js'
 import type { Provider } from './types.js'
 
 interface YtDlpFormat {
@@ -22,7 +23,6 @@ interface YtDlpFormat {
   vcodec?: string
   acodec?: string
   protocol?: string
-  format_id?: string
 }
 
 interface YtDlpInfo {
@@ -41,32 +41,16 @@ interface YtDlpInfo {
 
 interface CacheEntry {
   info: YtDlpInfo
+  episodes: BiliEpisode[]
   files: QuarkFile[]
   createdAt: number
 }
 
 const execFileAsync = promisify(execFile)
-const cacheTtlMs = 30 * 60 * 1000
+const cacheTtlMs = 5 * 60 * 1000
 const infoCache = new Map<string, CacheEntry>()
 const bilibiliUserAgent =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36'
-
-const mockFiles: QuarkFile[] = [
-  {
-    fid: 'bilibili:mock:episode-1',
-    name: 'Bilibili Mock Part 1.mp4',
-    size: 24 * 1024 * 1024,
-    isDir: false,
-    createdAt: new Date('2026-01-01T00:00:00.000Z').toISOString()
-  },
-  {
-    fid: 'bilibili:mock:episode-2',
-    name: 'Bilibili Mock Part 2.mp4',
-    size: 32 * 1024 * 1024,
-    isDir: false,
-    createdAt: new Date('2026-01-01T00:00:00.000Z').toISOString()
-  }
-]
 
 function normalizeInput(input: string) {
   return String(input || '').trim().replace(/^['"]|['"]$/g, '')
@@ -158,7 +142,7 @@ function throwYtDlpError(error: unknown): never {
   ) {
     throw new AppError('bilibili_network_error', 'Bilibili 解析请求失败，请稍后重试')
   }
-  throw new AppError('bilibili_ytdlp_failed', 'yt-dlp 解析 Bilibili 资源失败，已回退到 Mock 数据')
+  throw new AppError('bilibili_ytdlp_failed', 'yt-dlp 解析 Bilibili 资源失败')
 }
 
 async function runYtDlpJson(args: string[]) {
@@ -181,41 +165,24 @@ async function runYtDlpJson(args: string[]) {
   }
 }
 
-function toFile(info: YtDlpInfo, index: number): QuarkFile {
-  const title = info.title || `Bilibili Part ${index + 1}`
-  const size = info.filesize || info.filesize_approx || 0
+function episodeToFile(episode: BiliEpisode): QuarkFile {
+  // QuarkFile is only a UI compatibility DTO here; BiliEpisode remains the semantic media model.
   return {
-    fid: `bilibili:real:${info.id || index}`,
-    name: `${title}.${info.ext || 'mp4'}`,
-    size,
+    fid: `bilibili:episode:${episode.id}`,
+    name: episode.title,
+    size: 0,
     isDir: false,
     createdAt: new Date().toISOString()
   }
 }
 
-function normalizeFiles(info: YtDlpInfo) {
-  const entries = Array.isArray(info.entries) ? info.entries.filter(Boolean) : []
-  if (entries.length) {
-    return entries.map(toFile)
-  }
-  return [toFile(info, 0)]
-}
-
 function getCacheEntry(shareId: string) {
   const entry = infoCache.get(shareId)
   if (!entry || Date.now() - entry.createdAt > cacheTtlMs) {
+    infoCache.delete(shareId)
     return undefined
   }
   return entry
-}
-
-function buildMockShare(inputUrl: string): ShareResult {
-  return {
-    shareId: normalizeInput(inputUrl) || 'bilibili-mock-share',
-    stoken: 'bilibili-mock-token',
-    path: [],
-    files: mockFiles
-  }
 }
 
 function selectSingleFileFormat(info: YtDlpInfo) {
@@ -258,13 +225,18 @@ function buildDownloadResult(file: QuarkFile, info: YtDlpInfo): DownloadResult {
   return result
 }
 
-async function resolveRealShare(inputUrl: string) {
+async function resolveRealShare(inputUrl: string): Promise<ShareResult> {
   const normalizedUrl = normalizeInput(inputUrl)
-  const info = await runYtDlpJson(['--dump-single-json', '--no-download', normalizedUrl])
-  const files = normalizeFiles(info)
+  const info = await runYtDlpJson(['-J', '--yes-playlist', '--no-warnings', normalizedUrl])
+  const episodes = normalizeBiliEpisodes(info)
+  if (!episodes.length) {
+    throw new AppError('bilibili_ytdlp_failed', 'Bilibili 未返回可识别的分集信息')
+  }
+  const files = episodes.map(episodeToFile)
   const shareId = normalizedUrl
   infoCache.set(shareId, {
     info,
+    episodes,
     files,
     createdAt: Date.now()
   })
@@ -276,19 +248,8 @@ async function resolveRealShare(inputUrl: string) {
   }
 }
 
-async function resolveDownloadInfo(cached: CacheEntry, index: number) {
-  const entries = Array.isArray(cached.info.entries) ? cached.info.entries : []
-  const selected = entries[index] || cached.info
-  if (selected.url || selected.formats?.length || selected.requested_downloads?.length) {
-    return selected
-  }
-
-  const targetUrl = selected.webpage_url || cached.info.webpage_url
-  if (!targetUrl) {
-    return selected
-  }
-
-  return runYtDlpJson(['--dump-single-json', '--no-download', '--no-playlist', targetUrl])
+async function resolveDownloadInfo(episode: BiliEpisode) {
+  return runYtDlpJson(['--dump-single-json', '--no-download', '--no-warnings', episode.url])
 }
 
 export const bilibiliProvider: Provider = {
@@ -308,13 +269,7 @@ export const bilibiliProvider: Provider = {
       return providerOk('bilibili', await resolveRealShare(input.shareUrl), 'real')
     } catch (error) {
       const normalized = normalizeProviderError('bilibili', error, 'resolve')
-      return buildFallback(
-        'bilibili',
-        normalized.code,
-        normalized.message,
-        normalized.code,
-        { mockShare: buildMockShare(input.shareUrl) }
-      )
+      return buildFallback('bilibili', normalized.code, normalized.message, normalized.code)
     }
   },
   async list(input) {
@@ -326,8 +281,7 @@ export const bilibiliProvider: Provider = {
       'bilibili',
       'missing_cache',
       'Bilibili 当前没有真实解析缓存，降级列表不可进入执行链路',
-      'dependency_missing',
-      { mockFiles }
+      'dependency_missing'
     )
   },
   async getDownload(input) {
@@ -336,7 +290,7 @@ export const bilibiliProvider: Provider = {
       return providerError(
         'bilibili',
         'dependency_missing',
-        'Bilibili 当前只有降级列表数据，不能生成可执行下载链接，请先完成真实解析',
+        'Bilibili 当前没有真实解析缓存，不能生成可执行下载链接，请先完成真实解析',
         true,
         'fallback',
         'missing_cache'
@@ -344,11 +298,23 @@ export const bilibiliProvider: Provider = {
     }
 
     const index = cached.files.findIndex((file) => file.fid === input.file?.fid)
+    const episode = cached.episodes[index]
+    if (!episode?.url) {
+      return providerError(
+        'bilibili',
+        'parse_failed',
+        '未找到该分集对应的 Bilibili 地址，请重新解析资源',
+        true,
+        'fallback',
+        'missing_episode'
+      )
+    }
+
     try {
-      const info = await resolveDownloadInfo(cached, index)
+      const info = await resolveDownloadInfo(episode)
       return providerOk(
         'bilibili',
-        buildDownloadResult(input.file || cached.files[index] || cached.files[0], info),
+        buildDownloadResult(input.file || cached.files[index], info),
         'real'
       )
     } catch (error) {
