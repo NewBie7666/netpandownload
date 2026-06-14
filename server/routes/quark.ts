@@ -1,60 +1,62 @@
 import { Router } from 'express'
-import { proxyQuarkDownload } from '../services/quark/download.js'
 import { quarkApi } from '../adapters/quarkApi.js'
 import { ok } from '../http.js'
-import {
-  getProvider,
-  recordProviderException,
-  recordProviderResult,
-  requireProviderForInput
-} from '../providers/registry.js'
-import { toAppError } from '../providers/providerResponse.js'
+import { getProvider, requireProviderForInput } from '../providers/registry.js'
+import { toApiResponse, toAppError } from '../providers/providerResponse.js'
+import { proxyQuarkDownload } from '../services/quark/download.js'
 import type { ProviderResponse } from '../providers/types.js'
 
 export const quarkRouter = Router()
 const quarkProvider = getProvider('quark')
 
-function requireProviderData<T>(response: ProviderResponse<T>) {
-  recordProviderResult(response)
-  if (response.status === 'error') {
-    throw toAppError(response.error || {
-      code: 'parse_failed',
-      message: 'Provider 处理失败',
-      recoverable: true
-    })
+function requireProviderData<T>(
+  response: ProviderResponse<T>,
+  operation: 'resolve' | 'list' | 'download',
+  startedAt: number
+) {
+  const envelope = toApiResponse(response, operation, startedAt, quarkProvider.capabilities)
+  if (!envelope.ok) {
+    throw toAppError(
+      envelope.error || {
+        code: 'parse_failed',
+        message: 'Provider 处理失败',
+        recoverable: true
+      }
+    )
   }
-  return response.data as T
+  return envelope.data as T
 }
 
 quarkRouter.post('/share', async (req, res, next) => {
+  const startedAt = Date.now()
   try {
     const provider = requireProviderForInput(req.body?.shareUrl)
     const result = await provider.resolveShare({
       shareUrl: req.body?.shareUrl,
       passcode: req.body?.passcode
     })
-    res.json(ok(requireProviderData(result)))
+    res.json(ok(requireProviderData(result, 'resolve', startedAt)))
   } catch (error) {
-    recordProviderException(error)
     next(error)
   }
 })
 
 quarkRouter.post('/list', async (req, res, next) => {
+  const startedAt = Date.now()
   try {
     const result = await quarkProvider.list({
       shareId: req.body?.shareId,
       stoken: req.body?.stoken,
       dirFid: req.body?.dirFid
     })
-    res.json(ok(requireProviderData(result)))
+    res.json(ok(requireProviderData(result, 'list', startedAt)))
   } catch (error) {
-    recordProviderException(error)
     next(error)
   }
 })
 
 quarkRouter.post('/download', async (req, res, next) => {
+  const startedAt = Date.now()
   try {
     const result = await quarkProvider.getDownload({
       shareId: req.body?.shareId,
@@ -62,9 +64,8 @@ quarkRouter.post('/download', async (req, res, next) => {
       file: req.body?.file,
       sessionId: req.body?.sessionId
     })
-    res.json(ok(requireProviderData(result)))
+    res.json(ok(requireProviderData(result, 'download', startedAt)))
   } catch (error) {
-    recordProviderException(error)
     next(error)
   }
 })

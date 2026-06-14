@@ -32,12 +32,13 @@ export interface ProviderResponse<T> {
   meta?: {
     source?: ProviderSource
     reason?: string
+    executable?: boolean
   }
 }
 
 export interface ProviderCapabilities {
-  list: true
-  download: true
+  list: boolean
+  download: boolean
   login: boolean
   streaming: boolean
 }

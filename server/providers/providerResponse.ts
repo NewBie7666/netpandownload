@@ -1,5 +1,7 @@
 import { AppError } from '../http.js'
+import { recordExecutionTrace, type ProviderOperation } from './executionTrace.js'
 import type {
+  ProviderCapabilities,
   ProviderError,
   ProviderErrorCode,
   ProviderId,
@@ -7,17 +9,34 @@ import type {
   ProviderSource
 } from './types.js'
 
+export interface ProviderApiEnvelope<T> {
+  ok: boolean
+  providerId: ProviderId
+  operation: ProviderOperation
+  data?: T
+  error?: ProviderError
+  meta: {
+    source?: ProviderSource
+    reason?: string
+    executable: boolean
+    traceId: string
+    durationMs: number
+    capabilitiesSnapshot?: ProviderCapabilities
+  }
+}
+
 export function providerOk<T>(
   providerId: ProviderId,
   data: T,
   source: ProviderSource = 'real',
   reason?: string
 ): ProviderResponse<T> {
+  const executable = source !== 'fallback'
   return {
     providerId,
     status: 'ok',
     data,
-    meta: reason ? { source, reason } : { source }
+    meta: reason ? { source, reason, executable } : { source, executable }
   }
 }
 
@@ -25,7 +44,9 @@ export function providerError<T = never>(
   providerId: ProviderId,
   code: ProviderErrorCode,
   message: string,
-  recoverable = true
+  recoverable = true,
+  source?: ProviderSource,
+  reason?: string
 ): ProviderResponse<T> {
   return {
     providerId,
@@ -34,6 +55,11 @@ export function providerError<T = never>(
       code,
       message,
       recoverable
+    },
+    meta: {
+      source,
+      reason,
+      executable: false
     }
   }
 }
@@ -46,8 +72,52 @@ export function buildFallback<T>(
   return providerOk(providerId, data, 'fallback', reason)
 }
 
+export function toApiResponse<T>(
+  response: ProviderResponse<T>,
+  operation: ProviderOperation,
+  startedAt = Date.now(),
+  capabilitiesSnapshot?: ProviderCapabilities
+): ProviderApiEnvelope<T> {
+  const source = response.meta?.source
+  const executable = response.status === 'ok' && response.meta?.executable !== false && source !== 'fallback'
+  const trace = recordExecutionTrace({
+    providerId: response.providerId,
+    operation,
+    status: response.status,
+    errorCode: response.error?.code,
+    source,
+    executable,
+    startedAt,
+    capabilitiesSnapshot
+  })
+
+  return {
+    ok: response.status === 'ok',
+    providerId: response.providerId,
+    operation,
+    data: response.data,
+    error: response.error,
+    meta: {
+      source,
+      reason: response.meta?.reason,
+      executable,
+      traceId: trace.traceId,
+      durationMs: trace.durationMs,
+      capabilitiesSnapshot
+    }
+  }
+}
+
 export function toAppError(error: ProviderError, status = 400) {
   return new AppError(error.code, error.message, status)
+}
+
+export function providerCapabilityError<T = never>(
+  providerId: ProviderId,
+  operation: ProviderOperation,
+  message = '该 Provider 不支持当前操作'
+) {
+  return providerError<T>(providerId, operation === 'download' ? 'restricted' : 'parse_failed', message, false)
 }
 
 function hasText(error: unknown, patterns: string[]) {

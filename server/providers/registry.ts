@@ -1,20 +1,11 @@
 import { AppError } from '../http.js'
 import { bilibiliProvider } from './bilibiliProvider.js'
+import { getLastExecutionTrace } from './executionTrace.js'
 import { quarkProvider } from './quarkProvider.js'
-import type { Provider, ProviderErrorCode, ProviderId, ProviderResponse } from './types.js'
-
-interface ProviderDebugResult {
-  registered: string[]
-  matchedProvider?: string
-  lastResult?: {
-    status: 'ok' | 'error'
-    errorCode?: ProviderErrorCode
-  }
-}
+import type { Provider, ProviderId } from './types.js'
 
 const providers: Provider[] = [quarkProvider, bilibiliProvider]
 let matchedProvider: string | undefined
-let lastResult: ProviderDebugResult['lastResult']
 
 export function listProviders() {
   return [...providers]
@@ -23,7 +14,6 @@ export function listProviders() {
 export function getProvider(id: ProviderId) {
   const provider = providers.find((item) => item.id === id)
   if (!provider) {
-    lastResult = { status: 'error', errorCode: 'unsupported_provider' }
     throw new AppError('unsupported_provider', '暂不支持该资源来源', 400)
   }
   matchedProvider = provider.id
@@ -41,31 +31,24 @@ export function findProviderByInput(input: string) {
 export function requireProviderForInput(input: string) {
   const provider = findProviderByInput(input)
   if (!provider) {
-    lastResult = { status: 'error', errorCode: 'unsupported_provider' }
     throw new AppError('unsupported_provider', '暂不支持该资源来源', 400)
   }
   return provider
 }
 
-export function recordProviderResult(response: ProviderResponse<unknown>) {
-  lastResult = {
-    status: response.status,
-    errorCode: response.error?.code
-  }
-}
-
-export function recordProviderException(error: unknown) {
-  if (error instanceof AppError && error.error === 'unsupported_provider') {
-    lastResult = { status: 'error', errorCode: 'unsupported_provider' }
-    return
-  }
-  lastResult = { status: 'error', errorCode: 'parse_failed' }
-}
-
-export function getProviderDebug(): ProviderDebugResult {
+export function getProviderDebug() {
+  const trace = getLastExecutionTrace()
   return {
     registered: providers.map((provider) => provider.id),
     matchedProvider,
-    lastResult
+    lastResult: trace
+      ? {
+          status: trace.status,
+          errorCode: trace.errorCode,
+          traceId: trace.traceId,
+          source: trace.source,
+          executable: trace.executable
+        }
+      : undefined
   }
 }

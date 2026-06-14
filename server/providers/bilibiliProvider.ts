@@ -1,8 +1,8 @@
+import { execFile } from 'node:child_process'
 import { constants as fsConstants } from 'node:fs'
 import { access } from 'node:fs/promises'
-import { execFile } from 'node:child_process'
-import { promisify } from 'node:util'
 import path from 'node:path'
+import { promisify } from 'node:util'
 import type { DownloadResult, QuarkFile, ShareResult } from '../../shared/types.js'
 import { registerAllowedDownloadResult } from '../downloader/downloadService.js'
 import { AppError } from '../http.js'
@@ -113,8 +113,12 @@ async function resolveYtDlpExecutable() {
 function readExecErrorText(error: unknown) {
   const parts = [
     error instanceof Error ? error.message : '',
-    typeof error === 'object' && error !== null && 'stderr' in error ? String((error as { stderr?: unknown }).stderr || '') : '',
-    typeof error === 'object' && error !== null && 'stdout' in error ? String((error as { stdout?: unknown }).stdout || '') : ''
+    typeof error === 'object' && error !== null && 'stderr' in error
+      ? String((error as { stderr?: unknown }).stderr || '')
+      : '',
+    typeof error === 'object' && error !== null && 'stdout' in error
+      ? String((error as { stdout?: unknown }).stdout || '')
+      : ''
   ]
   return parts.filter(Boolean).join('\n')
 }
@@ -212,19 +216,6 @@ function buildMockShare(inputUrl: string): ShareResult {
     path: [],
     files: mockFiles
   }
-}
-
-function buildMockDownloadResult(file: QuarkFile): DownloadResult {
-  const result: DownloadResult = {
-    fid: file.fid,
-    name: file.name,
-    downloadUrl: `https://mock.local/bilibili/${encodeURIComponent(file.fid)}`,
-    source: 'direct',
-    expiresAt: new Date(Date.now() + cacheTtlMs).toISOString(),
-    cached: false
-  }
-  registerAllowedDownloadResult(result)
-  return result
 }
 
 function selectSingleFileFormat(info: YtDlpInfo) {
@@ -330,9 +321,12 @@ export const bilibiliProvider: Provider = {
   async getDownload(input) {
     const cached = getCacheEntry(input.shareId)
     if (!cached) {
-      return buildFallback(
+      return providerError(
         'bilibili',
-        buildMockDownloadResult(input.file || mockFiles[0]),
+        'dependency_missing',
+        'Bilibili 当前只有降级列表数据，不能生成可执行下载链接，请先完成真实解析',
+        true,
+        'fallback',
         'missing_cache'
       )
     }
@@ -347,12 +341,12 @@ export const bilibiliProvider: Provider = {
       )
     } catch (error) {
       const normalized = normalizeProviderError('bilibili', error, 'download')
-      if (normalized.code === 'dash_unsupported') {
-        return providerError('bilibili', normalized.code, normalized.message, normalized.recoverable)
-      }
-      return buildFallback(
+      return providerError(
         'bilibili',
-        buildMockDownloadResult(input.file || cached.files[0]),
+        normalized.code,
+        normalized.message,
+        normalized.recoverable,
+        'fallback',
         normalized.code
       )
     }
