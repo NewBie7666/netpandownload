@@ -308,7 +308,13 @@ export const bilibiliProvider: Provider = {
       return providerOk('bilibili', await resolveRealShare(input.shareUrl), 'real')
     } catch (error) {
       const normalized = normalizeProviderError('bilibili', error, 'resolve')
-      return buildFallback('bilibili', buildMockShare(input.shareUrl), normalized.code)
+      return buildFallback(
+        'bilibili',
+        normalized.code,
+        normalized.message,
+        normalized.code,
+        { mockShare: buildMockShare(input.shareUrl) }
+      )
     }
   },
   async list(input) {
@@ -316,7 +322,13 @@ export const bilibiliProvider: Provider = {
     if (cached) {
       return providerOk('bilibili', { files: cached.files }, 'cache')
     }
-    return buildFallback('bilibili', { files: mockFiles }, 'missing_cache')
+    return buildFallback(
+      'bilibili',
+      'missing_cache',
+      'Bilibili 当前没有真实解析缓存，降级列表不可进入执行链路',
+      'dependency_missing',
+      { mockFiles }
+    )
   },
   async getDownload(input) {
     const cached = getCacheEntry(input.shareId)

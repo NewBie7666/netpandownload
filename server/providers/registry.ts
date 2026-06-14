@@ -43,6 +43,7 @@ export function getProviderDebug() {
     matchedProvider,
     lastResult: trace
       ? {
+          kind: trace.kind,
           status: trace.status,
           errorCode: trace.errorCode,
           traceId: trace.traceId,

@@ -1,27 +1,33 @@
 import { AppError } from '../http.js'
 import { recordExecutionTrace, type ProviderOperation } from './executionTrace.js'
 import type {
-  ProviderCapabilities,
+  FallbackProviderResponse,
   ProviderError,
   ProviderErrorCode,
   ProviderId,
   ProviderResponse,
+  ProviderResultKind,
   ProviderSource
 } from './types.js'
 
-export interface ProviderApiEnvelope<T> {
+export interface InternalExecutionContract<T> {
+  kind: ProviderResultKind
   ok: boolean
   providerId: ProviderId
   operation: ProviderOperation
-  data?: T
+  data?: T | null
   error?: ProviderError
   meta: {
-    source?: ProviderSource
-    reason?: string
-    executable: boolean
-    traceId: string
-    durationMs: number
-    capabilitiesSnapshot?: ProviderCapabilities
+    runtime: {
+      traceId: string
+      durationMs: number
+      source?: ProviderSource
+      executable: boolean
+    }
+    provider: {
+      providerMeta?: unknown
+      reason?: string
+    }
   }
 }
 
@@ -29,14 +35,19 @@ export function providerOk<T>(
   providerId: ProviderId,
   data: T,
   source: ProviderSource = 'real',
-  reason?: string
+  reason?: string,
+  providerMeta?: unknown
 ): ProviderResponse<T> {
-  const executable = source !== 'fallback'
   return {
+    kind: 'success',
+    ok: true,
     providerId,
-    status: 'ok',
     data,
-    meta: reason ? { source, reason, executable } : { source, executable }
+    meta: {
+      source,
+      reason,
+      providerMeta
+    }
   }
 }
 
@@ -46,11 +57,14 @@ export function providerError<T = never>(
   message: string,
   recoverable = true,
   source?: ProviderSource,
-  reason?: string
+  reason?: string,
+  providerMeta?: unknown
 ): ProviderResponse<T> {
   return {
+    kind: 'error',
+    ok: false,
     providerId,
-    status: 'error',
+    data: null,
     error: {
       code,
       message,
@@ -59,51 +73,72 @@ export function providerError<T = never>(
     meta: {
       source,
       reason,
-      executable: false
+      providerMeta
     }
   }
 }
 
-export function buildFallback<T>(
+export function buildFallback(
   providerId: ProviderId,
-  data: T,
-  reason: string
-): ProviderResponse<T> {
-  return providerOk(providerId, data, 'fallback', reason)
+  reason: string,
+  message = '降级数据不可执行',
+  code: ProviderErrorCode = 'blocked_by_upstream',
+  providerMeta?: unknown
+): FallbackProviderResponse {
+  return {
+    kind: 'fallback',
+    ok: false,
+    providerId,
+    data: null,
+    error: {
+      code,
+      message,
+      recoverable: true
+    },
+    meta: {
+      source: 'fallback',
+      reason,
+      providerMeta
+    }
+  }
 }
 
-export function toApiResponse<T>(
+export function toInternalExecutionContract<T>(
   response: ProviderResponse<T>,
   operation: ProviderOperation,
-  startedAt = Date.now(),
-  capabilitiesSnapshot?: ProviderCapabilities
-): ProviderApiEnvelope<T> {
+  startedAt = Date.now()
+): InternalExecutionContract<T> {
   const source = response.meta?.source
-  const executable = response.status === 'ok' && response.meta?.executable !== false && source !== 'fallback'
+  const executable = response.kind === 'success' && source !== 'fallback'
+  const error = response.kind === 'success' ? undefined : response.error
   const trace = recordExecutionTrace({
     providerId: response.providerId,
     operation,
-    status: response.status,
-    errorCode: response.error?.code,
+    kind: response.kind,
+    errorCode: error?.code,
     source,
     executable,
-    startedAt,
-    capabilitiesSnapshot
+    startedAt
   })
 
   return {
-    ok: response.status === 'ok',
+    kind: response.kind,
+    ok: response.kind === 'success',
     providerId: response.providerId,
     operation,
-    data: response.data,
-    error: response.error,
+    data: response.kind === 'success' ? response.data : null,
+    error,
     meta: {
-      source,
-      reason: response.meta?.reason,
-      executable,
-      traceId: trace.traceId,
-      durationMs: trace.durationMs,
-      capabilitiesSnapshot
+      runtime: {
+        traceId: trace.traceId,
+        durationMs: trace.durationMs,
+        source,
+        executable
+      },
+      provider: {
+        providerMeta: response.meta?.providerMeta,
+        reason: response.meta?.reason
+      }
     }
   }
 }

@@ -8,6 +8,7 @@ import type {
 export type ProviderId = 'quark' | 'bilibili'
 export type ProviderSource = 'real' | 'mock' | 'fallback' | 'cache'
 export type ProviderStatus = 'ok' | 'error'
+export type ProviderResultKind = 'success' | 'error' | 'fallback'
 export type ProviderErrorCode =
   | 'unsupported_provider'
   | 'parse_failed'
@@ -24,17 +25,45 @@ export interface ProviderError {
   recoverable: boolean
 }
 
-export interface ProviderResponse<T> {
+export interface ProviderMeta {
+  source?: ProviderSource
+  reason?: string
+  providerMeta?: unknown
+}
+
+export interface ProviderSuccessResponse<T> {
+  kind: 'success'
+  ok: true
   providerId: ProviderId
-  status: ProviderStatus
-  data?: T
-  error?: ProviderError
-  meta?: {
-    source?: ProviderSource
-    reason?: string
-    executable?: boolean
+  data: T
+  meta?: ProviderMeta
+}
+
+export interface ProviderErrorResponse {
+  kind: 'error'
+  ok: false
+  providerId: ProviderId
+  data?: null
+  error: ProviderError
+  meta?: ProviderMeta
+}
+
+export interface FallbackProviderResponse {
+  kind: 'fallback'
+  ok: false
+  providerId: ProviderId
+  data: null
+  error: ProviderError
+  meta: ProviderMeta & {
+    source: 'fallback'
+    reason: string
   }
 }
+
+export type ProviderResponse<T> =
+  | ProviderSuccessResponse<T>
+  | ProviderErrorResponse
+  | FallbackProviderResponse
 
 export interface ProviderCapabilities {
   list: boolean

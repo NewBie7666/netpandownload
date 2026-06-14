@@ -2,7 +2,7 @@ import { Router } from 'express'
 import { quarkApi } from '../adapters/quarkApi.js'
 import { ok } from '../http.js'
 import { getProvider, requireProviderForInput } from '../providers/registry.js'
-import { toApiResponse, toAppError } from '../providers/providerResponse.js'
+import { toAppError, toInternalExecutionContract } from '../providers/providerResponse.js'
 import { proxyQuarkDownload } from '../services/quark/download.js'
 import type { ProviderResponse } from '../providers/types.js'
 
@@ -14,17 +14,17 @@ function requireProviderData<T>(
   operation: 'resolve' | 'list' | 'download',
   startedAt: number
 ) {
-  const envelope = toApiResponse(response, operation, startedAt, quarkProvider.capabilities)
-  if (!envelope.ok) {
+  const contract = toInternalExecutionContract(response, operation, startedAt)
+  if (!contract.ok || contract.kind !== 'success') {
     throw toAppError(
-      envelope.error || {
+      contract.error || {
         code: 'parse_failed',
         message: 'Provider 处理失败',
         recoverable: true
       }
     )
   }
-  return envelope.data as T
+  return contract.data as T
 }
 
 quarkRouter.post('/share', async (req, res, next) => {

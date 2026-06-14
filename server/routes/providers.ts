@@ -8,29 +8,39 @@ import {
 } from '../providers/registry.js'
 import {
   providerCapabilityError,
-  toApiResponse,
   toAppError,
-  type ProviderApiEnvelope
+  toInternalExecutionContract,
+  type InternalExecutionContract
 } from '../providers/providerResponse.js'
 import type { DownloadResult, ListResult, ShareResult } from '../../shared/types.js'
 import type { Provider, ProviderId, ProviderResponse } from '../providers/types.js'
 
 export const providersRouter = Router()
 
-function requireEnvelopeData<T>(envelope: ProviderApiEnvelope<T>) {
-  if (!envelope.ok) {
+function requireContractData<T>(contract: InternalExecutionContract<T>) {
+  if (!contract.ok || contract.kind !== 'success') {
     throw toAppError(
-      envelope.error || {
+      contract.error || {
         code: 'parse_failed',
         message: 'Provider 处理失败',
         recoverable: true
       }
     )
   }
-  if (!envelope.data) {
+  if (!contract.data) {
     throw new AppError('parse_failed', 'Provider 未返回数据', 502)
   }
-  return envelope.data
+  return contract.data
+}
+
+function toPublicMeta<T>(contract: InternalExecutionContract<T>) {
+  return {
+    source: contract.meta.runtime.source,
+    executable: contract.meta.runtime.executable,
+    traceId: contract.meta.runtime.traceId,
+    durationMs: contract.meta.runtime.durationMs,
+    reason: contract.meta.provider.reason
+  }
 }
 
 function wrapResponse<T>(
@@ -39,27 +49,14 @@ function wrapResponse<T>(
   response: ProviderResponse<T>,
   startedAt: number
 ) {
-  return toApiResponse(response, operation, startedAt, provider.capabilities)
-}
-
-function capabilityResponse<T>(
-  provider: Provider,
-  operation: 'list' | 'download',
-  startedAt: number
-) {
-  return wrapResponse<T>(
-    provider,
-    operation,
-    providerCapabilityError(provider.id, operation),
-    startedAt
-  )
+  return toInternalExecutionContract(response, operation, startedAt)
 }
 
 providersRouter.post('/resolve', async (req, res, next) => {
   const startedAt = Date.now()
   try {
     const provider = requireProviderForInput(req.body?.input)
-    const envelope = wrapResponse<ShareResult>(
+    const contract = wrapResponse<ShareResult>(
       provider,
       'resolve',
       await provider.resolveShare({
@@ -68,8 +65,8 @@ providersRouter.post('/resolve', async (req, res, next) => {
       }),
       startedAt
     )
-    const share = requireEnvelopeData(envelope)
-    res.json(ok({ providerId: provider.id, share, meta: envelope.meta }))
+    const share = requireContractData(contract)
+    res.json(ok({ providerId: provider.id, share, meta: toPublicMeta(contract) }))
   } catch (error) {
     next(error)
   }
@@ -85,10 +82,10 @@ providersRouter.post('/list', async (req, res, next) => {
           stoken: String(req.body?.stoken || ''),
           dirFid: req.body?.dirFid
         })
-      : capabilityResponse<ListResult>(provider, 'list', startedAt)
-    const envelope = 'ok' in response ? response : wrapResponse<ListResult>(provider, 'list', response, startedAt)
-    const list = requireEnvelopeData(envelope)
-    res.json(ok({ providerId: provider.id, list, meta: envelope.meta }))
+      : providerCapabilityError<ListResult>(provider.id, 'list')
+    const contract = wrapResponse<ListResult>(provider, 'list', response, startedAt)
+    const list = requireContractData(contract)
+    res.json(ok({ providerId: provider.id, list, meta: toPublicMeta(contract) }))
   } catch (error) {
     next(error)
   }
@@ -105,10 +102,10 @@ providersRouter.post('/download', async (req, res, next) => {
           file: req.body?.file,
           sessionId: req.body?.sessionId
         })
-      : capabilityResponse<DownloadResult>(provider, 'download', startedAt)
-    const envelope = 'ok' in response ? response : wrapResponse<DownloadResult>(provider, 'download', response, startedAt)
-    const download = requireEnvelopeData(envelope)
-    res.json(ok({ providerId: provider.id, download, meta: envelope.meta }))
+      : providerCapabilityError<DownloadResult>(provider.id, 'download')
+    const contract = wrapResponse<DownloadResult>(provider, 'download', response, startedAt)
+    const download = requireContractData(contract)
+    res.json(ok({ providerId: provider.id, download, meta: toPublicMeta(contract) }))
   } catch (error) {
     next(error)
   }
