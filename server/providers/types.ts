@@ -6,6 +6,41 @@ import type {
 } from '../../shared/types.js'
 
 export type ProviderId = 'quark' | 'bilibili'
+export type ProviderSource = 'real' | 'mock' | 'fallback' | 'cache'
+export type ProviderStatus = 'ok' | 'error'
+export type ProviderErrorCode =
+  | 'unsupported_provider'
+  | 'parse_failed'
+  | 'restricted'
+  | 'dependency_missing'
+  | 'network_error'
+  | 'dash_unsupported'
+  | 'auth_required'
+  | 'blocked_by_upstream'
+
+export interface ProviderError {
+  code: ProviderErrorCode
+  message: string
+  recoverable: boolean
+}
+
+export interface ProviderResponse<T> {
+  providerId: ProviderId
+  status: ProviderStatus
+  data?: T
+  error?: ProviderError
+  meta?: {
+    source?: ProviderSource
+    reason?: string
+  }
+}
+
+export interface ProviderCapabilities {
+  list: true
+  download: true
+  login: boolean
+  streaming: boolean
+}
 
 export interface ResolveShareInput {
   shareUrl: string
@@ -28,8 +63,9 @@ export interface DownloadInput {
 export interface Provider {
   id: ProviderId
   name: string
+  capabilities: ProviderCapabilities
   match(input: string): boolean
-  resolveShare(input: ResolveShareInput): Promise<ShareResult>
-  list(input: ListInput): Promise<ListResult>
-  getDownload(input: DownloadInput): Promise<DownloadResult>
+  resolveShare(input: ResolveShareInput): Promise<ProviderResponse<ShareResult>>
+  list(input: ListInput): Promise<ProviderResponse<ListResult>>
+  getDownload(input: DownloadInput): Promise<ProviderResponse<DownloadResult>>
 }

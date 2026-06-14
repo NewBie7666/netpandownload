@@ -6,6 +6,12 @@ import path from 'node:path'
 import type { DownloadResult, QuarkFile, ShareResult } from '../../shared/types.js'
 import { registerAllowedDownloadResult } from '../downloader/downloadService.js'
 import { AppError } from '../http.js'
+import {
+  buildFallback,
+  normalizeProviderError,
+  providerError,
+  providerOk
+} from './providerResponse.js'
 import type { Provider } from './types.js'
 
 interface YtDlpFormat {
@@ -98,16 +104,63 @@ async function resolveYtDlpExecutable() {
       await access(candidate, fsConstants.X_OK)
       return candidate
     } catch {
-      // Try the next configured resource location.
+      // Try next candidate.
     }
   }
   return ''
 }
 
+function readExecErrorText(error: unknown) {
+  const parts = [
+    error instanceof Error ? error.message : '',
+    typeof error === 'object' && error !== null && 'stderr' in error ? String((error as { stderr?: unknown }).stderr || '') : '',
+    typeof error === 'object' && error !== null && 'stdout' in error ? String((error as { stdout?: unknown }).stdout || '') : ''
+  ]
+  return parts.filter(Boolean).join('\n')
+}
+
+function throwYtDlpError(error: unknown): never {
+  if (error instanceof AppError) {
+    throw error
+  }
+
+  const text = readExecErrorText(error)
+  const lowered = text.toLowerCase()
+  if (lowered.includes('http error 412') || lowered.includes('precondition failed')) {
+    throw new AppError(
+      'bilibili_blocked_by_upstream',
+      'B站返回风控限制，当前版本未接入 B站登录态，无法保证解析成功'
+    )
+  }
+  if (
+    lowered.includes('login') ||
+    lowered.includes('private') ||
+    lowered.includes('会员') ||
+    lowered.includes('付费') ||
+    lowered.includes('drm') ||
+    lowered.includes('region')
+  ) {
+    throw new AppError(
+      'bilibili_access_restricted',
+      '该资源可能需要登录、会员权限、地区权限或受到 DRM 限制，当前版本不支持绕过'
+    )
+  }
+  if (
+    lowered.includes('timed out') ||
+    lowered.includes('timeout') ||
+    lowered.includes('econnreset') ||
+    lowered.includes('enotfound') ||
+    lowered.includes('network')
+  ) {
+    throw new AppError('bilibili_network_error', 'Bilibili 解析请求失败，请稍后重试')
+  }
+  throw new AppError('bilibili_ytdlp_failed', 'yt-dlp 解析 Bilibili 资源失败，已回退到 Mock 数据')
+}
+
 async function runYtDlpJson(args: string[]) {
   const executable = await resolveYtDlpExecutable()
   if (!executable) {
-    throw new AppError('ytdlp_unavailable', '未找到 yt-dlp.exe，Bilibili 真实解析不可用，已回退到 Mock 数据')
+    throw new AppError('ytdlp_unavailable', '请先运行 scripts/prepare-ytdlp.ps1 准备 yt-dlp.exe')
   }
 
   try {
@@ -120,10 +173,7 @@ async function runYtDlpJson(args: string[]) {
     })
     return JSON.parse(stdout) as YtDlpInfo
   } catch (error) {
-    if (error instanceof AppError) {
-      throw error
-    }
-    throw new AppError('bilibili_ytdlp_failed', 'yt-dlp 解析 Bilibili 资源失败，已回退到 Mock 数据')
+    throwYtDlpError(error)
   }
 }
 
@@ -180,7 +230,7 @@ function buildMockDownloadResult(file: QuarkFile): DownloadResult {
 function selectSingleFileFormat(info: YtDlpInfo) {
   const requested = Array.isArray(info.requested_downloads) ? info.requested_downloads : []
   if (requested.length > 1) {
-    throw new AppError('bilibili_dash_unsupported', '该资源需要 ffmpeg 合并，当前版本暂不支持')
+    throw new AppError('bilibili_dash_unsupported', '该资源需要音视频合并，当前版本暂不支持 ffmpeg 合并')
   }
   if (requested[0]?.url) {
     return requested[0]
@@ -200,7 +250,7 @@ function selectSingleFileFormat(info: YtDlpInfo) {
     return info
   }
 
-  throw new AppError('bilibili_dash_unsupported', '该资源需要 ffmpeg 合并，当前版本暂不支持')
+  throw new AppError('bilibili_dash_unsupported', '该资源需要音视频合并，当前版本暂不支持 ffmpeg 合并')
 }
 
 function buildDownloadResult(file: QuarkFile, info: YtDlpInfo): DownloadResult {
@@ -250,45 +300,61 @@ async function resolveDownloadInfo(cached: CacheEntry, index: number) {
   return runYtDlpJson(['--dump-single-json', '--no-download', '--no-playlist', targetUrl])
 }
 
-// V0.7/V0.8 compatibility wrapper:
-// Bilibili is now registered as a Provider, but this file deliberately keeps
-// the output shape aligned with the existing Quark-derived Share/List/Download
-// contracts until a broader Provider result model is introduced.
 export const bilibiliProvider: Provider = {
   id: 'bilibili',
   name: 'Bilibili',
+  capabilities: {
+    list: true,
+    download: true,
+    login: false,
+    streaming: false
+  },
   match(input) {
     return isBilibiliUrl(input)
   },
   async resolveShare(input) {
     try {
-      return await resolveRealShare(input.shareUrl)
-    } catch {
-      return buildMockShare(input.shareUrl)
+      return providerOk('bilibili', await resolveRealShare(input.shareUrl), 'real')
+    } catch (error) {
+      const normalized = normalizeProviderError('bilibili', error, 'resolve')
+      return buildFallback('bilibili', buildMockShare(input.shareUrl), normalized.code)
     }
   },
   async list(input) {
     const cached = getCacheEntry(input.shareId)
     if (cached) {
-      return { files: cached.files }
+      return providerOk('bilibili', { files: cached.files }, 'cache')
     }
-    return { files: mockFiles }
+    return buildFallback('bilibili', { files: mockFiles }, 'missing_cache')
   },
   async getDownload(input) {
     const cached = getCacheEntry(input.shareId)
     if (!cached) {
-      return buildMockDownloadResult(input.file || mockFiles[0])
+      return buildFallback(
+        'bilibili',
+        buildMockDownloadResult(input.file || mockFiles[0]),
+        'missing_cache'
+      )
     }
 
     const index = cached.files.findIndex((file) => file.fid === input.file?.fid)
     try {
       const info = await resolveDownloadInfo(cached, index)
-      return buildDownloadResult(input.file || cached.files[index] || cached.files[0], info)
+      return providerOk(
+        'bilibili',
+        buildDownloadResult(input.file || cached.files[index] || cached.files[0], info),
+        'real'
+      )
     } catch (error) {
-      if (error instanceof AppError) {
-        throw error
+      const normalized = normalizeProviderError('bilibili', error, 'download')
+      if (normalized.code === 'dash_unsupported') {
+        return providerError('bilibili', normalized.code, normalized.message, normalized.recoverable)
       }
-      return buildMockDownloadResult(input.file || cached.files[0])
+      return buildFallback(
+        'bilibili',
+        buildMockDownloadResult(input.file || cached.files[0]),
+        normalized.code
+      )
     }
   }
 }

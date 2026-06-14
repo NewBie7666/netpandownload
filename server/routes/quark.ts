@@ -4,12 +4,27 @@ import { quarkApi } from '../adapters/quarkApi.js'
 import { ok } from '../http.js'
 import {
   getProvider,
-  recordProviderResolveStatus,
+  recordProviderException,
+  recordProviderResult,
   requireProviderForInput
 } from '../providers/registry.js'
+import { toAppError } from '../providers/providerResponse.js'
+import type { ProviderResponse } from '../providers/types.js'
 
 export const quarkRouter = Router()
 const quarkProvider = getProvider('quark')
+
+function requireProviderData<T>(response: ProviderResponse<T>) {
+  recordProviderResult(response)
+  if (response.status === 'error') {
+    throw toAppError(response.error || {
+      code: 'parse_failed',
+      message: 'Provider 处理失败',
+      recoverable: true
+    })
+  }
+  return response.data as T
+}
 
 quarkRouter.post('/share', async (req, res, next) => {
   try {
@@ -18,10 +33,9 @@ quarkRouter.post('/share', async (req, res, next) => {
       shareUrl: req.body?.shareUrl,
       passcode: req.body?.passcode
     })
-    recordProviderResolveStatus('ok')
-    res.json(ok(result))
+    res.json(ok(requireProviderData(result)))
   } catch (error) {
-    recordProviderResolveStatus('error')
+    recordProviderException(error)
     next(error)
   }
 })
@@ -33,10 +47,9 @@ quarkRouter.post('/list', async (req, res, next) => {
       stoken: req.body?.stoken,
       dirFid: req.body?.dirFid
     })
-    recordProviderResolveStatus('ok')
-    res.json(ok(result))
+    res.json(ok(requireProviderData(result)))
   } catch (error) {
-    recordProviderResolveStatus('error')
+    recordProviderException(error)
     next(error)
   }
 })
@@ -49,10 +62,9 @@ quarkRouter.post('/download', async (req, res, next) => {
       file: req.body?.file,
       sessionId: req.body?.sessionId
     })
-    recordProviderResolveStatus('ok')
-    res.json(ok(result))
+    res.json(ok(requireProviderData(result)))
   } catch (error) {
-    recordProviderResolveStatus('error')
+    recordProviderException(error)
     next(error)
   }
 })
