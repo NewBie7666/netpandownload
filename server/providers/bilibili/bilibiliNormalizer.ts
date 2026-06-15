@@ -4,6 +4,7 @@ export interface BiliEpisode {
   url: string
   index: number
   duration?: number
+  downloadInfo?: unknown
 }
 
 type UnknownRecord = Record<string, unknown>
@@ -69,7 +70,8 @@ function pushEpisode(
     id,
     title: pickTitle(item, episodes.length + 1),
     url,
-    duration: asNumber(item.duration)
+    duration: asNumber(item.duration),
+    downloadInfo: item
   })
 }
 

@@ -18,6 +18,9 @@ export type ProviderErrorCode =
   | 'dash_unsupported'
   | 'auth_required'
   | 'blocked_by_upstream'
+  | 'episode_cache_miss'
+  | 'episode_inconsistent_state'
+  | 'download_url_missing'
 
 export interface ProviderError {
   code: ProviderErrorCode

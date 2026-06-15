@@ -212,6 +212,9 @@ function mapAppErrorCode(
     if (errorCode === 'bilibili_access_restricted') return 'restricted'
     if (errorCode === 'bilibili_ytdlp_failed') return 'network_error'
     if (errorCode === 'bilibili_network_error') return 'network_error'
+    if (errorCode === 'episode_cache_miss') return 'episode_cache_miss'
+    if (errorCode === 'episode_inconsistent_state') return 'episode_inconsistent_state'
+    if (errorCode === 'download_url_missing') return 'download_url_missing'
     return context === 'download' ? 'network_error' : 'parse_failed'
   }
 

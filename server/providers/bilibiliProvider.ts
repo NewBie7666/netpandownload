@@ -40,20 +40,48 @@ interface YtDlpInfo {
 }
 
 interface CacheEntry {
-  info: YtDlpInfo
+  raw: YtDlpInfo
   episodes: BiliEpisode[]
   files: QuarkFile[]
   createdAt: number
 }
 
 const execFileAsync = promisify(execFile)
-const cacheTtlMs = 5 * 60 * 1000
+const cacheTtlMs = 15 * 60 * 1000
 const infoCache = new Map<string, CacheEntry>()
 const bilibiliUserAgent =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36'
 
 function normalizeInput(input: string) {
   return String(input || '').trim().replace(/^['"]|['"]$/g, '')
+}
+
+function canonicalizeBiliUrl(input: string) {
+  const value = normalizeInput(input)
+  try {
+    const url = new URL(value)
+    const bvMatch = url.pathname.match(/\/video\/(BV[0-9A-Za-z]+)/i)
+    if (/^(www\.)?bilibili\.com$/i.test(url.hostname) && bvMatch) {
+      return `https://www.bilibili.com/video/${bvMatch[1]}`
+    }
+
+    if (/^(www\.)?bilibili\.com$/i.test(url.hostname) && /^\/bangumi\/play\//i.test(url.pathname)) {
+      return `https://www.bilibili.com${url.pathname.replace(/\/+$/, '')}`
+    }
+
+    // b23.tv is a short link. We intentionally do not expand it here because
+    // canonicalization must not introduce extra network requests.
+    if (/^b23\.tv$/i.test(url.hostname)) {
+      return `https://b23.tv${url.pathname.replace(/\/+$/, '')}`
+    }
+  } catch {
+    // Keep the normalized input so unsupported URL errors stay readable.
+  }
+  return value
+}
+
+function toCacheKey(input: string) {
+  return `bili:${canonicalizeBiliUrl(input)}`
 }
 
 function isBilibiliUrl(input: string) {
@@ -185,6 +213,12 @@ function getCacheEntry(shareId: string) {
   return entry
 }
 
+function assertEpisodeConsistency(entry: CacheEntry) {
+  if (entry.episodes.length !== entry.files.length) {
+    throw new AppError('episode_inconsistent_state', 'Bilibili 分集缓存状态不一致，请重新解析资源')
+  }
+}
+
 function selectSingleFileFormat(info: YtDlpInfo) {
   const requested = Array.isArray(info.requested_downloads) ? info.requested_downloads : []
   if (requested.length > 1) {
@@ -208,7 +242,14 @@ function selectSingleFileFormat(info: YtDlpInfo) {
     return info
   }
 
-  throw new AppError('bilibili_dash_unsupported', '该资源需要音视频合并，当前版本暂不支持 ffmpeg 合并')
+  throw new AppError('download_url_missing', 'Bilibili 未返回可直接下载的链接，请重新解析或等待后续 ffmpeg 支持')
+}
+
+function getCachedDownloadInfo(episode: BiliEpisode): YtDlpInfo {
+  if (episode.downloadInfo && typeof episode.downloadInfo === 'object') {
+    return episode.downloadInfo as YtDlpInfo
+  }
+  throw new AppError('download_url_missing', 'Bilibili 分集缓存中没有可直接下载的链接，请重新解析或等待后续 ffmpeg 支持')
 }
 
 function buildDownloadResult(file: QuarkFile, info: YtDlpInfo): DownloadResult {
@@ -225,31 +266,36 @@ function buildDownloadResult(file: QuarkFile, info: YtDlpInfo): DownloadResult {
   return result
 }
 
+function debugProvider(message: string, details: Record<string, unknown>) {
+  if (process.env.PROVIDER_DEBUG === 'true') {
+    console.info(`[provider:bilibili] ${message}`, details)
+  }
+}
+
 async function resolveRealShare(inputUrl: string): Promise<ShareResult> {
-  const normalizedUrl = normalizeInput(inputUrl)
-  const info = await runYtDlpJson(['-J', '--yes-playlist', '--no-warnings', normalizedUrl])
-  const episodes = normalizeBiliEpisodes(info)
+  const canonicalUrl = canonicalizeBiliUrl(inputUrl)
+  const cacheKey = toCacheKey(inputUrl)
+  const raw = await runYtDlpJson(['-J', '--yes-playlist', '--no-warnings', canonicalUrl])
+  const episodes = normalizeBiliEpisodes(raw)
   if (!episodes.length) {
     throw new AppError('bilibili_ytdlp_failed', 'Bilibili 未返回可识别的分集信息')
   }
   const files = episodes.map(episodeToFile)
-  const shareId = normalizedUrl
-  infoCache.set(shareId, {
-    info,
+  const entry: CacheEntry = {
+    raw,
     episodes,
     files,
     createdAt: Date.now()
-  })
+  }
+  assertEpisodeConsistency(entry)
+  infoCache.set(cacheKey, entry)
+  debugProvider('resolve', { episodeCount: episodes.length, source: 'yt-dlp', canonicalUrl })
   return {
-    shareId,
+    shareId: cacheKey,
     stoken: 'bilibili-ytdlp',
     path: [],
     files
   }
-}
-
-async function resolveDownloadInfo(episode: BiliEpisode) {
-  return runYtDlpJson(['--dump-single-json', '--no-download', '--no-warnings', episode.url])
 }
 
 export const bilibiliProvider: Provider = {
@@ -266,7 +312,12 @@ export const bilibiliProvider: Provider = {
   },
   async resolveShare(input) {
     try {
-      return providerOk('bilibili', await resolveRealShare(input.shareUrl), 'real')
+      const result = await resolveRealShare(input.shareUrl)
+      return providerOk('bilibili', result, 'real', undefined, {
+        episodeCount: result.files.length,
+        source: 'yt-dlp',
+        canonicalUrl: canonicalizeBiliUrl(input.shareUrl)
+      })
     } catch (error) {
       const normalized = normalizeProviderError('bilibili', error, 'resolve')
       return buildFallback('bilibili', normalized.code, normalized.message, normalized.code)
@@ -274,36 +325,54 @@ export const bilibiliProvider: Provider = {
   },
   async list(input) {
     const cached = getCacheEntry(input.shareId)
-    if (cached) {
-      return providerOk('bilibili', { files: cached.files }, 'cache')
+    if (!cached) {
+      return buildFallback(
+        'bilibili',
+        'episode_cache_miss',
+        'Bilibili 分集缓存不存在或已过期，请重新解析资源',
+        'episode_cache_miss'
+      )
     }
-    return buildFallback(
-      'bilibili',
-      'missing_cache',
-      'Bilibili 当前没有真实解析缓存，降级列表不可进入执行链路',
-      'dependency_missing'
-    )
+
+    try {
+      assertEpisodeConsistency(cached)
+      debugProvider('list', { episodeCount: cached.episodes.length, source: 'cache' })
+      return providerOk('bilibili', { files: cached.files }, 'cache', undefined, {
+        episodeCount: cached.episodes.length,
+        source: 'cache'
+      })
+    } catch (error) {
+      const normalized = normalizeProviderError('bilibili', error, 'list')
+      return providerError('bilibili', normalized.code, normalized.message, normalized.recoverable, 'cache')
+    }
   },
   async getDownload(input) {
     const cached = getCacheEntry(input.shareId)
     if (!cached) {
       return providerError(
         'bilibili',
-        'dependency_missing',
-        'Bilibili 当前没有真实解析缓存，不能生成可执行下载链接，请先完成真实解析',
+        'episode_cache_miss',
+        'Bilibili 分集缓存不存在或已过期，请重新解析资源',
         true,
         'fallback',
-        'missing_cache'
+        'episode_cache_miss'
       )
+    }
+
+    try {
+      assertEpisodeConsistency(cached)
+    } catch (error) {
+      const normalized = normalizeProviderError('bilibili', error, 'download')
+      return providerError('bilibili', normalized.code, normalized.message, normalized.recoverable, 'cache')
     }
 
     const index = cached.files.findIndex((file) => file.fid === input.file?.fid)
     const episode = cached.episodes[index]
-    if (!episode?.url) {
+    if (!episode) {
       return providerError(
         'bilibili',
-        'parse_failed',
-        '未找到该分集对应的 Bilibili 地址，请重新解析资源',
+        'episode_cache_miss',
+        '未找到该分集缓存，请重新解析资源',
         true,
         'fallback',
         'missing_episode'
@@ -311,11 +380,21 @@ export const bilibiliProvider: Provider = {
     }
 
     try {
-      const info = await resolveDownloadInfo(episode)
+      debugProvider('download', {
+        episodeCount: cached.episodes.length,
+        source: 'cache',
+        resolvedEpisodeId: episode.id
+      })
       return providerOk(
         'bilibili',
-        buildDownloadResult(input.file || cached.files[index], info),
-        'real'
+        buildDownloadResult(input.file || cached.files[index], getCachedDownloadInfo(episode)),
+        'real',
+        undefined,
+        {
+          episodeCount: cached.episodes.length,
+          source: 'cache',
+          resolvedEpisodeId: episode.id
+        }
       )
     } catch (error) {
       const normalized = normalizeProviderError('bilibili', error, 'download')
