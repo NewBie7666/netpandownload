@@ -5,6 +5,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { config, setRuntimePort } from './config.js'
 import { downloadsRouter } from './routes/downloads.js'
+import { downloadEngineRouter } from './routes/downloadEngine.js'
 import { AppError, fail } from './http.js'
 import { quarkRouter } from './routes/quark.js'
 import { providersRouter } from './routes/providers.js'
@@ -33,6 +34,7 @@ app.get('/api/health', (_req, res) => {
 
 app.use('/api/quark', quarkRouter)
 app.use('/api/downloads', downloadsRouter)
+app.use('/api/download-engine', downloadEngineRouter)
 app.use('/api/providers', providersRouter)
 
 if (desktopStaticEnabled) {
