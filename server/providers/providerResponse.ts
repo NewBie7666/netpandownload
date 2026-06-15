@@ -206,6 +206,7 @@ function mapAppErrorCode(
   if (errorCode === 'unsupported_provider') return 'unsupported_provider'
 
   if (providerId === 'bilibili') {
+    if (errorCode === 'bilibili_resolve_failed') return 'bilibili_resolve_failed'
     if (errorCode === 'ytdlp_unavailable') return 'dependency_missing'
     if (errorCode === 'bilibili_blocked_by_upstream') return 'blocked_by_upstream'
     if (errorCode === 'bilibili_dash_unsupported') return 'dash_unsupported'

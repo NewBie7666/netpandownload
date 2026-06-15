@@ -132,6 +132,8 @@ export interface UnifiedTask {
   source: 'engine' | 'aria2'
   createdAt: number
   gid?: string
+  sourceUrl?: string
+  downloadUrl?: string
   error?: string
 }
 

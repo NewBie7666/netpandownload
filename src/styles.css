@@ -418,58 +418,231 @@ textarea {
   align-items: center;
 }
 
-.dashboard-grid {
+.dc-dashboard-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 12px;
   padding: 20px 38px 10px;
 }
 
-.dashboard-card {
+.dc-dashboard-card {
   padding: 14px;
   background: #f8fafc;
   border: 1px solid #f1f5f9;
   border-radius: 8px;
 }
 
-.dashboard-card span {
+.dc-dashboard-card span {
   display: block;
   color: #64748b;
   font-size: 12px;
 }
 
-.dashboard-card strong {
+.dc-dashboard-card strong {
   display: block;
   margin-top: 8px;
   color: #0f172a;
   font-size: 22px;
 }
 
-.product-section {
+.dc-dashboard-card.is-blue {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+}
+
+.dc-dashboard-card.is-gray {
+  border-color: #e2e8f0;
+  background: #f8fafc;
+}
+
+.dc-dashboard-card.is-green {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+}
+
+.dc-dashboard-card.is-red {
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+
+.dc-dashboard-card.is-yellow {
+  border-color: #fde68a;
+  background: #fffbeb;
+}
+
+.dc-section {
   padding: 18px 38px 24px;
 }
 
-.product-section + .product-section {
+.dc-section + .dc-section {
   border-top: 1px solid #f1f5f9;
 }
 
-.product-section h3 {
-  margin-bottom: 12px;
+.dc-section-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.dc-section-header h3 {
   color: #1e293b;
   font-size: 16px;
   font-weight: 650;
 }
 
-.history-list {
-  display: grid;
-  gap: 8px;
+.dc-section-header p {
+  margin-top: 4px;
+  color: #64748b;
+  font-size: 13px;
 }
 
-.history-item {
+.dc-tools {
   display: flex;
-  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.dc-tools input {
+  width: 220px;
+  height: 38px;
+  padding: 0 12px;
+  border: 1px solid #dbe4f0;
+  border-radius: 8px;
+  color: #334155;
+  font-size: 14px;
+}
+
+.dc-filter {
+  display: flex;
+  gap: 6px;
+  padding: 4px;
+  background: #f8fafc;
+  border: 1px solid #eef2f7;
+  border-radius: 8px;
+}
+
+.dc-filter button {
+  height: 30px;
+  padding: 0 10px;
+  color: #64748b;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.dc-filter button.active {
+  color: #047857;
+  background: #e8fff4;
+}
+
+.dc-task-list {
+  display: grid;
+  gap: 10px;
+}
+
+.dc-task-card {
+  display: block;
+  width: 100%;
+  padding: 14px;
+  text-align: left;
+  background: #ffffff;
+  border: 1px solid #eef2f7;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.dc-task-card:hover {
+  background: #f8fafc;
+}
+
+.dc-task-main {
+  display: flex;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
+}
+
+.dc-task-title {
+  color: #1e293b;
+  font-weight: 650;
+}
+
+.dc-task-meta,
+.dc-task-error {
+  margin-top: 4px;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.dc-task-error {
+  color: #dc2626;
+}
+
+.dc-status-badge {
+  flex: 0 0 auto;
+  padding: 5px 10px;
+  color: #475569;
+  background: #f1f5f9;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.dc-status-badge.is-running {
+  color: #1d4ed8;
+  background: #dbeafe;
+}
+
+.dc-status-badge.is-done {
+  color: #047857;
+  background: #d1fae5;
+}
+
+.dc-status-badge.is-error {
+  color: #b91c1c;
+  background: #fee2e2;
+}
+
+.dc-status-badge.is-paused {
+  color: #92400e;
+  background: #fef3c7;
+}
+
+.dc-status-badge.is-removed {
+  color: #64748b;
+  background: #e2e8f0;
+}
+
+.dc-progress {
+  height: 6px;
+  margin-top: 12px;
+  overflow: hidden;
+  background: #e2e8f0;
+  border-radius: 999px;
+}
+
+.dc-progress span {
+  display: block;
+  height: 100%;
+  background: #2563eb;
+}
+
+.dc-history {
+  position: relative;
+  display: grid;
+  gap: 10px;
+}
+
+.dc-history-item {
+  position: relative;
+  display: grid;
+  grid-template-columns: 14px 1fr;
+  gap: 10px;
   padding: 10px 12px;
   color: #475569;
   background: #f8fafc;
@@ -478,18 +651,108 @@ textarea {
   font-size: 14px;
 }
 
-.history-item span {
+.dc-history-item p {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: #334155;
+  font-weight: 650;
 }
 
-.history-item strong,
-.history-empty {
+.dc-history-item small,
+.dc-empty {
   color: #64748b;
   font-size: 13px;
-  white-space: nowrap;
+}
+
+.dc-history-dot {
+  width: 10px;
+  height: 10px;
+  margin-top: 5px;
+  background: #94a3b8;
+  border-radius: 999px;
+}
+
+.dc-history-dot.is-done {
+  background: #10b981;
+}
+
+.dc-history-dot.is-error {
+  background: #ef4444;
+}
+
+.dc-history-dot.is-removed {
+  background: #94a3b8;
+}
+
+.dc-empty {
+  padding: 18px;
+  text-align: center;
+  background: #f8fafc;
+  border: 1px solid #f1f5f9;
+  border-radius: 8px;
+}
+
+.dc-drawer-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  justify-content: flex-end;
+  background: rgba(15, 23, 42, 0.35);
+}
+
+.dc-drawer {
+  width: min(460px, 100%);
+  height: 100%;
+  padding: 24px;
+  overflow-y: auto;
+  background: #ffffff;
+  box-shadow: -12px 0 30px rgba(15, 23, 42, 0.16);
+}
+
+.dc-drawer-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.dc-drawer-header h3 {
+  color: #0f172a;
+  font-size: 18px;
+}
+
+.dc-drawer-header p {
+  margin-top: 6px;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.dc-detail-list {
+  display: grid;
+  gap: 12px;
+}
+
+.dc-detail-list div {
+  display: grid;
+  gap: 4px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.dc-detail-list dt {
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.dc-detail-list dd {
+  overflow-wrap: anywhere;
+  color: #334155;
+  font-size: 13px;
 }
 
 .auth-modal {
@@ -558,12 +821,22 @@ textarea {
     padding: 14px 16px;
   }
 
-  .dashboard-grid {
+  .dc-dashboard-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     padding: 16px 20px 8px;
   }
 
-  .product-section {
+  .dc-section {
     padding: 16px 20px 20px;
+  }
+
+  .dc-section-header,
+  .dc-tools {
+    display: grid;
+    justify-content: stretch;
+  }
+
+  .dc-tools input {
+    width: 100%;
   }
 }

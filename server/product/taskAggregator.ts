@@ -19,6 +19,8 @@ function engineToUnified(task: DownloadEngineTask): UnifiedTask {
     source: 'engine',
     createdAt: task.createdAt,
     gid: task.gid,
+    sourceUrl: task.sourceUrl,
+    downloadUrl: task.downloadUrl,
     error: task.error
   }
 }
@@ -56,6 +58,8 @@ function mergeTask(existing: UnifiedTask | undefined, incoming: UnifiedTask): Un
     source: engineTask.source,
     createdAt: Math.min(engineTask.createdAt || Date.now(), runtimeTask.createdAt || Date.now()),
     gid: engineTask.gid || runtimeTask.gid,
+    sourceUrl: engineTask.sourceUrl || runtimeTask.sourceUrl,
+    downloadUrl: engineTask.downloadUrl || runtimeTask.downloadUrl,
     error: engineTask.error || runtimeTask.error
   }
 }

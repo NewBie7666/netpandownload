@@ -19,22 +19,15 @@ import {
   listProviderFiles,
   resolveProviderResource
 } from './api/providers'
-import {
-  fetchProductDashboard,
-  fetchProductHistory,
-  fetchProductTasks
-} from './api/product'
+import DownloadCenter from './views/download-center/DownloadCenter.vue'
 import type {
-  DownloadDashboard,
-  DownloadHistoryResult,
   DownloadResult,
   DownloadTask,
   DownloadTasksResult,
   ProviderId,
   QuarkAuthQrcodeResult,
   QuarkAuthStatusResult,
-  QuarkFile,
-  UnifiedTask
+  QuarkFile
 } from '../shared/types'
 
 interface PathItem {
@@ -73,18 +66,6 @@ const downloaderMessage = ref('')
 const downloaderDefaultDir = ref('')
 const taskActionGid = ref('')
 const deleteTaskDialog = ref<DownloadTask | null>(null)
-const productTasks = ref<UnifiedTask[]>([])
-const productHistory = ref<UnifiedTask[]>([])
-const productDashboard = ref<DownloadDashboard>({
-  totalTasks: 0,
-  runningCount: 0,
-  pausedCount: 0,
-  completedCount: 0,
-  failedCount: 0,
-  removedCount: 0,
-  activeDownloads: 0
-})
-const productMessage = ref('')
 
 let authPollTimer: number | undefined
 let taskPollTimer: number | undefined
@@ -170,28 +151,6 @@ async function refreshDownloadTasks(silent = false) {
     downloaderMessage.value = error instanceof Error ? error.message : '内置下载器不可用'
     if (!silent) {
       errorMessage.value = downloaderMessage.value
-    }
-  }
-}
-
-async function refreshProductCenter(silent = false) {
-  try {
-    const [dashboard, tasks, history]: [DownloadDashboard, { tasks: UnifiedTask[] }, DownloadHistoryResult] =
-      await Promise.all([
-        fetchProductDashboard(),
-        fetchProductTasks(),
-        fetchProductHistory()
-      ])
-    productDashboard.value = dashboard
-    productTasks.value = tasks.tasks
-    productHistory.value = history.items
-    productMessage.value = ''
-  } catch (error) {
-    productTasks.value = []
-    productHistory.value = []
-    productMessage.value = error instanceof Error ? error.message : '下载中心暂不可用'
-    if (!silent) {
-      errorMessage.value = productMessage.value
     }
   }
 }
@@ -482,31 +441,10 @@ function formatTaskStatus(status: DownloadTask['status']) {
   return labels[status] || status
 }
 
-function formatUnifiedStatus(status: UnifiedTask['status']) {
-  const labels: Record<UnifiedTask['status'], string> = {
-    queued: '排队中',
-    pending: '待执行',
-    running: '下载中',
-    paused: '已暂停',
-    done: '已完成',
-    error: '出错',
-    removed: '已移除'
-  }
-  return labels[status] || status
-}
-
-function formatProvider(providerId: UnifiedTask['providerId']) {
-  if (providerId === 'quark') return '夸克'
-  if (providerId === 'bilibili') return 'Bilibili'
-  return '未知'
-}
-
 onMounted(() => {
   void refreshDownloadTasks(true)
-  void refreshProductCenter(true)
   taskPollTimer = window.setInterval(() => {
     void refreshDownloadTasks(true)
-    void refreshProductCenter(true)
   }, 1000)
 })
 
@@ -705,86 +643,7 @@ onBeforeUnmount(() => {
         </div>
       </section>
 
-      <section class="panel product-panel">
-        <div class="table-header">
-          <div>
-            <h2>下载中心</h2>
-            <p class="path-text">统一展示执行任务、aria2 状态和历史记录</p>
-          </div>
-        </div>
-
-        <div class="dashboard-grid">
-          <div class="dashboard-card">
-            <span>全部任务</span>
-            <strong>{{ productDashboard.totalTasks }}</strong>
-          </div>
-          <div class="dashboard-card">
-            <span>下载中</span>
-            <strong>{{ productDashboard.runningCount }}</strong>
-          </div>
-          <div class="dashboard-card">
-            <span>已暂停</span>
-            <strong>{{ productDashboard.pausedCount }}</strong>
-          </div>
-          <div class="dashboard-card">
-            <span>已完成</span>
-            <strong>{{ productDashboard.completedCount }}</strong>
-          </div>
-          <div class="dashboard-card">
-            <span>失败</span>
-            <strong>{{ productDashboard.failedCount }}</strong>
-          </div>
-        </div>
-
-        <div v-if="productMessage" class="downloader-status">
-          <p>{{ productMessage }}</p>
-        </div>
-
-        <div class="product-section">
-          <h3>统一任务视图</h3>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>任务</th>
-                  <th>来源</th>
-                  <th>状态</th>
-                  <th>进度</th>
-                  <th>执行层</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="task in productTasks" :key="task.id">
-                  <td>{{ task.title }}</td>
-                  <td>{{ formatProvider(task.providerId) }}</td>
-                  <td>{{ formatUnifiedStatus(task.status) }}</td>
-                  <td>{{ typeof task.progress === 'number' ? `${task.progress}%` : '-' }}</td>
-                  <td>{{ task.source === 'engine' ? 'Engine' : 'aria2' }}</td>
-                </tr>
-                <tr v-if="!productTasks.length">
-                  <td class="empty-cell" colspan="5">
-                    <div class="empty-state">
-                      <div class="empty-icon">↓</div>
-                      <p>暂无统一任务</p>
-                    </div>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <div class="product-section">
-          <h3>历史记录</h3>
-          <div class="history-list">
-            <div v-for="item in productHistory" :key="item.id" class="history-item">
-              <span>{{ item.title }}</span>
-              <strong>{{ formatUnifiedStatus(item.status) }}</strong>
-            </div>
-            <div v-if="!productHistory.length" class="history-empty">暂无历史记录</div>
-          </div>
-        </div>
-      </section>
+      <DownloadCenter />
     </main>
 
     <div v-if="downloadDialog" class="modal-mask" @click.self="downloadDialog = null">
