@@ -488,7 +488,7 @@ onBeforeUnmount(() => {
             :disabled="authLoading"
             @click="startQrLogin"
           >
-            {{ authLoading ? '二维码生成中...' : '扫码登录' }}
+            {{ authLoading ? '二维码生成中...' : '夸克扫码登录' }}
           </button>
           <button v-else class="ghost-button" type="button" @click="logoutQrLogin">
             已登录，退出
@@ -728,13 +728,14 @@ onBeforeUnmount(() => {
     <div v-if="authDialog" class="modal-mask" @click.self="closeAuthDialog">
       <div class="modal auth-modal">
         <div class="modal-header">
-          <h3>扫码登录</h3>
+          <h3>夸克扫码登录</h3>
           <button class="icon-button" type="button" aria-label="关闭" @click="closeAuthDialog">
             x
           </button>
         </div>
         <div class="qr-box">
           <img :src="authDialog.qrImageUrl" alt="夸克扫码登录二维码" />
+          <p class="path-text">此二维码仅用于夸克账号登录，不是 B 站登录。</p>
           <p>{{ authStatus?.message || '等待扫码确认' }}</p>
           <a :href="authDialog.qrLoginUrl" target="_blank" rel="noreferrer">打开登录链接</a>
         </div>
