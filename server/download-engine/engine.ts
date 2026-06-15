@@ -1,5 +1,6 @@
 import { pauseDownloadTask, removeDownloadTask, resumeDownloadTask } from '../downloader/downloadService.js'
 import { AppError } from '../http.js'
+import { recoverEngineState } from './recovery.js'
 import { syncEngineTasks } from './executionSync.js'
 import { maxConcurrent, scheduleDownloads } from './scheduler.js'
 import {
@@ -20,6 +21,7 @@ import type {
 
 const syncIntervalMs = 2000
 let loopStarted = false
+let engineStarted: Promise<void> | undefined
 
 function startLoop() {
   if (loopStarted) return
@@ -34,6 +36,20 @@ async function runEngineTick() {
   await scheduleDownloads()
 }
 
+export async function ensureEngineStarted() {
+  if (!engineStarted) {
+    engineStarted = recoverEngineState()
+      .then(() => {
+        startLoop()
+      })
+      .catch((error) => {
+        engineStarted = undefined
+        throw error
+      })
+  }
+  await engineStarted
+}
+
 function requireAction(action: unknown) {
   if (action === 'pause' || action === 'resume' || action === 'remove') {
     return action
@@ -42,7 +58,7 @@ function requireAction(action: unknown) {
 }
 
 export async function addEngineTask(input: DownloadEngineAddRequest): Promise<DownloadEngineAddResult> {
-  startLoop()
+  await ensureEngineStarted()
   const task = createTask(input)
   void runEngineTick()
   return {
@@ -52,7 +68,7 @@ export async function addEngineTask(input: DownloadEngineAddRequest): Promise<Do
 }
 
 export async function listEngineTasks(): Promise<DownloadEngineListResult> {
-  startLoop()
+  await ensureEngineStarted()
   await runEngineTick()
   return {
     tasks: listTasks(),
@@ -62,7 +78,7 @@ export async function listEngineTasks(): Promise<DownloadEngineListResult> {
 }
 
 export async function controlEngineTask(input: DownloadEngineActionRequest): Promise<DownloadEngineActionResult> {
-  startLoop()
+  await ensureEngineStarted()
   const action = requireAction(input.action)
   const task = requireTask(String(input.id || ''))
 

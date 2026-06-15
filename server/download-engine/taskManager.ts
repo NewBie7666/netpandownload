@@ -6,6 +6,7 @@ import type {
   DownloadEngineTask,
   EngineTaskStatus
 } from './taskTypes.js'
+import { saveTasks } from './persistence/taskStore.js'
 
 const tasks = new Map<string, DownloadEngineTask>()
 const taskEventLog: DownloadEngineEvent[] = []
@@ -17,6 +18,17 @@ function now() {
 
 function cloneTask(task: DownloadEngineTask): DownloadEngineTask {
   return { ...task }
+}
+
+function rawTasks() {
+  return Array.from(tasks.values()).sort((left, right) => left.createdAt - right.createdAt)
+}
+
+function persistSnapshot() {
+  for (const task of tasks.values()) {
+    task.persisted = true
+  }
+  void saveTasks(rawTasks().map(cloneTask), taskEventLog.map((event) => ({ ...event })))
 }
 
 function appendEvent(
@@ -54,10 +66,13 @@ export function createTask(input: DownloadEngineAddRequest) {
     downloadUrl,
     status: 'queued',
     createdAt,
-    updatedAt: createdAt
+    updatedAt: createdAt,
+    lastUpdated: createdAt,
+    persisted: false
   }
   tasks.set(task.id, task)
   appendEvent(task.id, 'create', 'queued', 'queued')
+  persistSnapshot()
   return cloneTask(task)
 }
 
@@ -75,8 +90,7 @@ export function requireTask(id: string) {
 }
 
 export function listTasks() {
-  return Array.from(tasks.values())
-    .sort((left, right) => left.createdAt - right.createdAt)
+  return rawTasks()
     .map(cloneTask)
 }
 
@@ -97,7 +111,10 @@ export function transitionTask(
 
   const fromState = task.status
   task.status = toState
-  task.updatedAt = now()
+  const updatedAt = now()
+  task.updatedAt = updatedAt
+  task.lastUpdated = updatedAt
+  task.persisted = false
   if ('gid' in patch) {
     task.gid = patch.gid
   }
@@ -105,6 +122,7 @@ export function transitionTask(
     task.error = patch.error
   }
   appendEvent(id, action, fromState, toState)
+  persistSnapshot()
   return cloneTask(task)
 }
 
@@ -114,11 +132,49 @@ export function setTaskGid(id: string, gid: string) {
     throw new AppError('download_engine_task_missing', '下载任务不存在', 404)
   }
   task.gid = gid
-  task.updatedAt = now()
+  const updatedAt = now()
+  task.updatedAt = updatedAt
+  task.lastUpdated = updatedAt
+  task.persisted = false
+  persistSnapshot()
   return cloneTask(task)
 }
 
 export function countTasksByStatus(statuses: EngineTaskStatus[]) {
   const wanted = new Set(statuses)
   return Array.from(tasks.values()).filter((task) => wanted.has(task.status)).length
+}
+
+export function hydrateTasks(storedTasks: DownloadEngineTask[], storedEvents: DownloadEngineEvent[] = []) {
+  for (const event of storedEvents) {
+    if (!taskEventLog.some((existing) => (
+      existing.taskId === event.taskId &&
+      existing.action === event.action &&
+      existing.timestamp === event.timestamp &&
+      existing.fromState === event.fromState &&
+      existing.toState === event.toState
+    ))) {
+      taskEventLog.push({ ...event })
+    }
+  }
+  if (taskEventLog.length > maxEventLogSize) {
+    taskEventLog.splice(0, taskEventLog.length - maxEventLogSize)
+  }
+
+  for (const storedTask of storedTasks) {
+    const existing = tasks.get(storedTask.id)
+    const existingUpdated = existing?.lastUpdated || existing?.updatedAt || 0
+    const storedUpdated = storedTask.lastUpdated || storedTask.updatedAt || 0
+    if (!existing || storedUpdated >= existingUpdated) {
+      tasks.set(storedTask.id, {
+        ...storedTask,
+        lastUpdated: storedUpdated,
+        updatedAt: storedTask.updatedAt || storedUpdated,
+        persisted: true
+      })
+    }
+  }
+
+  persistSnapshot()
+  return listTasks()
 }

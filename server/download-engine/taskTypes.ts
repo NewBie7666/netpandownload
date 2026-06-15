@@ -30,6 +30,8 @@ export interface DownloadEngineTask {
   status: EngineTaskStatus
   createdAt: number
   updatedAt: number
+  lastUpdated: number
+  persisted: boolean
   gid?: string
   error?: string
 }
