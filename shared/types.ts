@@ -114,6 +114,45 @@ export interface OpenDownloadDirResult {
   dir: string
 }
 
+export type UnifiedTaskStatus =
+  | 'queued'
+  | 'pending'
+  | 'running'
+  | 'paused'
+  | 'done'
+  | 'error'
+  | 'removed'
+
+export interface UnifiedTask {
+  id: string
+  title: string
+  providerId: ProviderId | 'unknown'
+  status: UnifiedTaskStatus
+  progress?: number
+  source: 'engine' | 'aria2'
+  createdAt: number
+  gid?: string
+  error?: string
+}
+
+export interface ProductTasksResult {
+  tasks: UnifiedTask[]
+}
+
+export interface DownloadDashboard {
+  totalTasks: number
+  runningCount: number
+  pausedCount: number
+  completedCount: number
+  failedCount: number
+  removedCount: number
+  activeDownloads: number
+}
+
+export interface DownloadHistoryResult {
+  items: UnifiedTask[]
+}
+
 export interface QuarkAuthQrcodeResult {
   sessionId: string
   qrImageUrl: string

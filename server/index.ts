@@ -10,6 +10,7 @@ import { ensureEngineStarted } from './download-engine/engine.js'
 import { AppError, fail } from './http.js'
 import { quarkRouter } from './routes/quark.js'
 import { providersRouter } from './routes/providers.js'
+import { productRouter } from './routes/product.js'
 
 export const app = express()
 const __filename = fileURLToPath(import.meta.url)
@@ -37,6 +38,7 @@ app.use('/api/quark', quarkRouter)
 app.use('/api/downloads', downloadsRouter)
 app.use('/api/download-engine', downloadEngineRouter)
 app.use('/api/providers', providersRouter)
+app.use('/api/product', productRouter)
 
 void ensureEngineStarted().catch((error) => {
   console.error('Download engine startup failed:', error)

@@ -174,6 +174,11 @@ h1 {
   overflow: hidden;
 }
 
+.product-panel {
+  margin-top: 18px;
+  overflow: hidden;
+}
+
 .table-header {
   display: flex;
   align-items: center;
@@ -413,6 +418,80 @@ textarea {
   align-items: center;
 }
 
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+  padding: 20px 38px 10px;
+}
+
+.dashboard-card {
+  padding: 14px;
+  background: #f8fafc;
+  border: 1px solid #f1f5f9;
+  border-radius: 8px;
+}
+
+.dashboard-card span {
+  display: block;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.dashboard-card strong {
+  display: block;
+  margin-top: 8px;
+  color: #0f172a;
+  font-size: 22px;
+}
+
+.product-section {
+  padding: 18px 38px 24px;
+}
+
+.product-section + .product-section {
+  border-top: 1px solid #f1f5f9;
+}
+
+.product-section h3 {
+  margin-bottom: 12px;
+  color: #1e293b;
+  font-size: 16px;
+  font-weight: 650;
+}
+
+.history-list {
+  display: grid;
+  gap: 8px;
+}
+
+.history-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  color: #475569;
+  background: #f8fafc;
+  border: 1px solid #f1f5f9;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.history-item span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history-item strong,
+.history-empty {
+  color: #64748b;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
 .auth-modal {
   width: min(420px, 100%);
 }
@@ -477,5 +556,14 @@ textarea {
   th,
   td {
     padding: 14px 16px;
+  }
+
+  .dashboard-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding: 16px 20px 8px;
+  }
+
+  .product-section {
+    padding: 16px 20px 20px;
   }
 }
