@@ -32,7 +32,7 @@ export interface StableResolvedShare {
   files: QuarkFile[]
   normalizedUrl: string
   cacheKey: string
-  source: 'bangumi' | 'yt-dlp' | 'heuristic'
+  source: 'bangumi' | 'yt-dlp' | 'html' | 'heuristic'
 }
 
 export interface ResolverAttempt {
@@ -43,5 +43,6 @@ export interface ResolverAttempt {
 
 export interface ResolveShareOptions {
   runYtDlpJson?: (url: string) => Promise<YtDlpInfo>
+  fetchInitialStateJson?: (url: string) => Promise<YtDlpInfo>
   expandShortUrl?: (url: string) => Promise<string>
 }

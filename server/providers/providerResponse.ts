@@ -216,6 +216,8 @@ function mapAppErrorCode(
     if (errorCode === 'episode_cache_miss') return 'episode_cache_miss'
     if (errorCode === 'episode_inconsistent_state') return 'episode_inconsistent_state'
     if (errorCode === 'download_url_missing') return 'download_url_missing'
+    if (errorCode === 'media_resolution_failed') return 'media_resolution_failed'
+    if (errorCode === 'media_extract_timeout') return 'media_extract_timeout'
     return context === 'download' ? 'network_error' : 'parse_failed'
   }
 

@@ -1,23 +1,28 @@
+import { bindEpisodeAuthContext, getPrimaryReferer } from '../authContext/index.js'
+
 export interface AccessContext {
   url: string
   userAgent: string
   referer: string
   cookies?: string
   retryCount: number
+  acceptLanguage: string
+  episodeSessionId: string
+  timingDelayMs: number
+  refererChain: string[]
 }
 
-export const defaultBilibiliUserAgent =
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36'
-
-export const defaultBilibiliReferer = 'https://www.bilibili.com'
-
 export function createAccessContext(url: string, retryCount = 0): AccessContext {
-  const cookies = String(process.env.BILIBILI_COOKIE || '').trim()
+  const context = bindEpisodeAuthContext(url)
   return {
-    url,
-    userAgent: defaultBilibiliUserAgent,
-    referer: defaultBilibiliReferer,
-    cookies: cookies || undefined,
-    retryCount
+    url: context.episodeUrl,
+    userAgent: context.userAgent,
+    referer: getPrimaryReferer(context),
+    cookies: context.cookies,
+    retryCount,
+    acceptLanguage: context.acceptLanguage,
+    episodeSessionId: context.episodeSessionId,
+    timingDelayMs: context.timingDelayMs,
+    refererChain: context.refererChain
   }
 }

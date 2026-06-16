@@ -6,18 +6,11 @@ defineProps<{
 }>()
 
 function statusLabel(status: ProductUiTask['status']) {
-  const labels: Record<ProductUiTask['status'], string> = {
-    waiting: '等待中',
-    active: '进行中',
-    paused: '已暂停',
-    success: '已完成',
-    failed: '失败'
-  }
-  return labels[status] || status
+  return status === 'success' ? '成功' : '失败'
 }
 
 function formatDate(value: number) {
-  return value ? new Date(value).toLocaleString() : '-'
+  return value ? new Date(value).toLocaleString() : '未提供'
 }
 </script>
 

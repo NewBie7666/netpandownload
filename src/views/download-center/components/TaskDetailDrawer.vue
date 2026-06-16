@@ -11,23 +11,23 @@ const emit = defineEmits<{
 
 function providerLabel(providerId: ProductUiTask['providerId']) {
   if (providerId === 'quark') return '夸克'
-  if (providerId === 'bilibili') return 'Bilibili'
-  return '未知'
+  if (providerId === 'bilibili') return 'B站'
+  return '未知来源'
 }
 
 function statusLabel(status: ProductUiTask['status']) {
   const labels: Record<ProductUiTask['status'], string> = {
     waiting: '等待中',
-    active: '进行中',
+    active: '下载中',
     paused: '已暂停',
-    success: '已完成',
+    success: '成功',
     failed: '失败'
   }
-  return labels[status] || status
+  return labels[status]
 }
 
 function formatDate(value: number) {
-  return value ? new Date(value).toLocaleString() : '-'
+  return value ? new Date(value).toLocaleString() : '未提供'
 }
 </script>
 
@@ -44,46 +44,28 @@ function formatDate(value: number) {
 
       <dl class="dc-detail-list">
         <div>
-          <dt>taskId</dt>
-          <dd>{{ task.id }}</dd>
+          <dt>状态</dt>
+          <dd>{{ statusLabel(task.status) }}</dd>
         </div>
         <div>
-          <dt>providerId</dt>
-          <dd>{{ providerLabel(task.providerId) }}</dd>
-        </div>
-        <div>
-          <dt>source</dt>
-          <dd>{{ task.source }}</dd>
-        </div>
-        <div>
-          <dt>status</dt>
-          <dd>{{ statusLabel(task.status) }} / {{ task.rawStatus }}</dd>
-        </div>
-        <div>
-          <dt>progress</dt>
+          <dt>进度</dt>
           <dd>{{ task.progress }}%</dd>
         </div>
         <div>
-          <dt>sourceUrl</dt>
-          <dd>{{ task.sourceUrl || '未提供' }}</dd>
+          <dt>来源</dt>
+          <dd>{{ providerLabel(task.providerId) }}</dd>
         </div>
         <div>
-          <dt>downloadUrl</dt>
-          <dd>{{ task.downloadUrl || '未提供' }}</dd>
-        </div>
-        <div>
-          <dt>gid</dt>
-          <dd>{{ task.gid || '未提供' }}</dd>
-        </div>
-        <div>
-          <dt>error</dt>
+          <dt>错误</dt>
           <dd v-if="task.error">
-            {{ task.error.message }}（{{ task.error.code }}，{{ task.error.recoverable ? '可恢复' : '不可恢复' }}）
+            <strong>{{ task.error.title }}</strong>
+            <span>{{ task.error.message }}</span>
+            <small v-if="task.error.actionHint">{{ task.error.actionHint }}</small>
           </dd>
-          <dd v-else>无</dd>
+          <dd v-else>未提供</dd>
         </div>
         <div>
-          <dt>createdAt</dt>
+          <dt>创建时间</dt>
           <dd>{{ formatDate(task.createdAt) }}</dd>
         </div>
       </dl>

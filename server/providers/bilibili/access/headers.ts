@@ -1,32 +1,23 @@
 import type { AccessContext } from './context.js'
+import { buildSignedFetchHeaders, buildSignedYtDlpArgs } from '../authContext/index.js'
+
+function toAuthLikeContext(context: AccessContext) {
+  return {
+    episodeUrl: context.url,
+    userAgent: context.userAgent,
+    refererChain: context.refererChain || [context.referer],
+    cookies: context.cookies,
+    timingDelayMs: context.timingDelayMs || 0,
+    episodeSessionId: context.episodeSessionId || context.url,
+    acceptLanguage: context.acceptLanguage || 'zh-CN,zh;q=0.9',
+    adaptiveLevel: 0 as const
+  }
+}
 
 export function buildBilibiliHeaders(context: AccessContext) {
-  const headers: Record<string, string> = {
-    'User-Agent': context.userAgent,
-    Referer: context.referer,
-    'Accept-Language': 'zh-CN,zh;q=0.9'
-  }
-
-  if (context.cookies) {
-    headers.Cookie = context.cookies
-  }
-
-  return headers
+  return buildSignedFetchHeaders(toAuthLikeContext(context))
 }
 
 export function buildYtDlpHeaderArgs(context: AccessContext) {
-  const args = [
-    '--user-agent',
-    context.userAgent,
-    '--add-header',
-    `referer:${context.referer}`,
-    '--add-header',
-    'accept-language:zh-CN,zh;q=0.9'
-  ]
-
-  if (context.cookies) {
-    args.push('--add-header', `cookie:${context.cookies}`)
-  }
-
-  return args
+  return buildSignedYtDlpArgs(toAuthLikeContext(context))
 }

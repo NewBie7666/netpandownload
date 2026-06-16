@@ -140,6 +140,18 @@ function ensureDownloadUrlAllowed(rawUrl: string, normalizedUrl: URL) {
   throw new AppError('download_url_not_allowed', '该下载地址未通过当前应用授权，无法加入内置下载器', 403)
 }
 
+function getDownloadRequestHeaders(normalizedUrl: URL) {
+  const hostname = normalizedUrl.hostname.toLowerCase()
+  if (!hostname.endsWith('bilivideo.com')) {
+    return []
+  }
+
+  return [
+    'Referer: https://www.bilibili.com',
+    'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36'
+  ]
+}
+
 function toNumber(value: string | undefined) {
   const parsed = Number(value || 0)
   return Number.isFinite(parsed) ? parsed : 0
@@ -219,9 +231,13 @@ export async function addDownloadTask(input: AddDownloadRequest): Promise<AddDow
   const dir = await ensureDownloadDir(input.dir || (await getEffectiveDownloadDir()))
   const options = getDefaultDownloadOptions(input.fileName, dir)
   const rpcOptions = options.out ? options : { ...options, out: undefined }
-  const sanitizedOptions = Object.entries(rpcOptions).reduce<Record<string, string>>(
+  const headers = getDownloadRequestHeaders(normalizedUrl)
+  const optionsWithHeaders = headers.length ? { ...rpcOptions, header: headers } : rpcOptions
+  const sanitizedOptions = Object.entries(optionsWithHeaders).reduce<Record<string, string | string[]>>(
     (result, [key, value]) => {
       if (typeof value === 'string' && value) {
+        result[key] = value
+      } else if (Array.isArray(value) && value.every((item) => typeof item === 'string' && item)) {
         result[key] = value
       }
       return result

@@ -12,7 +12,7 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const appRoot = path.resolve(__dirname, '..', '..')
 const distServerEntry = path.resolve(appRoot, 'dist-server', 'server', 'index.js')
-const preloadEntry = path.resolve(__dirname, 'preload.js')
+const preloadEntry = path.resolve(__dirname, 'preload.cjs')
 const defaultBackendPort = 3000
 const aria2RpcPort = 16800
 let backendPort = defaultBackendPort
@@ -161,6 +161,8 @@ async function startAria2Sidecar() {
       `--rpc-listen-port=${aria2RpcPort}`,
       `--rpc-secret=${rpcSecret}`,
       '--continue=true',
+      '--disable-ipv6=true',
+      '--async-dns=false',
       '--max-connection-per-server=16',
       '--split=16',
       '--min-split-size=1M',

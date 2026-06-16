@@ -7,16 +7,16 @@ import {
   providerError,
   providerOk
 } from './providerResponse.js'
+import { expandBilibiliShortUrl, fetchBilibiliInitialState, resolveBilibiliAccess } from './bilibili/access/index.js'
+import { resolveMedia } from './bilibili/media/mediaResolver.js'
 import {
   assertEpisodeConsistency,
   cacheTtlMs,
   isBilibiliUrl,
   normalizeBiliUrl,
   resolveShare,
-  type StableResolvedShare,
-  type YtDlpInfo
+  type StableResolvedShare
 } from './bilibili/resolver/index.js'
-import { expandBilibiliShortUrl, resolveBilibiliAccess } from './bilibili/access/index.js'
 import type { Provider } from './types.js'
 
 const infoCache = new Map<string, StableResolvedShare & { createdAt: number }>()
@@ -30,53 +30,6 @@ function getCacheEntry(shareId: string) {
   return entry
 }
 
-function selectSingleFileFormat(info: YtDlpInfo) {
-  const requested = Array.isArray(info.requested_downloads) ? info.requested_downloads : []
-  if (requested.length > 1) {
-    throw new AppError('bilibili_dash_unsupported', 'Bilibili DASH media requires merge support')
-  }
-  if (requested[0]?.url) {
-    return requested[0]
-  }
-
-  const formats = Array.isArray(info.formats) ? info.formats : []
-  const merged = formats.find((format) => {
-    const hasVideo = format.vcodec && format.vcodec !== 'none'
-    const hasAudio = format.acodec && format.acodec !== 'none'
-    return Boolean(format.url && hasVideo && hasAudio && format.protocol !== 'm3u8_native')
-  })
-  if (merged?.url) {
-    return merged
-  }
-
-  if (info.url) {
-    return info
-  }
-
-  throw new AppError('download_url_missing', 'Bilibili cached episode has no direct download URL')
-}
-
-function getCachedDownloadInfo(episode: StableResolvedShare['episodes'][number]): YtDlpInfo {
-  if (episode.downloadInfo && typeof episode.downloadInfo === 'object') {
-    return episode.downloadInfo as YtDlpInfo
-  }
-  throw new AppError('download_url_missing', 'Bilibili cached episode has no download metadata')
-}
-
-function buildDownloadResult(file: StableResolvedShare['files'][number], info: YtDlpInfo): DownloadResult {
-  const format = selectSingleFileFormat(info)
-  const result: DownloadResult = {
-    fid: file.fid,
-    name: file.name,
-    downloadUrl: format.url,
-    source: 'direct',
-    expiresAt: new Date(Date.now() + cacheTtlMs).toISOString(),
-    cached: false
-  }
-  registerAllowedDownloadResult(result)
-  return result
-}
-
 function debugProvider(message: string, details: Record<string, unknown>) {
   if (process.env.PROVIDER_DEBUG === 'true') {
     console.info(`[provider:bilibili] ${message}`, details)
@@ -86,6 +39,7 @@ function debugProvider(message: string, details: Record<string, unknown>) {
 async function resolveRealShare(inputUrl: string): Promise<ShareResult & { source: StableResolvedShare['source'] }> {
   const resolved = await resolveShare(inputUrl, {
     runYtDlpJson: resolveBilibiliAccess,
+    fetchInitialStateJson: fetchBilibiliInitialState,
     expandShortUrl: expandBilibiliShortUrl
   })
   assertEpisodeConsistency(resolved)
@@ -102,6 +56,27 @@ async function resolveRealShare(inputUrl: string): Promise<ShareResult & { sourc
     files: resolved.files,
     source: resolved.source
   }
+}
+
+async function buildDownloadResult(
+  file: StableResolvedShare['files'][number],
+  episode: StableResolvedShare['episodes'][number]
+): Promise<DownloadResult> {
+  if (!episode.url) {
+    throw new AppError('media_resolution_failed', 'B站单集地址为空，无法解析媒体直链')
+  }
+
+  const media = await resolveMedia(episode.url, { episodeInfo: episode.downloadInfo })
+  const result: DownloadResult = {
+    fid: file.fid,
+    name: file.name,
+    downloadUrl: media.url,
+    source: 'direct',
+    expiresAt: media.expiresAt,
+    cached: false
+  }
+  registerAllowedDownloadResult(result)
+  return result
 }
 
 export const bilibiliProvider: Provider = {
@@ -204,12 +179,12 @@ export const bilibiliProvider: Provider = {
       })
       return providerOk(
         'bilibili',
-        buildDownloadResult(cached.files[index], getCachedDownloadInfo(episode)),
+        await buildDownloadResult(cached.files[index], episode),
         'real',
         undefined,
         {
           episodeCount: cached.episodes.length,
-          source: 'cache',
+          source: 'media',
           resolvedEpisodeId: episode.id,
           resolvedEpisodeUrl: episode.url
         }
@@ -227,3 +202,4 @@ export const bilibiliProvider: Provider = {
     }
   }
 }
+

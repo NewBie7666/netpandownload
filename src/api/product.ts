@@ -3,22 +3,22 @@ import type {
   DownloadDashboard,
   DownloadHistoryResult,
   ProductTasksResult,
+  ProviderId,
   UnifiedTask
 } from '../../shared/types'
+import { presentTaskError, type PresentedError } from './product/errorPresenter'
+import { clampProgress, mapTaskStatus, type ProductUiStatus } from './product/taskStateMapper'
 
-export type ProductUiStatus = 'waiting' | 'active' | 'paused' | 'success' | 'failed'
+export type { ProductUiStatus, PresentedError }
 
-export interface ProductUiError {
-  code: string
-  message: string
-  recoverable: boolean
-}
-
-export interface ProductUiTask extends Omit<UnifiedTask, 'status' | 'progress' | 'error'> {
-  rawStatus: UnifiedTask['status']
+export interface ProductUiTask {
+  id: string
+  title: string
   status: ProductUiStatus
   progress: number
-  error?: ProductUiError
+  providerId: ProviderId | 'unknown'
+  error?: PresentedError
+  createdAt: number
 }
 
 async function getJson<T>(url: string): Promise<T> {
@@ -26,7 +26,7 @@ async function getJson<T>(url: string): Promise<T> {
   const data = (await response.json()) as ApiResponse<T>
 
   if (!data.ok || !data.result) {
-    throw new Error(data.message || data.error || 'Request failed')
+    throw new Error(data.message || data.error || '请求失败')
   }
 
   return data.result
@@ -44,36 +44,15 @@ export function fetchProductHistory() {
   return getJson<DownloadHistoryResult>('/api/product/history')
 }
 
-function normalizeStatus(status: UnifiedTask['status']): ProductUiStatus {
-  if (status === 'queued' || status === 'pending') return 'waiting'
-  if (status === 'running') return 'active'
-  if (status === 'done') return 'success'
-  if (status === 'paused') return 'paused'
-  return 'failed'
-}
-
-function normalizeProgress(value: number | undefined) {
-  if (!Number.isFinite(value)) return 0
-  return Math.min(100, Math.max(0, Number(value)))
-}
-
-function normalizeError(task: UnifiedTask): ProductUiError | undefined {
-  if (!task.error && task.status !== 'error' && task.status !== 'removed') return undefined
-
-  return {
-    code: task.status === 'removed' ? 'task_removed' : 'task_error',
-    message: task.error || (task.status === 'removed' ? '任务已移除' : '任务执行失败'),
-    recoverable: false
-  }
-}
-
 export function normalizeProductTask(task: UnifiedTask): ProductUiTask {
   return {
-    ...task,
-    rawStatus: task.status,
-    status: normalizeStatus(task.status),
-    progress: normalizeProgress(task.progress),
-    error: normalizeError(task)
+    id: task.id,
+    title: task.title || '未命名任务',
+    status: mapTaskStatus(task.status),
+    progress: clampProgress(task.progress),
+    providerId: task.providerId || 'unknown',
+    error: presentTaskError(task),
+    createdAt: task.createdAt
   }
 }
 
@@ -87,8 +66,8 @@ export async function fetchProductTaskViews() {
 export async function fetchProductHistoryViews() {
   const result = await fetchProductHistory()
   return {
-    items: result.items.map(normalizeProductTask).filter((task) => (
-      task.status === 'success' || task.status === 'failed'
-    ))
+    items: result.items
+      .map(normalizeProductTask)
+      .filter((task) => task.status === 'success' || task.status === 'failed')
   }
 }

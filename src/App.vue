@@ -66,15 +66,49 @@ const downloaderMessage = ref('')
 const downloaderDefaultDir = ref('')
 const taskActionGid = ref('')
 const deleteTaskDialog = ref<DownloadTask | null>(null)
+const selectedFileIds = ref<string[]>([])
+const batchDownloadLoading = ref(false)
+const batchDownloadDone = ref(0)
+const batchDownloadTotal = ref(0)
 
 let authPollTimer: number | undefined
 let taskPollTimer: number | undefined
 
 const hasFiles = computed(() => files.value.length > 0)
 const canGoBack = computed(() => pathStack.value.length > 0)
+const selectableFiles = computed(() => files.value.filter((file) => !file.isDir))
+const selectedFiles = computed(() => selectableFiles.value.filter((file) => selectedFileIds.value.includes(file.fid)))
+const allSelectableSelected = computed(
+  () => selectableFiles.value.length > 0 && selectableFiles.value.every((file) => selectedFileIds.value.includes(file.fid))
+)
+const batchDownloadProgressText = computed(() => {
+  if (!batchDownloadLoading.value || !batchDownloadTotal.value) return ''
+  return `正在加入下载任务：${batchDownloadDone.value} / ${batchDownloadTotal.value}`
+})
+
 function clearMessages() {
   errorMessage.value = ''
   noticeMessage.value = ''
+}
+
+function clearFileSelection() {
+  selectedFileIds.value = []
+}
+
+function isFileSelected(file: QuarkFile) {
+  return selectedFileIds.value.includes(file.fid)
+}
+
+function toggleFileSelection(file: QuarkFile) {
+  if (file.isDir || batchDownloadLoading.value) return
+  selectedFileIds.value = isFileSelected(file)
+    ? selectedFileIds.value.filter((fid) => fid !== file.fid)
+    : [...selectedFileIds.value, file.fid]
+}
+
+function toggleSelectAllFiles() {
+  if (batchDownloadLoading.value) return
+  selectedFileIds.value = allSelectableSelected.value ? [] : selectableFiles.value.map((file) => file.fid)
 }
 
 function normalizeResourceUrlInput(value: string) {
@@ -171,6 +205,7 @@ function stopTaskPolling() {
 
 async function loadShare() {
   clearMessages()
+  clearFileSelection()
   downloadDialog.value = null
   const normalizedShareUrl = normalizeResourceUrlInput(shareUrl.value)
   const validationError = validateResourceUrl(normalizedShareUrl)
@@ -187,6 +222,7 @@ async function loadShare() {
     shareId.value = result.share.shareId
     stoken.value = result.share.stoken
     files.value = result.share.files
+    clearFileSelection()
     pathStack.value = []
     noticeMessage.value = `已通过 ${result.providerId === 'quark' ? '夸克' : 'Bilibili'} 获取 ${result.share.files.length} 个文件`
   } catch (error) {
@@ -194,6 +230,7 @@ async function loadShare() {
     shareId.value = ''
     stoken.value = ''
     files.value = []
+    clearFileSelection()
     pathStack.value = []
     errorMessage.value = error instanceof Error ? error.message : '解析资源失败'
   } finally {
@@ -204,6 +241,7 @@ async function loadShare() {
 async function enterFolder(file: QuarkFile) {
   if (!file.isDir || !currentProviderId.value || !shareId.value || !stoken.value) return
   clearMessages()
+  clearFileSelection()
   folderLoadingFid.value = file.fid
   try {
     const result = await listProviderFiles(currentProviderId.value, shareId.value, stoken.value, file.fid)
@@ -219,6 +257,7 @@ async function enterFolder(file: QuarkFile) {
 async function goBack() {
   if (!canGoBack.value || !currentProviderId.value || !shareId.value || !stoken.value) return
   clearMessages()
+  clearFileSelection()
   loading.value = true
   try {
     const nextStack = pathStack.value.slice(0, -1)
@@ -280,6 +319,26 @@ function startBrowserDownload() {
   document.body.removeChild(anchor)
 }
 
+function getDownloadFileName(download: DownloadResult) {
+  const baseName = String(download.name || 'download').trim() || 'download'
+  if (/\.[A-Za-z0-9]{2,8}$/.test(baseName)) {
+    return baseName
+  }
+
+  const targetUrl = download.proxyUrl || download.downloadUrl || ''
+  try {
+    const pathname = new URL(targetUrl, window.location.origin).pathname
+    const matched = pathname.match(/\.([A-Za-z0-9]{2,8})$/)
+    if (matched?.[1]) {
+      return `${baseName}.${matched[1]}`
+    }
+  } catch {
+    // Fall through to source-based defaults.
+  }
+
+  return download.source === 'direct' ? `${baseName}.mp4` : baseName
+}
+
 async function useBuiltInDownloader() {
   if (!downloadDialog.value) return
 
@@ -293,12 +352,73 @@ async function useBuiltInDownloader() {
   try {
     await addDownloaderTask({
       url,
-      fileName: downloadDialog.value.name
+      fileName: getDownloadFileName(downloadDialog.value)
     })
     noticeMessage.value = '已加入下载任务'
+    downloadDialog.value = null
     await refreshDownloadTasks(true)
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '添加下载任务失败'
+  }
+}
+
+async function downloadSelectedFiles() {
+  if (!currentProviderId.value || !shareId.value || !stoken.value || batchDownloadLoading.value) return
+
+  const targets = selectedFiles.value
+  if (!targets.length) {
+    errorMessage.value = '请先选择要下载的文件'
+    return
+  }
+
+  clearMessages()
+  batchDownloadLoading.value = true
+  batchDownloadDone.value = 0
+  batchDownloadTotal.value = targets.length
+
+  let successCount = 0
+  let failureCount = 0
+
+  try {
+    for (const file of targets) {
+      try {
+        const result = await fetchProviderDownload(
+          currentProviderId.value,
+          shareId.value,
+          stoken.value,
+          file,
+          authSessionId.value
+        )
+        const url = result.download.proxyUrl || result.download.downloadUrl
+        if (!url) {
+          throw new Error('没有可用的下载地址')
+        }
+        await addDownloaderTask({
+          url,
+          fileName: getDownloadFileName(result.download)
+        })
+        successCount += 1
+      } catch {
+        failureCount += 1
+      } finally {
+        batchDownloadDone.value += 1
+      }
+    }
+
+    if (successCount > 0) {
+      clearFileSelection()
+      await refreshDownloadTasks(true)
+    }
+
+    if (failureCount > 0) {
+      errorMessage.value = `已加入 ${successCount} 个下载任务，失败 ${failureCount} 个`
+    } else {
+      noticeMessage.value = `已加入 ${successCount} 个下载任务`
+    }
+  } finally {
+    batchDownloadLoading.value = false
+    batchDownloadDone.value = 0
+    batchDownloadTotal.value = 0
   }
 }
 
@@ -507,16 +627,44 @@ onBeforeUnmount(() => {
             <p v-if="pathStack.length" class="path-text">
               / {{ pathStack.map((item) => item.name).join(' / ') }}
             </p>
+            <p v-if="batchDownloadProgressText" class="path-text">{{ batchDownloadProgressText }}</p>
           </div>
-          <button class="ghost-button" type="button" :disabled="!canGoBack || loading" @click="goBack">
+          <div class="task-header-actions">
+            <button
+              class="ghost-button"
+              type="button"
+              :disabled="!selectableFiles.length || batchDownloadLoading"
+              @click="toggleSelectAllFiles"
+            >
+              {{ allSelectableSelected ? '取消全选' : '全选' }}
+            </button>
+            <button
+              class="primary-button"
+              type="button"
+              :disabled="!selectedFiles.length || batchDownloadLoading || !downloaderEnabled"
+              @click="downloadSelectedFiles"
+            >
+              {{ batchDownloadLoading ? '加入中...' : `下载选中 (${selectedFiles.length})` }}
+            </button>
+          <button class="ghost-button" type="button" :disabled="!canGoBack || loading || batchDownloadLoading" @click="goBack">
             返回上一级
           </button>
         </div>
+          </div>
 
         <div class="table-wrap">
           <table>
             <thead>
               <tr>
+                <th>
+                  <input
+                    type="checkbox"
+                    :checked="allSelectableSelected"
+                    :disabled="!selectableFiles.length || batchDownloadLoading"
+                    aria-label="全选当前列表文件"
+                    @change="toggleSelectAllFiles"
+                  />
+                </th>
                 <th>名称</th>
                 <th>大小</th>
                 <th>是否文件夹</th>
@@ -525,6 +673,15 @@ onBeforeUnmount(() => {
             </thead>
             <tbody>
               <tr v-for="file in files" :key="file.fid">
+                <td>
+                  <input
+                    type="checkbox"
+                    :checked="isFileSelected(file)"
+                    :disabled="file.isDir || batchDownloadLoading"
+                    :aria-label="`选择 ${file.name}`"
+                    @change="toggleFileSelection(file)"
+                  />
+                </td>
                 <td>
                   <span class="file-name" :title="file.name">
                     <span class="file-icon">{{ file.isDir ? '文件夹' : '文件' }}</span>
@@ -547,7 +704,7 @@ onBeforeUnmount(() => {
                     v-else
                     class="row-button"
                     type="button"
-                    :disabled="Boolean(downloadLoadingFid)"
+                    :disabled="Boolean(downloadLoadingFid) || batchDownloadLoading"
                     @click="openDownload(file)"
                   >
                     {{ downloadLoadingFid === file.fid ? '获取中...' : '获取链接' }}
@@ -555,7 +712,7 @@ onBeforeUnmount(() => {
                 </td>
               </tr>
               <tr v-if="!loading && !hasFiles">
-                <td class="empty-cell" colspan="4">
+                <td class="empty-cell" colspan="5">
                   <div class="empty-state">
                     <div class="empty-icon">[]</div>
                     <p>暂无文件</p>

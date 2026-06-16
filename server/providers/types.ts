@@ -22,6 +22,8 @@ export type ProviderErrorCode =
   | 'episode_cache_miss'
   | 'episode_inconsistent_state'
   | 'download_url_missing'
+  | 'media_resolution_failed'
+  | 'media_extract_timeout'
 
 export interface ProviderError {
   code: ProviderErrorCode

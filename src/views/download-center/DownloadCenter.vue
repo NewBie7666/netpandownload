@@ -6,9 +6,6 @@ import {
   fetchProductTaskViews,
   type ProductUiTask
 } from '../../api/product'
-import type {
-  DownloadDashboard,
-} from '../../../shared/types'
 import DashboardCard from './components/DashboardCard.vue'
 import HistoryPanel from './components/HistoryPanel.vue'
 import TaskDetailDrawer from './components/TaskDetailDrawer.vue'
@@ -18,23 +15,14 @@ type TaskFilter = 'all' | 'active' | 'waiting' | 'success' | 'failed'
 
 const filterItems: { value: TaskFilter; label: string }[] = [
   { value: 'all', label: '全部' },
-  { value: 'active', label: '进行中' },
+  { value: 'active', label: '下载中' },
   { value: 'waiting', label: '等待中' },
-  { value: 'success', label: '已完成' },
+  { value: 'success', label: '成功' },
   { value: 'failed', label: '失败' }
 ]
 
 const tasks = ref<ProductUiTask[]>([])
 const history = ref<ProductUiTask[]>([])
-const dashboard = ref<DownloadDashboard>({
-  totalTasks: 0,
-  runningCount: 0,
-  pausedCount: 0,
-  completedCount: 0,
-  failedCount: 0,
-  removedCount: 0,
-  activeDownloads: 0
-})
 const selectedTask = ref<ProductUiTask | null>(null)
 const filter = ref<TaskFilter>('all')
 const search = ref('')
@@ -58,12 +46,11 @@ const filteredTasks = computed(() => {
 
 async function refreshDownloadCenter(silent = false) {
   try {
-    const [dashboardResult, tasksResult, historyResult] = await Promise.all([
+    const [, tasksResult, historyResult] = await Promise.all([
       fetchProductDashboard(),
       fetchProductTaskViews(),
       fetchProductHistoryViews()
     ])
-    dashboard.value = dashboardResult
     tasks.value = tasksResult.tasks
     history.value = historyResult.items
     message.value = ''
@@ -96,16 +83,15 @@ onBeforeUnmount(() => {
     <div class="table-header">
       <div>
         <h2>下载中心</h2>
-        <p class="path-text">统一展示执行任务、aria2 状态和历史记录</p>
+        <p class="path-text">统一展示下载任务状态和历史结果</p>
       </div>
     </div>
 
     <div class="dc-dashboard-grid">
-      <DashboardCard label="进行中" :value="activeCount" tone="blue" />
+      <DashboardCard label="下载中" :value="activeCount" tone="blue" />
       <DashboardCard label="等待中" :value="waitingCount" tone="gray" />
-      <DashboardCard label="已完成" :value="successCount" tone="green" />
+      <DashboardCard label="成功" :value="successCount" tone="green" />
       <DashboardCard label="失败" :value="failedCount" tone="red" />
-      <DashboardCard label="活跃下载" :value="dashboard.activeDownloads" tone="yellow" />
     </div>
 
     <div v-if="message" class="downloader-status">
@@ -116,7 +102,7 @@ onBeforeUnmount(() => {
       <div class="dc-section-header">
         <div>
           <h3>任务列表</h3>
-          <p>只读聚合视图，不控制下载执行</p>
+          <p>按任务标题、状态和来源快速查看下载进度</p>
         </div>
         <div class="dc-tools">
           <input v-model="search" type="search" placeholder="搜索任务标题" />
@@ -140,7 +126,7 @@ onBeforeUnmount(() => {
       <div class="dc-section-header">
         <div>
           <h3>历史记录</h3>
-          <p>仅展示已完成、失败和已移除任务</p>
+          <p>只展示成功和失败的最终结果</p>
         </div>
       </div>
       <HistoryPanel :items="history" />

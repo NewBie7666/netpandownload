@@ -12,22 +12,22 @@ const emit = defineEmits<{
 function statusLabel(status: ProductUiTask['status']) {
   const labels: Record<ProductUiTask['status'], string> = {
     waiting: '等待中',
-    active: '进行中',
+    active: '下载中',
     paused: '已暂停',
-    success: '已完成',
+    success: '成功',
     failed: '失败'
   }
-  return labels[status] || status
+  return labels[status]
 }
 
 function providerLabel(providerId: ProductUiTask['providerId']) {
   if (providerId === 'quark') return '夸克'
-  if (providerId === 'bilibili') return 'Bilibili'
-  return '未知'
+  if (providerId === 'bilibili') return 'B站'
+  return '未知来源'
 }
 
 function formatDate(value: number) {
-  return value ? new Date(value).toLocaleString() : '-'
+  return value ? new Date(value).toLocaleString() : '未提供'
 }
 </script>
 
@@ -43,10 +43,7 @@ function formatDate(value: number) {
       <div class="dc-task-main">
         <div>
           <p class="dc-task-title">{{ task.title }}</p>
-          <p class="dc-task-meta">
-            {{ providerLabel(task.providerId) }} · {{ task.source === 'engine' ? 'Engine' : 'aria2' }} ·
-            {{ formatDate(task.createdAt) }}
-          </p>
+          <p class="dc-task-meta">{{ providerLabel(task.providerId) }} · {{ formatDate(task.createdAt) }}</p>
         </div>
         <span class="dc-status-badge" :class="`is-${task.status}`">{{ statusLabel(task.status) }}</span>
       </div>
@@ -55,8 +52,9 @@ function formatDate(value: number) {
         <span :style="{ width: `${task.progress}%` }"></span>
       </div>
       <p v-if="task.error" class="dc-task-error">
+        <strong>{{ task.error.title }}</strong>
         {{ task.error.message }}
-        <span v-if="task.error.recoverable" class="dc-retry-label">Retry</span>
+        <span v-if="task.error.actionHint" class="dc-action-hint">{{ task.error.actionHint }}</span>
       </p>
     </button>
 
@@ -70,7 +68,7 @@ function formatDate(value: number) {
 }
 
 .dc-task-card {
-  min-height: 92px;
+  min-height: 88px;
 }
 
 .dc-status-badge.is-active {
@@ -98,14 +96,10 @@ function formatDate(value: number) {
   background: #fef3c7;
 }
 
-.dc-retry-label {
+.dc-action-hint {
   display: inline-flex;
   margin-left: 8px;
-  padding: 2px 6px;
-  color: #047857;
-  background: #d1fae5;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 700;
+  color: #475569;
+  font-weight: 600;
 }
 </style>

@@ -34,6 +34,21 @@ export async function resolveShare(inputUrl: string, options: ResolveShareOption
     if (consistent(ytDlp.result)) return ytDlp.result as StableResolvedShare
   }
 
+  if (options.fetchInitialStateJson) {
+    try {
+      const htmlRaw = await options.fetchInitialStateJson(inputUrl)
+      const html = await ytDlpResolver(inputUrl, { ...options, runYtDlpJson: async () => htmlRaw })
+      if (consistent(html.result)) {
+        return {
+          ...html.result,
+          source: 'html'
+        } as StableResolvedShare
+      }
+    } catch {
+      // Fall through to the stable single-video heuristic.
+    }
+  }
+
   const heuristic = await heuristicResolver(inputUrl, options)
   if (consistent(heuristic.result)) return heuristic.result as StableResolvedShare
 

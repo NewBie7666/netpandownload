@@ -113,7 +113,7 @@ export function getAria2TaskKeys() {
 
 export function aria2AddUri(
   url: string,
-  options: Record<string, string>
+  options: Record<string, string | string[]>
 ) {
   return callAria2<string>('addUri', [[url], options])
 }
@@ -160,6 +160,8 @@ export function getDefaultDownloadOptions(out?: string, dir?: string) {
     dir: dir || '',
     split: '16',
     'max-connection-per-server': '16',
-    continue: 'true'
+    continue: 'true',
+    'disable-ipv6': 'true',
+    'async-dns': 'false'
   }
 }

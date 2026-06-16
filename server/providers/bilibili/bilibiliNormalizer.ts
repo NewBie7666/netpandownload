@@ -26,8 +26,12 @@ function getArray(value: unknown): UnknownRecord[] {
 }
 
 function pickTitle(item: UnknownRecord, fallbackIndex: number) {
+  const arc = isRecord(item.arc) ? item.arc : undefined
+  const page = isRecord(item.page) ? item.page : undefined
   return (
     asString(item.title) ||
+    (arc ? asString(arc.title) : '') ||
+    (page ? asString(page.part) : '') ||
     asString(item.long_title) ||
     asString(item.name) ||
     asString(item.part) ||
@@ -36,7 +40,15 @@ function pickTitle(item: UnknownRecord, fallbackIndex: number) {
   )
 }
 
+function pickBvid(item: UnknownRecord) {
+  const arc = isRecord(item.arc) ? item.arc : undefined
+  return asString(item.bvid) || (arc ? asString(arc.bvid) : '')
+}
+
 function pickUrl(item: UnknownRecord, rootUrl = '') {
+  const bvid = pickBvid(item)
+  if (bvid) return `https://www.bilibili.com/video/${bvid}`
+
   return (
     asString(item.webpage_url) ||
     asString(item.url) ||
@@ -49,8 +61,8 @@ function pickUrl(item: UnknownRecord, rootUrl = '') {
 
 function pickId(item: UnknownRecord, fallback: string) {
   const raw =
+    pickBvid(item) ||
     asString(item.id) ||
-    asString(item.bvid) ||
     asString(item.aid) ||
     asString(item.cid) ||
     asString(item.ep_id) ||
@@ -105,6 +117,31 @@ function collectBangumiEpisodes(
   }
 }
 
+function collectUgcSeason(
+  episodes: Array<Omit<BiliEpisode, 'index'>>,
+  root: UnknownRecord,
+  rootUrl: string
+) {
+  const candidates = [
+    isRecord(root.ugc_season) ? root.ugc_season : undefined,
+    isRecord(root.videoData) && isRecord(root.videoData.ugc_season) ? root.videoData.ugc_season : undefined,
+    isRecord(root.data) && isRecord(root.data.ugc_season) ? root.data.ugc_season : undefined
+  ].filter(isRecord)
+
+  for (const season of candidates) {
+    for (const section of getArray(season.sections)) {
+      collectEntries(episodes, getArray(section.episodes), rootUrl)
+    }
+  }
+
+  const sectionsInfo = isRecord(root.sectionsInfo) ? root.sectionsInfo : undefined
+  if (sectionsInfo) {
+    for (const section of getArray(sectionsInfo.sections)) {
+      collectEntries(episodes, getArray(section.episodes), rootUrl)
+    }
+  }
+}
+
 export function normalizeBiliEpisodes(ytdlpJson: unknown): BiliEpisode[] {
   if (!isRecord(ytdlpJson)) return []
 
@@ -112,6 +149,7 @@ export function normalizeBiliEpisodes(ytdlpJson: unknown): BiliEpisode[] {
   const collected: Array<Omit<BiliEpisode, 'index'>> = []
   collectEntries(collected, getArray(ytdlpJson.entries), rootUrl)
   collectBangumiEpisodes(collected, ytdlpJson, rootUrl)
+  collectUgcSeason(collected, ytdlpJson, rootUrl)
 
   if (!collected.length) {
     pushEpisode(collected, ytdlpJson, rootUrl)

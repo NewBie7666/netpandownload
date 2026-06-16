@@ -5,14 +5,10 @@ import path from 'node:path'
 import { promisify } from 'node:util'
 import type { YtDlpInfo } from '../resolver/index.js'
 import { normalizeBiliUrl } from '../resolver/index.js'
+import { throttleBilibiliRequest, toBilibiliFailSafeError, withBilibiliRetry } from '../stability/index.js'
 import { createAccessContext, type AccessContext } from './context.js'
 import { buildYtDlpHeaderArgs } from './headers.js'
-import {
-  BilibiliAccessError,
-  classifyAccessError,
-  shouldRetryAccess,
-  waitBeforeRetry
-} from './retryPolicy.js'
+import { BilibiliAccessError } from './retryPolicy.js'
 
 const execFileAsync = promisify(execFile)
 
@@ -76,27 +72,17 @@ async function runYtDlpOnce(context: AccessContext) {
 
   try {
     return JSON.parse(stdout) as YtDlpInfo
-  } catch (error) {
+  } catch {
     throw new BilibiliAccessError('parse_failed', 'yt-dlp returned invalid JSON', true)
   }
 }
 
 export async function runYtDlpJson(url: string): Promise<YtDlpInfo> {
-  let context = createAccessContext(url)
-  let lastError: unknown
-
-  for (;;) {
-    try {
-      return await runYtDlpOnce(context)
-    } catch (error) {
-      lastError = error
-      if (!shouldRetryAccess(error, context.retryCount)) {
-        throw classifyAccessError(error)
-      }
-      await waitBeforeRetry(context.retryCount)
-      context = createAccessContext(url, context.retryCount + 1)
-    }
-  }
-
-  throw classifyAccessError(lastError)
+  const context = createAccessContext(url)
+  return withBilibiliRetry(async () => {
+    await throttleBilibiliRequest(context.episodeSessionId || context.url)
+    return runYtDlpOnce(context)
+  }).catch((error) => {
+    throw toBilibiliFailSafeError(error, 'resolve')
+  })
 }
