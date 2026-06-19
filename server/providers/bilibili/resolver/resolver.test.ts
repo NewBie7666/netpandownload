@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { fetchBilibiliInitialState } from '../access/index.js'
 import { resolveShare } from './index.js'
 import { assertEpisodeConsistency, buildResolvedShare } from './utils.js'
 import type { YtDlpInfo } from './types.js'
@@ -74,6 +75,105 @@ async function testYtDlpFailureFallsBack() {
   assert.equal(resolved.episodes[0]?.url, 'https://www.bilibili.com/video/BV1abcdefghi')
 }
 
+async function testSpaceSearchInitialState() {
+  const inputUrl = 'https://space.bilibili.com/1078866473/search?keyword=%E9%87%91%E8%B4%B5%E8%A6%81%E7%95%A5'
+  const raw: YtDlpInfo = {
+    page: {
+      vlist: [
+        { bvid: 'BV1space0001', title: '金贵要略 第一讲', duration: 1200 },
+        { bvid: 'BV1space0002', title: '金贵要略 第二讲', duration: 1300 },
+        { bvid: 'BV1space0001', title: 'duplicate' }
+      ]
+    }
+  }
+
+  const resolved = await resolveShare(inputUrl, {
+    runYtDlpJson: async () => {
+      throw new Error('yt-dlp unsupported')
+    },
+    fetchInitialStateJson: async () => raw
+  })
+
+  assert.equal(resolved.source, 'space-search')
+  assert.equal(resolved.episodes.length, 2)
+  assert.deepEqual(
+    resolved.episodes.map((episode) => episode.url),
+    ['https://www.bilibili.com/video/BV1space0001', 'https://www.bilibili.com/video/BV1space0002']
+  )
+}
+
+async function testSpaceSearchDoesNotUseSingleVideoFallback() {
+  const inputUrl = 'https://space.bilibili.com/1078866473/search?keyword=%E9%87%91%E8%B4%B5%E8%A6%81%E7%95%A5'
+
+  await assert.rejects(
+    () => resolveShare(inputUrl, {
+      runYtDlpJson: async () => {
+        throw new Error('yt-dlp unsupported')
+      },
+      fetchInitialStateJson: async () => {
+        throw new Error('space search blocked')
+      }
+    }),
+    /space search resolve failed/
+  )
+}
+
+async function testSpaceSearchFetchesAllPages() {
+  const originalFetch = globalThis.fetch
+  const pageRequests: number[] = []
+
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input)
+    if (url.includes('/x/web-interface/nav')) {
+      return new Response(JSON.stringify({
+        data: {
+          wbi_img: {
+            img_url: 'https://i0.hdslb.com/bfs/wbi/1234567890abcdef1234567890abcdef.png',
+            sub_url: 'https://i0.hdslb.com/bfs/wbi/abcdef1234567890abcdef1234567890.png'
+          }
+        }
+      }))
+    }
+    if (url.includes('/x/space/wbi/arc/search')) {
+      const parsed = new URL(url)
+      const page = Number(parsed.searchParams.get('pn') || '1')
+      pageRequests.push(page)
+      const offset = (page - 1) * 30
+      const remaining = Math.max(0, 65 - offset)
+      const length = Math.min(30, remaining)
+      return new Response(JSON.stringify({
+        code: 0,
+        data: {
+          page: { count: 65 },
+          list: {
+            vlist: Array.from({ length }, (_, index) => ({
+              bvid: `BVspace${String(offset + index + 1).padStart(4, '0')}`,
+              title: `Space video ${offset + index + 1}`
+            }))
+          }
+        }
+      }))
+    }
+    return new Response('<html></html>')
+  }) as typeof fetch
+
+  try {
+    const raw = await fetchBilibiliInitialState('https://space.bilibili.com/1078866473/search?keyword=test')
+    const resolved = await resolveShare('https://space.bilibili.com/1078866473/search?keyword=test', {
+      runYtDlpJson: async () => {
+        throw new Error('yt-dlp unsupported')
+      },
+      fetchInitialStateJson: async () => raw
+    })
+
+    assert.deepEqual(pageRequests, [1, 2, 3])
+    assert.equal(resolved.episodes.length, 65)
+    assert.equal(resolved.episodes[64]?.title, 'Space video 65')
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+}
+
 function testConsistencyLock() {
   const consistent = buildResolvedShare(
     'https://www.bilibili.com/video/BV1abcdefghi',
@@ -125,6 +225,9 @@ function testFileEpisodeMapping() {
 await testBangumiFlatten()
 await testPlaylistEntries()
 await testYtDlpFailureFallsBack()
+await testSpaceSearchInitialState()
+await testSpaceSearchDoesNotUseSingleVideoFallback()
+await testSpaceSearchFetchesAllPages()
 testConsistencyLock()
 testFileEpisodeMapping()
 

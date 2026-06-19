@@ -4,6 +4,7 @@ import { pipeline } from 'node:stream/promises'
 import type { Request, Response } from 'express'
 import { config } from '../../config.js'
 import { AppError } from '../../http.js'
+import { structuredLogger } from '../../logging/structuredLogger.js'
 import { quarkApi, type QuarkDownloadData } from '../../adapters/quarkApi.js'
 import { registerAllowedDownloadResult } from '../../downloader/downloadService.js'
 import type { DownloadResult, QuarkFile } from '../../../shared/types.js'
@@ -314,9 +315,12 @@ export async function proxyQuarkDownload(req: Request, res: Response) {
     requestHeaders.set('Range', rangeHeader)
   }
 
-  console.log(
-    `[download-proxy] host=${upstreamUrl.host} fid=${activeTicket.fid} fileName=${activeTicket.fileName} source=${activeTicket.source}`
-  )
+  structuredLogger.info('download-proxy', 'Proxy download started', {
+    host: upstreamUrl.host,
+    fid: activeTicket.fid,
+    fileName: activeTicket.fileName,
+    source: activeTicket.source
+  })
 
   let upstream = await fetch(upstreamUrl, {
     method: 'GET',
@@ -327,9 +331,13 @@ export async function proxyQuarkDownload(req: Request, res: Response) {
   let upstreamErrorBody = ''
   if (!upstream.ok) {
     upstreamErrorBody = await upstream.text()
-    console.log(
-      `[download-proxy] upstream-status=${upstream.status} host=${upstreamUrl.host} fid=${activeTicket.fid} source=${activeTicket.source} body=${upstreamErrorBody.slice(0, 220).replace(/\s+/g, ' ')}`
-    )
+    structuredLogger.warn('download-proxy', 'Upstream download failed', {
+      status: upstream.status,
+      host: upstreamUrl.host,
+      fid: activeTicket.fid,
+      source: activeTicket.source,
+      body: upstreamErrorBody.slice(0, 220).replace(/\s+/g, ' ')
+    })
   }
 
   if (!upstream.ok && isUpstreamExpired(upstream.status, upstreamErrorBody)) {
@@ -351,9 +359,13 @@ export async function proxyQuarkDownload(req: Request, res: Response) {
     })
     if (!upstream.ok) {
       upstreamErrorBody = await upstream.text()
-      console.log(
-        `[download-proxy] retry-upstream-status=${upstream.status} host=${retryUrl.host} fid=${activeTicket.fid} source=${activeTicket.source} body=${upstreamErrorBody.slice(0, 220).replace(/\s+/g, ' ')}`
-      )
+      structuredLogger.warn('download-proxy', 'Retry upstream download failed', {
+        status: upstream.status,
+        host: retryUrl.host,
+        fid: activeTicket.fid,
+        source: activeTicket.source,
+        body: upstreamErrorBody.slice(0, 220).replace(/\s+/g, ' ')
+      })
     }
   }
 

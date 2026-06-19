@@ -135,6 +135,15 @@ export interface UnifiedTask {
   sourceUrl?: string
   downloadUrl?: string
   error?: string
+  traceId?: string
+  health?: 'stable' | 'degraded' | 'unstable'
+  diagnosis?: {
+    rootCause: string
+    explanation: string
+    suggestedAction: string
+    recoverable: boolean
+    health: 'stable' | 'degraded' | 'unstable'
+  }
 }
 
 export interface ProductTasksResult {

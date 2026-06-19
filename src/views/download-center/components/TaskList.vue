@@ -51,10 +51,10 @@ function formatDate(value: number) {
       <div v-if="task.progress > 0" class="dc-progress">
         <span :style="{ width: `${task.progress}%` }"></span>
       </div>
-      <p v-if="task.error" class="dc-task-error">
-        <strong>{{ task.error.title }}</strong>
-        {{ task.error.message }}
-        <span v-if="task.error.actionHint" class="dc-action-hint">{{ task.error.actionHint }}</span>
+      <p v-if="task.presentedError" class="dc-task-error">
+        <strong>{{ task.presentedError.title }}</strong>
+        {{ task.presentedError.message }}
+        <span v-if="task.presentedError.actionHint" class="dc-action-hint">{{ task.presentedError.actionHint }}</span>
       </p>
     </button>
 
@@ -64,6 +64,7 @@ function formatDate(value: number) {
 
 <style scoped>
 .dc-task-list {
+  display: grid;
   gap: 8px;
 }
 

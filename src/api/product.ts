@@ -11,14 +11,40 @@ import { clampProgress, mapTaskStatus, type ProductUiStatus } from './product/ta
 
 export type { ProductUiStatus, PresentedError }
 
+export type ProductHealth = 'stable' | 'degraded' | 'unstable'
+
+export interface ProductDiagnosis {
+  rootCause: string
+  explanation: string
+  suggestedAction: string
+  recoverable: boolean
+  health: ProductHealth
+}
+
 export interface ProductUiTask {
   id: string
   title: string
   status: ProductUiStatus
   progress: number
   providerId: ProviderId | 'unknown'
+  rawError?: string
+  presentedError?: PresentedError
   error?: PresentedError
+  diagnosis?: ProductDiagnosis
+  health?: ProductHealth
+  traceId?: string
   createdAt: number
+}
+
+const uiStatuses: ProductUiStatus[] = ['waiting', 'active', 'paused', 'success', 'failed']
+const healthValues: ProductHealth[] = ['stable', 'degraded', 'unstable']
+
+function assertProductUiTask(task: ProductUiTask) {
+  if (!uiStatuses.includes(task.status)) throw new Error(`Unknown product UI status: ${task.status}`)
+  if (task.health && !healthValues.includes(task.health)) throw new Error(`Unknown product health: ${task.health}`)
+  if (!task.id || !task.title || !task.providerId || typeof task.createdAt !== 'number') {
+    throw new Error('Product UI task schema is incomplete')
+  }
 }
 
 async function getJson<T>(url: string): Promise<T> {
@@ -45,15 +71,23 @@ export function fetchProductHistory() {
 }
 
 export function normalizeProductTask(task: UnifiedTask): ProductUiTask {
-  return {
+  const presentedError = presentTaskError(task)
+  const normalized: ProductUiTask = {
     id: task.id,
     title: task.title || '未命名任务',
     status: mapTaskStatus(task.status),
     progress: clampProgress(task.progress),
     providerId: task.providerId || 'unknown',
-    error: presentTaskError(task),
+    rawError: task.error,
+    presentedError,
+    error: presentedError,
+    diagnosis: task.diagnosis,
+    health: task.health || task.diagnosis?.health,
+    traceId: task.traceId,
     createdAt: task.createdAt
   }
+  assertProductUiTask(normalized)
+  return normalized
 }
 
 export async function fetchProductTaskViews() {

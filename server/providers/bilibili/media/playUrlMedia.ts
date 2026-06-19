@@ -1,6 +1,7 @@
 import { AppError } from '../../../http.js'
 import { createAccessContext, type AccessContext } from '../access/context.js'
 import { buildBilibiliHeaders } from '../access/headers.js'
+import { withFailureLayer } from '../stability/index.js'
 
 type UnknownRecord = Record<string, unknown>
 
@@ -30,11 +31,42 @@ function pickCid(episodeInfo: unknown) {
   return asNumber(info?.cid) || asNumber(page?.cid) || asNumber(pages[0]?.cid)
 }
 
+function pickCidFromViewPayload(payload: unknown) {
+  if (!isRecord(payload)) return undefined
+  const data = isRecord(payload.data) ? payload.data : undefined
+  const pages = data && Array.isArray(data.pages) ? data.pages.filter(isRecord) : []
+  return asNumber(data?.cid) || asNumber(pages[0]?.cid)
+}
+
 function pickPlayableUrl(payload: unknown) {
   if (!isRecord(payload)) return ''
   const data = isRecord(payload.data) ? payload.data : undefined
   const durl = data && Array.isArray(data.durl) ? data.durl.filter(isRecord) : []
   return asString(durl[0]?.url)
+}
+
+async function resolveCidByBvid(bvid: string, context: AccessContext) {
+  const apiUrl = new URL('https://api.bilibili.com/x/web-interface/view')
+  apiUrl.searchParams.set('bvid', bvid)
+
+  const response = await withFailureLayer('mediaResolver', () => fetch(apiUrl, {
+    method: 'GET',
+    headers: buildBilibiliHeaders(context),
+    signal: AbortSignal.timeout(12000)
+  }))
+  if (response.status === 412) {
+    throw new AppError('media_resolution_failed', 'B站返回风控限制，无法解析视频信息')
+  }
+  if (!response.ok) {
+    throw new AppError('media_resolution_failed', `B站视频信息接口请求失败：${response.status}`)
+  }
+
+  const payload = await response.json()
+  const cid = pickCidFromViewPayload(payload)
+  if (!cid) {
+    throw new AppError('media_resolution_failed', 'B站视频信息接口未返回 cid，无法解析媒体直链')
+  }
+  return cid
 }
 
 export async function resolvePlayUrlMedia(
@@ -43,12 +75,12 @@ export async function resolvePlayUrlMedia(
   accessContext?: AccessContext
 ) {
   const bvid = pickBvid(episodeUrl, episodeInfo)
-  const cid = pickCid(episodeInfo)
-  if (!bvid || !cid) {
-    throw new AppError('media_resolution_failed', 'B站单集缺少 bvid 或 cid，无法解析媒体直链')
+  if (!bvid) {
+    throw new AppError('media_resolution_failed', 'B站单集缺少 bvid，无法解析媒体直链')
   }
 
   const context = accessContext || createAccessContext(episodeUrl)
+  const cid = pickCid(episodeInfo) || await resolveCidByBvid(bvid, context)
   const apiUrl = new URL('https://api.bilibili.com/x/player/playurl')
   apiUrl.searchParams.set('bvid', bvid)
   apiUrl.searchParams.set('cid', String(cid))
@@ -56,11 +88,11 @@ export async function resolvePlayUrlMedia(
   apiUrl.searchParams.set('fnval', '0')
   apiUrl.searchParams.set('fourk', '1')
 
-  const response = await fetch(apiUrl, {
+  const response = await withFailureLayer('mediaResolver', () => fetch(apiUrl, {
     method: 'GET',
     headers: buildBilibiliHeaders(context),
     signal: AbortSignal.timeout(12000)
-  })
+  }))
   if (response.status === 412) {
     throw new AppError('media_resolution_failed', 'B站返回风控限制，无法解析媒体直链')
   }

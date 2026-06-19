@@ -1,4 +1,5 @@
 import type { AccessContext } from '../access/context.js'
+import type { BilibiliTraceContext } from '../observability/index.js'
 
 export type BilibiliMediaErrorReason =
   | 'media_resolution_failed'
@@ -15,5 +16,6 @@ export interface BilibiliMediaResult {
 export interface ResolveMediaOptions {
   timeoutMs?: number
   accessContext?: AccessContext
+  traceContext?: BilibiliTraceContext
   episodeInfo?: unknown
 }

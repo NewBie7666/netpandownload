@@ -22,6 +22,12 @@ export function normalizeBiliUrl(input: string) {
       return `https://www.bilibili.com${url.pathname.replace(/\/+$/, '')}`
     }
 
+    if (/^space\.bilibili\.com$/i.test(url.hostname) && /^\/\d+\/search\/?$/i.test(url.pathname)) {
+      const keyword = url.searchParams.get('keyword')
+      const keywordPart = keyword ? `?keyword=${encodeURIComponent(keyword)}` : ''
+      return `https://space.bilibili.com${url.pathname.replace(/\/+$/, '')}${keywordPart}`
+    }
+
     if (/^b23\.tv$/i.test(url.hostname)) {
       return `https://b23.tv${url.pathname.replace(/\/+$/, '')}`
     }
@@ -41,6 +47,9 @@ export function isBilibiliUrl(input: string) {
     const url = new URL(value)
     if (/^(www\.)?bilibili\.com$/i.test(url.hostname)) {
       return /^\/video\/BV[0-9A-Za-z]+/i.test(url.pathname) || /^\/bangumi\/play\//i.test(url.pathname)
+    }
+    if (/^space\.bilibili\.com$/i.test(url.hostname)) {
+      return /^\/\d+\/search\/?$/i.test(url.pathname)
     }
     return /^b23\.tv$/i.test(url.hostname) && url.pathname.length > 1
   } catch {

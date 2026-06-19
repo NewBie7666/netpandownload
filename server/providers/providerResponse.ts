@@ -43,11 +43,7 @@ export function providerOk<T>(
     ok: true,
     providerId,
     data,
-    meta: {
-      source,
-      reason,
-      providerMeta
-    }
+    meta: { source, reason, providerMeta }
   }
 }
 
@@ -65,16 +61,8 @@ export function providerError<T = never>(
     ok: false,
     providerId,
     data: null,
-    error: {
-      code,
-      message,
-      recoverable
-    },
-    meta: {
-      source,
-      reason,
-      providerMeta
-    }
+    error: { code, message, recoverable },
+    meta: { source, reason, providerMeta }
   }
 }
 
@@ -90,16 +78,8 @@ export function buildFallback(
     ok: false,
     providerId,
     data: null,
-    error: {
-      code,
-      message,
-      recoverable: true
-    },
-    meta: {
-      source: 'fallback',
-      reason,
-      providerMeta
-    }
+    error: { code, message, recoverable: true },
+    meta: { source: 'fallback', reason, providerMeta }
   }
 }
 
@@ -178,7 +158,7 @@ export function normalizeProviderError(
     if (hasText(error, ['http error 412', 'precondition failed', '412'])) {
       return {
         code: 'blocked_by_upstream',
-        message: 'B站返回风控限制，当前版本未接入 B站登录态，无法保证解析成功',
+        message: 'B站返回风控限制，请稍后重试或登录后再试',
         recoverable: true
       }
     }

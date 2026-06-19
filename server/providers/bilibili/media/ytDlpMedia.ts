@@ -7,7 +7,7 @@ import { AppError } from '../../../http.js'
 import { createAccessContext } from '../access/context.js'
 import { buildYtDlpHeaderArgs } from '../access/headers.js'
 import { normalizeBiliUrl } from '../resolver/index.js'
-import { classifyFailure } from '../stability/index.js'
+import { classifyFailure, withFailureLayer } from '../stability/index.js'
 import type { ResolveMediaOptions } from './types.js'
 
 const execFileAsync = promisify(execFile)
@@ -59,7 +59,7 @@ function toMediaError(error: unknown) {
     return new AppError('media_resolution_failed', 'B站返回风控限制，无法解析媒体直链')
   }
   if (failure.type === 'restricted') {
-    return new AppError('media_resolution_failed', '该 B站资源需要更高登录态或访问权限')
+    return new AppError('media_resolution_failed', '该 B站资源需要更高登录状态或访问权限')
   }
   return new AppError('media_resolution_failed', failure.message || 'B站媒体直链解析失败')
 }
@@ -72,7 +72,7 @@ export async function runYtDlpMediaUrl(episodeUrl: string, options: ResolveMedia
 
   const context = options.accessContext || createAccessContext(episodeUrl)
   try {
-    const { stdout } = await execFileAsync(
+    const { stdout } = await withFailureLayer('ytDlp', () => execFileAsync(
       executable,
       [
         '-f',
@@ -92,7 +92,7 @@ export async function runYtDlpMediaUrl(episodeUrl: string, options: ResolveMedia
         windowsHide: true,
         timeout: options.timeoutMs || 12000
       }
-    )
+    ))
 
     const url = pickMediaUrl(stdout)
     if (!url) {

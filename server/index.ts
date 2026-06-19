@@ -4,13 +4,14 @@ import type { Server } from 'node:http'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { config, setRuntimePort } from './config.js'
-import { downloadsRouter } from './routes/downloads.js'
-import { downloadEngineRouter } from './routes/downloadEngine.js'
 import { ensureEngineStarted } from './download-engine/engine.js'
 import { AppError, fail } from './http.js'
-import { quarkRouter } from './routes/quark.js'
-import { providersRouter } from './routes/providers.js'
+import { structuredLogger } from './logging/structuredLogger.js'
+import { downloadsRouter } from './routes/downloads.js'
+import { downloadEngineRouter } from './routes/downloadEngine.js'
 import { productRouter } from './routes/product.js'
+import { providersRouter } from './routes/providers.js'
+import { quarkRouter } from './routes/quark.js'
 
 export const app = express()
 const __filename = fileURLToPath(import.meta.url)
@@ -41,7 +42,7 @@ app.use('/api/providers', providersRouter)
 app.use('/api/product', productRouter)
 
 void ensureEngineStarted().catch((error) => {
-  console.error('Download engine startup failed:', error)
+  structuredLogger.error('download-engine', 'Download engine startup failed', { error })
 })
 
 if (desktopStaticEnabled) {
@@ -63,6 +64,7 @@ const errorHandler: ErrorRequestHandler = (error, _req, res, _next) => {
     return
   }
 
+  structuredLogger.error('http', 'Unhandled server error', { error })
   res.status(500).json(fail('internal_error', '服务端处理失败，请稍后重试'))
 }
 
@@ -72,7 +74,7 @@ export function startServer(port = config.port) {
   return new Promise<Server>((resolve, reject) => {
     setRuntimePort(port)
     const server = app.listen(port, () => {
-      console.log(`Quark parser API listening on http://localhost:${port}`)
+      structuredLogger.info('server', 'Quark parser API listening', { port, url: `http://localhost:${port}` })
       resolve(server)
     })
 
@@ -82,7 +84,7 @@ export function startServer(port = config.port) {
 
 if (String(process.env.QUARK_EMBEDDED_SERVER || '').toLowerCase() !== 'true') {
   void startServer().catch((error) => {
-    console.error(error)
+    structuredLogger.error('server', 'Server startup failed', { error })
     process.exit(1)
   })
 }

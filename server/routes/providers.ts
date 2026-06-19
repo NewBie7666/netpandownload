@@ -39,7 +39,8 @@ function toPublicMeta<T>(contract: InternalExecutionContract<T>) {
     executable: contract.meta.runtime.executable,
     traceId: contract.meta.runtime.traceId,
     durationMs: contract.meta.runtime.durationMs,
-    reason: contract.meta.provider.reason
+    reason: contract.meta.provider.reason,
+    provider: contract.meta.provider.providerMeta
   }
 }
 

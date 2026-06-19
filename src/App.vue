@@ -35,10 +35,26 @@ interface PathItem {
   name: string
 }
 
+interface BilibiliLoginResult {
+  status: 'success' | 'failed' | 'cancelled'
+  loggedIn: boolean
+  message?: string
+}
+
+interface BilibiliLoginStatus {
+  loggedIn: boolean
+  cookieValid: boolean
+  lastLoginTime?: number
+  mode: 'anonymous' | 'cookie'
+}
+
 declare global {
   interface Window {
     desktopApi?: {
       selectDownloadDir: () => Promise<string | null>
+      loginBilibili?: () => Promise<BilibiliLoginResult>
+      getBilibiliLoginStatus?: () => Promise<BilibiliLoginStatus>
+      logoutBilibili?: () => Promise<BilibiliLoginStatus>
     }
   }
 }
@@ -70,6 +86,12 @@ const selectedFileIds = ref<string[]>([])
 const batchDownloadLoading = ref(false)
 const batchDownloadDone = ref(0)
 const batchDownloadTotal = ref(0)
+const bilibiliAuthLoading = ref(false)
+const bilibiliLoginStatus = ref<BilibiliLoginStatus>({
+  loggedIn: false,
+  cookieValid: false,
+  mode: 'anonymous'
+})
 
 let authPollTimer: number | undefined
 let taskPollTimer: number | undefined
@@ -112,18 +134,19 @@ function toggleSelectAllFiles() {
 }
 
 function normalizeResourceUrlInput(value: string) {
-  const trimmed = String(value || '').trim().replace(/^['"]|['"]$/g, '')
+  const trimmed = String(value || '').trim().replace(/^["']|["']$/g, '')
   if (!trimmed) return ''
 
   if (/^pan\.quark\.cn\/s\//i.test(trimmed)) {
     return `https://${trimmed}`
   }
-  if (/^(www\.)?bilibili\.com\//i.test(trimmed) || /^b23\.tv\//i.test(trimmed)) {
+  if (/^(www\.)?bilibili\.com\//i.test(trimmed) || /^space\.bilibili\.com\//i.test(trimmed) || /^b23\.tv\//i.test(trimmed)) {
     return `https://${trimmed}`
   }
 
   const matched = trimmed.match(/https?:\/\/pan\.quark\.cn\/s\/[^\s"'<>]+/i)
     || trimmed.match(/https?:\/\/(?:www\.)?bilibili\.com\/[^\s"'<>]+/i)
+    || trimmed.match(/https?:\/\/space\.bilibili\.com\/[^\s"'<>]+/i)
     || trimmed.match(/https?:\/\/b23\.tv\/[^\s"'<>]+/i)
   return matched ? matched[0] : trimmed
 }
@@ -146,6 +169,12 @@ function validateResourceUrl(value: string) {
       }
       return '未识别到支持的 B 站视频链接'
     }
+    if (/^space\.bilibili\.com$/i.test(url.hostname)) {
+      if (/^\/\d+\/search\/?$/i.test(url.pathname)) {
+        return ''
+      }
+      return '未识别到支持的 B 站空间搜索链接'
+    }
     if (/^b23\.tv$/i.test(url.hostname) && url.pathname.length > 1) {
       return ''
     }
@@ -155,7 +184,6 @@ function validateResourceUrl(value: string) {
 
   return '当前不支持该链接来源'
 }
-
 function formatSize(size: number) {
   if (!size) return '-'
   const units = ['B', 'KB', 'MB', 'GB', 'TB']
@@ -205,15 +233,13 @@ function stopTaskPolling() {
 
 async function loadShare() {
   clearMessages()
-  clearFileSelection()
-  downloadDialog.value = null
-  const normalizedShareUrl = normalizeResourceUrlInput(shareUrl.value)
-  const validationError = validateResourceUrl(normalizedShareUrl)
-  if (validationError) {
-    errorMessage.value = validationError
+  const validation = validateResourceUrl(shareUrl.value)
+  if (validation) {
+    errorMessage.value = validation
     return
   }
 
+  const normalizedShareUrl = normalizeResourceUrlInput(shareUrl.value)
   loading.value = true
   try {
     shareUrl.value = normalizedShareUrl
@@ -305,6 +331,7 @@ async function copyProxyDownloadUrl() {
   await navigator.clipboard.writeText(href)
   noticeMessage.value = '代理下载地址已复制'
 }
+
 
 function startBrowserDownload() {
   const targetUrl = downloadDialog.value?.proxyUrl || downloadDialog.value?.downloadUrl
@@ -422,6 +449,73 @@ async function downloadSelectedFiles() {
   }
 }
 
+async function refreshBilibiliLoginStatus() {
+  if (!window.desktopApi?.getBilibiliLoginStatus) {
+    bilibiliLoginStatus.value = {
+      loggedIn: false,
+      cookieValid: false,
+      mode: 'anonymous'
+    }
+    return
+  }
+
+  try {
+    bilibiliLoginStatus.value = await window.desktopApi.getBilibiliLoginStatus()
+  } catch {
+    bilibiliLoginStatus.value = {
+      loggedIn: false,
+      cookieValid: false,
+      mode: 'anonymous'
+    }
+  }
+}
+
+async function startBilibiliLogin() {
+  clearMessages()
+  if (!window.desktopApi?.loginBilibili) {
+    errorMessage.value = '请在桌面客户端中登录 B 站'
+    return
+  }
+
+  bilibiliAuthLoading.value = true
+  try {
+    const result = await window.desktopApi.loginBilibili()
+    await refreshBilibiliLoginStatus()
+    if (result.status === 'success' && result.loggedIn) {
+      noticeMessage.value = 'B 站登录完成'
+      return
+    }
+    if (result.status === 'cancelled') {
+      noticeMessage.value = result.message || 'B 站登录已取消'
+      return
+    }
+    errorMessage.value = result.message || 'B 站登录失败'
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : 'B 站登录失败'
+  } finally {
+    bilibiliAuthLoading.value = false
+  }
+}
+
+async function logoutBilibiliLogin() {
+  clearMessages()
+  if (!window.desktopApi?.logoutBilibili) {
+    errorMessage.value = '请在桌面客户端中退出 B 站登录'
+    return
+  }
+
+  bilibiliAuthLoading.value = true
+  try {
+    bilibiliLoginStatus.value = await window.desktopApi.logoutBilibili()
+    noticeMessage.value = 'B 站登录状态已退出'
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : 'B 站退出失败'
+  } finally {
+    bilibiliAuthLoading.value = false
+  }
+}
+
+
 function closeAuthDialog() {
   authDialog.value = null
   stopAuthPolling()
@@ -437,13 +531,13 @@ async function startQrLogin() {
     authStatus.value = {
       sessionId: result.sessionId,
       status: 'waiting',
-      message: '等待扫码确认',
+      message: '等待夸克扫码确认',
       expiresAt: result.expiresAt
     }
     authPollTimer = window.setInterval(pollQrLoginStatus, 2000)
     await pollQrLoginStatus()
   } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : '创建扫码登录失败'
+    errorMessage.value = error instanceof Error ? error.message : '创建夸克扫码登录失败'
   } finally {
     authLoading.value = false
   }
@@ -478,7 +572,7 @@ async function logoutQrLogin() {
   authStatus.value = null
   authDialog.value = null
   stopAuthPolling()
-  noticeMessage.value = '扫码登录状态已退出'
+  noticeMessage.value = '夸克扫码登录状态已退出'
 }
 
 async function toggleDownloadTask(task: DownloadTask) {
@@ -510,7 +604,7 @@ async function confirmDeleteDownloadTask(deleteFile: boolean) {
   taskActionGid.value = task.gid
   try {
     await removeDownloadTask(task.gid, { deleteFile })
-    noticeMessage.value = deleteFile ? '下载记录和本地文件已删除' : '下载记录已删除'
+    noticeMessage.value = deleteFile ? 'Task record and local file removed' : 'Task record removed'
     deleteTaskDialog.value = null
     await refreshDownloadTasks(true)
   } catch (error) {
@@ -523,7 +617,7 @@ async function confirmDeleteDownloadTask(deleteFile: boolean) {
 async function selectDownloadDirectory() {
   clearMessages()
   if (!window.desktopApi?.selectDownloadDir) {
-    errorMessage.value = '请在桌面客户端中选择下载目录'
+    errorMessage.value = 'Please choose download directory in the desktop client'
     return
   }
 
@@ -532,10 +626,10 @@ async function selectDownloadDirectory() {
     if (!selectedDir) return
     const result = await saveDownloadSettings(selectedDir)
     downloaderDefaultDir.value = result.downloadDir
-    noticeMessage.value = `下载目录已设置为：${result.downloadDir}`
+    noticeMessage.value = `Download directory updated: ${result.downloadDir}`
     await refreshDownloadTasks(true)
   } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : '设置下载目录失败'
+    errorMessage.value = error instanceof Error ? error.message : '选择下载目录失败'
   }
 }
 
@@ -543,7 +637,7 @@ async function openDownloaderDir() {
   clearMessages()
   try {
     const result = await openDownloadDir()
-    noticeMessage.value = `下载目录：${result.dir}`
+    noticeMessage.value = `Download directory opened: ${result.dir}`
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '打开下载目录失败'
   }
@@ -551,17 +645,18 @@ async function openDownloaderDir() {
 
 function formatTaskStatus(status: DownloadTask['status']) {
   const labels: Record<DownloadTask['status'], string> = {
-    active: '下载中',
-    waiting: '等待中',
-    paused: '已暂停',
-    error: '出错',
-    complete: '已完成',
-    removed: '已删除'
+    active: 'Downloading',
+    waiting: 'Waiting',
+    paused: 'Paused',
+    error: 'Failed',
+    complete: 'Complete',
+    removed: 'Removed'
   }
   return labels[status] || status
 }
 
 onMounted(() => {
+  void refreshBilibiliLoginStatus()
   void refreshDownloadTasks(true)
   taskPollTimer = window.setInterval(() => {
     void refreshDownloadTasks(true)
@@ -580,39 +675,25 @@ onBeforeUnmount(() => {
       <section class="panel parser-panel">
         <div class="form-row">
           <label for="share-url">资源链接</label>
-          <input
-            id="share-url"
-            v-model="shareUrl"
-            type="text"
-            placeholder="请输入夸克分享链接或 B 站视频链接"
-            :disabled="loading"
-          />
+          <input id="share-url" v-model="shareUrl" type="text" placeholder="夸克链接、B 站视频或 B 站空间搜索链接" :disabled="loading" />
         </div>
         <div class="form-row">
           <label for="passcode">提取码</label>
-          <input
-            id="passcode"
-            v-model="passcode"
-            type="text"
-            placeholder="夸克链接可填；B 站链接无需填写"
-            :disabled="loading"
-          />
+          <input id="passcode" v-model="passcode" type="text" placeholder="夸克链接可填；B 站链接无需填写" :disabled="loading" />
         </div>
         <div class="actions">
           <button class="primary-button" type="button" :disabled="loading" @click="loadShare">
             {{ loading ? '解析中...' : '解析资源' }}
           </button>
-          <button
-            v-if="!authSessionId"
-            class="ghost-button"
-            type="button"
-            :disabled="authLoading"
-            @click="startQrLogin"
-          >
+          <button v-if="!authSessionId" class="ghost-button" type="button" :disabled="authLoading" @click="startQrLogin">
             {{ authLoading ? '二维码生成中...' : '夸克扫码登录' }}
           </button>
-          <button v-else class="ghost-button" type="button" @click="logoutQrLogin">
-            已登录，退出
+          <button v-else class="ghost-button" type="button" @click="logoutQrLogin">夸克已登录，退出</button>
+          <button v-if="!bilibiliLoginStatus.loggedIn" class="ghost-button" type="button" :disabled="bilibiliAuthLoading" @click="startBilibiliLogin">
+            {{ bilibiliAuthLoading ? 'B 站登录中...' : 'B站登录' }}
+          </button>
+          <button v-else class="ghost-button" type="button" :disabled="bilibiliAuthLoading" @click="logoutBilibiliLogin">
+            B站已登录，退出
           </button>
         </div>
       </section>
@@ -624,100 +705,48 @@ onBeforeUnmount(() => {
         <div class="table-header">
           <div>
             <h2>文件列表</h2>
-            <p v-if="pathStack.length" class="path-text">
-              / {{ pathStack.map((item) => item.name).join(' / ') }}
-            </p>
+            <p v-if="pathStack.length" class="path-text">/ {{ pathStack.map((item) => item.name).join(' / ') }}</p>
             <p v-if="batchDownloadProgressText" class="path-text">{{ batchDownloadProgressText }}</p>
           </div>
           <div class="task-header-actions">
-            <button
-              class="ghost-button"
-              type="button"
-              :disabled="!selectableFiles.length || batchDownloadLoading"
-              @click="toggleSelectAllFiles"
-            >
+            <button class="ghost-button" type="button" :disabled="!selectableFiles.length || batchDownloadLoading" @click="toggleSelectAllFiles">
               {{ allSelectableSelected ? '取消全选' : '全选' }}
             </button>
-            <button
-              class="primary-button"
-              type="button"
-              :disabled="!selectedFiles.length || batchDownloadLoading || !downloaderEnabled"
-              @click="downloadSelectedFiles"
-            >
+            <button class="primary-button" type="button" :disabled="!selectedFiles.length || batchDownloadLoading || !downloaderEnabled" @click="downloadSelectedFiles">
               {{ batchDownloadLoading ? '加入中...' : `下载选中 (${selectedFiles.length})` }}
             </button>
-          <button class="ghost-button" type="button" :disabled="!canGoBack || loading || batchDownloadLoading" @click="goBack">
-            返回上一级
-          </button>
-        </div>
+            <button class="ghost-button" type="button" :disabled="!canGoBack || loading || batchDownloadLoading" @click="goBack">返回上一级</button>
           </div>
+        </div>
 
         <div class="table-wrap">
           <table>
             <thead>
               <tr>
-                <th>
-                  <input
-                    type="checkbox"
-                    :checked="allSelectableSelected"
-                    :disabled="!selectableFiles.length || batchDownloadLoading"
-                    aria-label="全选当前列表文件"
-                    @change="toggleSelectAllFiles"
-                  />
-                </th>
+                <th><input type="checkbox" :checked="allSelectableSelected" :disabled="!selectableFiles.length || batchDownloadLoading" aria-label="全选当前列表文件" @change="toggleSelectAllFiles" /></th>
                 <th>名称</th>
                 <th>大小</th>
-                <th>是否文件夹</th>
+                <th>类型</th>
                 <th>操作</th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="file in files" :key="file.fid">
-                <td>
-                  <input
-                    type="checkbox"
-                    :checked="isFileSelected(file)"
-                    :disabled="file.isDir || batchDownloadLoading"
-                    :aria-label="`选择 ${file.name}`"
-                    @change="toggleFileSelection(file)"
-                  />
-                </td>
-                <td>
-                  <span class="file-name" :title="file.name">
-                    <span class="file-icon">{{ file.isDir ? '文件夹' : '文件' }}</span>
-                    {{ file.name }}
-                  </span>
-                </td>
+                <td><input type="checkbox" :checked="isFileSelected(file)" :disabled="file.isDir || batchDownloadLoading" :aria-label="`选择 ${file.name}`" @change="toggleFileSelection(file)" /></td>
+                <td><span class="file-name" :title="file.name"><span class="file-icon">{{ file.isDir ? '文件夹' : '文件' }}</span> {{ file.name }}</span></td>
                 <td>{{ formatSize(file.size) }}</td>
-                <td>{{ file.isDir ? '是' : '否' }}</td>
+                <td>{{ file.isDir ? '文件夹' : '文件' }}</td>
                 <td>
-                  <button
-                    v-if="file.isDir"
-                    class="row-button"
-                    type="button"
-                    :disabled="Boolean(folderLoadingFid)"
-                    @click="enterFolder(file)"
-                  >
+                  <button v-if="file.isDir" class="row-button" type="button" :disabled="folderLoadingFid === file.fid" @click="enterFolder(file)">
                     {{ folderLoadingFid === file.fid ? '进入中...' : '进入文件夹' }}
                   </button>
-                  <button
-                    v-else
-                    class="row-button"
-                    type="button"
-                    :disabled="Boolean(downloadLoadingFid) || batchDownloadLoading"
-                    @click="openDownload(file)"
-                  >
+                  <button v-else class="row-button" type="button" :disabled="downloadLoadingFid === file.fid || batchDownloadLoading" @click="openDownload(file)">
                     {{ downloadLoadingFid === file.fid ? '获取中...' : '获取链接' }}
                   </button>
                 </td>
               </tr>
-              <tr v-if="!loading && !hasFiles">
-                <td class="empty-cell" colspan="5">
-                  <div class="empty-state">
-                    <div class="empty-icon">[]</div>
-                    <p>暂无文件</p>
-                  </div>
-                </td>
+              <tr v-if="!files.length">
+                <td class="empty-cell" colspan="5">暂无文件</td>
               </tr>
             </tbody>
           </table>
@@ -729,72 +758,35 @@ onBeforeUnmount(() => {
           <div>
             <h2>下载任务</h2>
             <p class="path-text">内置下载器：{{ downloaderEnabled ? '可用' : '不可用' }}</p>
-            <p class="path-text">默认下载目录：{{ downloaderDefaultDir || '正在读取下载目录...' }}</p>
+            <p class="path-text">默认下载目录：{{ downloaderDefaultDir || '-' }}</p>
+            <p v-if="downloaderMessage" class="path-text">{{ downloaderMessage }}</p>
           </div>
           <div class="task-header-actions">
             <button class="ghost-button" type="button" @click="selectDownloadDirectory">选择下载目录</button>
             <button class="ghost-button" type="button" @click="openDownloaderDir">打开下载目录</button>
+            <button class="ghost-button" type="button" @click="refreshDownloadTasks(false)">刷新</button>
           </div>
         </div>
-
-        <div v-if="!downloaderEnabled" class="downloader-status">
-          <p>{{ downloaderMessage || '内置下载器不可用' }}</p>
-          <p class="setup-command">powershell -ExecutionPolicy Bypass -File scripts/prepare-aria2.ps1</p>
-        </div>
-
-        <div v-else class="table-wrap">
+        <div class="table-wrap">
           <table>
             <thead>
-              <tr>
-                <th>文件名</th>
-                <th>状态</th>
-                <th>进度</th>
-                <th>速度</th>
-                <th>已下载</th>
-                <th>操作</th>
-              </tr>
+              <tr><th>文件名</th><th>状态</th><th>进度</th><th>速度</th><th>大小</th><th>操作</th></tr>
             </thead>
             <tbody>
               <tr v-for="task in downloadTasks" :key="task.gid">
                 <td>{{ task.fileName }}</td>
                 <td>{{ formatTaskStatus(task.status) }}</td>
-                <td>
-                  <div class="task-progress">
-                    <div class="task-progress-bar">
-                      <span :style="{ width: `${task.progress}%` }"></span>
-                    </div>
-                    <span class="task-progress-label">{{ task.progress }}%</span>
-                  </div>
-                </td>
+                <td>{{ task.progress }}%</td>
                 <td>{{ formatSpeed(task.downloadSpeed) }}</td>
                 <td>{{ formatSize(task.completedLength) }} / {{ formatSize(task.totalLength) }}</td>
                 <td class="task-actions">
-                  <button
-                    class="row-button"
-                    type="button"
-                    :disabled="taskActionGid === task.gid || !['active', 'paused'].includes(task.status)"
-                    @click="toggleDownloadTask(task)"
-                  >
+                  <button class="row-button" type="button" :disabled="taskActionGid === task.gid || !['active', 'paused'].includes(task.status)" @click="toggleDownloadTask(task)">
                     {{ task.status === 'paused' ? '继续' : '暂停' }}
                   </button>
-                  <button
-                    class="ghost-button"
-                    type="button"
-                    :disabled="taskActionGid === task.gid"
-                    @click="requestDeleteDownloadTask(task)"
-                  >
-                    删除
-                  </button>
+                  <button class="ghost-button" type="button" :disabled="taskActionGid === task.gid" @click="requestDeleteDownloadTask(task)">删除</button>
                 </td>
               </tr>
-              <tr v-if="!downloadTasks.length">
-                <td class="empty-cell" colspan="6">
-                  <div class="empty-state">
-                    <div class="empty-icon">↓</div>
-                    <p>暂无下载任务</p>
-                  </div>
-                </td>
-              </tr>
+              <tr v-if="!downloadTasks.length"><td class="empty-cell" colspan="6">暂无下载任务</td></tr>
             </tbody>
           </table>
         </div>
@@ -807,58 +799,18 @@ onBeforeUnmount(() => {
       <div class="modal">
         <div class="modal-header">
           <h3>下载链接</h3>
-          <button class="icon-button" type="button" aria-label="关闭" @click="downloadDialog = null">
-            x
-          </button>
+          <button class="icon-button" type="button" aria-label="关闭" @click="downloadDialog = null">x</button>
         </div>
         <p class="modal-file">{{ downloadDialog.name }}</p>
-        <template v-if="downloadDialog.source === 'direct' && downloadDialog.downloadUrl">
-          <textarea readonly :value="downloadDialog.downloadUrl"></textarea>
-        </template>
-        <template v-else>
-          <div class="proxy-download-note">该文件将通过本站代理下载。</div>
-        </template>
-        <p class="cache-note">
-          {{ downloadDialog.cached ? '已命中服务端缓存' : '已生成新链接' }}，
-          过期时间：{{ new Date(downloadDialog.expiresAt).toLocaleString() }}
-        </p>
+        <textarea v-if="downloadDialog.downloadUrl" readonly :value="downloadDialog.downloadUrl"></textarea>
+        <div v-else class="proxy-download-note">该文件将通过本站代理或临时链接下载。</div>
+        <p class="cache-note">过期时间：{{ new Date(downloadDialog.expiresAt).toLocaleString() }}</p>
         <div class="modal-actions">
           <button class="ghost-button" type="button" @click="downloadDialog = null">关闭</button>
-          <button
-            v-if="downloadDialog.source === 'direct'"
-            class="ghost-button"
-            type="button"
-            @click="startBrowserDownload"
-          >
-            浏览器下载
-          </button>
-          <button
-            v-if="downloadDialog.source === 'direct'"
-            class="ghost-button"
-            type="button"
-            @click="copyDownloadUrl"
-          >
-            复制直链
-          </button>
-          <button
-            v-if="downloadDialog.source !== 'direct'"
-            class="ghost-button"
-            type="button"
-            @click="startBrowserDownload"
-          >
-            浏览器下载
-          </button>
-          <button
-            v-if="downloadDialog.source !== 'direct'"
-            class="ghost-button"
-            type="button"
-            @click="copyProxyDownloadUrl"
-          >
-            复制代理地址
-          </button>
-          <button class="primary-button" type="button" @click="useBuiltInDownloader">
-            用内置下载器下载
-          </button>
+          <button class="ghost-button" type="button" @click="startBrowserDownload">浏览器下载</button>
+          <button v-if="downloadDialog.downloadUrl" class="ghost-button" type="button" @click="copyDownloadUrl">复制直链</button>
+          <button v-if="downloadDialog.proxyUrl" class="ghost-button" type="button" @click="copyProxyDownloadUrl">复制代理地址</button>
+          <button class="primary-button" type="button" @click="useBuiltInDownloader">用内置下载器下载</button>
         </div>
       </div>
     </div>
@@ -867,20 +819,14 @@ onBeforeUnmount(() => {
       <div class="modal delete-modal">
         <div class="modal-header">
           <h3>删除下载任务</h3>
-          <button class="icon-button" type="button" aria-label="关闭" @click="deleteTaskDialog = null">
-            x
-          </button>
+          <button class="icon-button" type="button" aria-label="关闭" @click="deleteTaskDialog = null">x</button>
         </div>
         <p class="modal-file">{{ deleteTaskDialog.fileName }}</p>
         <p class="delete-note">请选择删除方式。本地文件只会在确认后删除。</p>
         <div class="modal-actions">
           <button class="ghost-button" type="button" @click="deleteTaskDialog = null">取消</button>
-          <button class="ghost-button" type="button" @click="confirmDeleteDownloadTask(false)">
-            只删除记录
-          </button>
-          <button class="danger-button" type="button" @click="confirmDeleteDownloadTask(true)">
-            删除记录并删除本地文件
-          </button>
+          <button class="ghost-button" type="button" @click="confirmDeleteDownloadTask(false)">只删除记录</button>
+          <button class="danger-button" type="button" @click="confirmDeleteDownloadTask(true)">删除记录并删除本地文件</button>
         </div>
       </div>
     </div>
@@ -889,9 +835,7 @@ onBeforeUnmount(() => {
       <div class="modal auth-modal">
         <div class="modal-header">
           <h3>夸克扫码登录</h3>
-          <button class="icon-button" type="button" aria-label="关闭" @click="closeAuthDialog">
-            x
-          </button>
+          <button class="icon-button" type="button" aria-label="关闭" @click="closeAuthDialog">x</button>
         </div>
         <div class="qr-box">
           <img :src="authDialog.qrImageUrl" alt="夸克扫码登录二维码" />

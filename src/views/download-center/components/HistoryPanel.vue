@@ -29,6 +29,7 @@ function formatDate(value: number) {
 
 <style scoped>
 .dc-history {
+  display: grid;
   gap: 8px;
 }
 

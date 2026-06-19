@@ -1,5 +1,6 @@
 import { AppError } from '../../../http.js'
 import { readErrorText } from '../access/retryPolicy.js'
+import { unwrapFailureCause } from './failureInsights.js'
 
 export type BilibiliFailureType =
   | 'network_error'
@@ -22,25 +23,27 @@ export interface ClassifiedFailure {
 }
 
 export function classifyFailure(error: unknown): ClassifiedFailure {
-  if (error instanceof AppError) {
-    if (error.error === 'ytdlp_unavailable') {
-      return { type: 'dependency_missing', retryable: false, severity: 'high', message: error.message }
+  const cause = unwrapFailureCause(error)
+
+  if (cause instanceof AppError) {
+    if (cause.error === 'ytdlp_unavailable') {
+      return { type: 'dependency_missing', retryable: false, severity: 'high', message: cause.message }
     }
-    if (error.error === 'media_extract_timeout') {
-      return { type: 'yt_dlp_timeout', retryable: true, severity: 'medium', message: error.message }
+    if (cause.error === 'media_extract_timeout') {
+      return { type: 'yt_dlp_timeout', retryable: true, severity: 'medium', message: cause.message }
     }
-    if (error.error === 'media_resolution_failed') {
-      return { type: 'media_extract_failed', retryable: true, severity: 'medium', message: error.message }
+    if (cause.error === 'media_resolution_failed') {
+      return { type: 'media_extract_failed', retryable: true, severity: 'medium', message: cause.message }
     }
-    if (error.error === 'bilibili_blocked_by_upstream') {
-      return { type: 'bilibili_412', retryable: true, severity: 'high', message: error.message }
+    if (cause.error === 'bilibili_blocked_by_upstream') {
+      return { type: 'bilibili_412', retryable: true, severity: 'high', message: cause.message }
     }
-    if (error.error === 'bilibili_access_restricted') {
-      return { type: 'restricted', retryable: false, severity: 'high', message: error.message }
+    if (cause.error === 'bilibili_access_restricted') {
+      return { type: 'restricted', retryable: false, severity: 'high', message: cause.message }
     }
   }
 
-  const text = readErrorText(error).toLowerCase()
+  const text = readErrorText(cause).toLowerCase()
   if (text.includes('http error 412') || text.includes('precondition failed') || text.includes('412')) {
     return { type: 'bilibili_412', retryable: true, severity: 'high', message: 'B站返回风控限制' }
   }

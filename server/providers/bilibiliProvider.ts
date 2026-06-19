@@ -1,6 +1,8 @@
 import type { DownloadResult, ShareResult } from '../../shared/types.js'
 import { registerAllowedDownloadResult } from '../downloader/downloadService.js'
 import { AppError } from '../http.js'
+import { structuredLogger } from '../logging/structuredLogger.js'
+import { assertBilibiliRuntimeFreeze } from '../release/freezeGuard.js'
 import {
   buildFallback,
   normalizeProviderError,
@@ -8,7 +10,18 @@ import {
   providerOk
 } from './providerResponse.js'
 import { expandBilibiliShortUrl, fetchBilibiliInitialState, resolveBilibiliAccess } from './bilibili/access/index.js'
+import { getCachedCookieHealth } from './bilibili/authContext/index.js'
+import { calculateDownloadHealth, diagnoseBilibiliFailure } from './bilibili/diagnostics/index.js'
 import { resolveMedia } from './bilibili/media/mediaResolver.js'
+import {
+  createTraceContext,
+  createTraceEvent,
+  getTrace,
+  recordTraceEvent,
+  startTrace,
+  traceStage,
+  type BilibiliTraceContext
+} from './bilibili/observability/index.js'
 import {
   assertEpisodeConsistency,
   cacheTtlMs,
@@ -17,9 +30,13 @@ import {
   resolveShare,
   type StableResolvedShare
 } from './bilibili/resolver/index.js'
+import { getFailureInsight } from './bilibili/stability/index.js'
 import type { Provider } from './types.js'
 
+assertBilibiliRuntimeFreeze()
+
 const infoCache = new Map<string, StableResolvedShare & { createdAt: number }>()
+const stableShareIdPrefix = 'bili:stable:'
 
 function getCacheEntry(shareId: string) {
   const entry = infoCache.get(shareId)
@@ -30,25 +47,80 @@ function getCacheEntry(shareId: string) {
   return entry
 }
 
+function getUrlFromStableShareId(shareId: string) {
+  if (!shareId.startsWith(stableShareIdPrefix)) {
+    return ''
+  }
+  return shareId.slice(stableShareIdPrefix.length)
+}
+
 function debugProvider(message: string, details: Record<string, unknown>) {
   if (process.env.PROVIDER_DEBUG === 'true') {
-    console.info(`[provider:bilibili] ${message}`, details)
+    structuredLogger.debug('provider:bilibili', message, details, typeof details.traceId === 'string' ? details.traceId : undefined)
   }
 }
 
-async function resolveRealShare(inputUrl: string): Promise<ShareResult & { source: StableResolvedShare['source'] }> {
-  const resolved = await resolveShare(inputUrl, {
-    runYtDlpJson: resolveBilibiliAccess,
-    fetchInitialStateJson: fetchBilibiliInitialState,
-    expandShortUrl: expandBilibiliShortUrl
-  })
+async function resolveStableShare(
+  inputUrl: string,
+  traceContext: BilibiliTraceContext
+): Promise<StableResolvedShare & { createdAt: number }> {
+  const resolved = await traceStage(
+    traceContext,
+    'resolver',
+    () => resolveShare(inputUrl, {
+      runYtDlpJson: (url) => resolveBilibiliAccess(url, traceContext),
+      fetchInitialStateJson: (url) => fetchBilibiliInitialState(url, traceContext),
+      expandShortUrl: (url) => expandBilibiliShortUrl(url, traceContext)
+    }),
+    recordTraceEvent
+  )
   assertEpisodeConsistency(resolved)
-  infoCache.set(resolved.cacheKey, { ...resolved, createdAt: Date.now() })
+  const cached = { ...resolved, createdAt: Date.now() }
+  infoCache.set(resolved.cacheKey, cached)
   debugProvider('resolve', {
     episodeCount: resolved.episodes.length,
     source: resolved.source,
-    normalizedUrl: resolved.normalizedUrl
+    normalizedUrl: resolved.normalizedUrl,
+    traceId: traceContext.traceId
   })
+  return cached
+}
+
+async function getOrRefreshCacheEntry(shareId: string, traceContext: BilibiliTraceContext) {
+  const cached = getCacheEntry(shareId)
+  if (cached) {
+    return cached
+  }
+
+  const sourceUrl = getUrlFromStableShareId(shareId)
+  if (!sourceUrl || !isBilibiliUrl(sourceUrl)) {
+    return undefined
+  }
+
+  debugProvider('cache_refresh', {
+    shareId,
+    sourceUrl,
+    traceId: traceContext.traceId
+  })
+
+  try {
+    const refreshed = await resolveStableShare(sourceUrl, traceContext)
+    return refreshed.cacheKey === shareId ? refreshed : getCacheEntry(shareId)
+  } catch (error) {
+    debugProvider('cache_refresh_failed', {
+      shareId,
+      traceId: traceContext.traceId,
+      error: error instanceof Error ? error.message : String(error)
+    })
+    return undefined
+  }
+}
+
+async function resolveRealShare(
+  inputUrl: string,
+  traceContext: BilibiliTraceContext
+): Promise<ShareResult & { source: StableResolvedShare['source'] }> {
+  const resolved = await resolveStableShare(inputUrl, traceContext)
   return {
     shareId: resolved.cacheKey,
     stoken: 'bilibili-stable',
@@ -60,13 +132,14 @@ async function resolveRealShare(inputUrl: string): Promise<ShareResult & { sourc
 
 async function buildDownloadResult(
   file: StableResolvedShare['files'][number],
-  episode: StableResolvedShare['episodes'][number]
+  episode: StableResolvedShare['episodes'][number],
+  traceContext: BilibiliTraceContext
 ): Promise<DownloadResult> {
   if (!episode.url) {
     throw new AppError('media_resolution_failed', 'B站单集地址为空，无法解析媒体直链')
   }
 
-  const media = await resolveMedia(episode.url, { episodeInfo: episode.downloadInfo })
+  const media = await resolveMedia(episode.url, { episodeInfo: episode.downloadInfo, traceContext })
   const result: DownloadResult = {
     fid: file.fid,
     name: file.name,
@@ -76,6 +149,7 @@ async function buildDownloadResult(
     cached: false
   }
   registerAllowedDownloadResult(result)
+  recordTraceEvent(traceContext, createTraceEvent('handoff', 'success'))
   return result
 }
 
@@ -92,16 +166,22 @@ export const bilibiliProvider: Provider = {
     return isBilibiliUrl(input)
   },
   async resolveShare(input) {
+    const traceContext = createTraceContext(input.shareUrl, 'resolve')
+    startTrace(traceContext)
     try {
-      const result = await resolveRealShare(input.shareUrl)
+      const result = await resolveRealShare(input.shareUrl, traceContext)
       const { source, ...share } = result
       return providerOk('bilibili', share, 'real', undefined, {
         episodeCount: share.files.length,
         source,
-        normalizedUrl: normalizeBiliUrl(input.shareUrl)
+        normalizedUrl: normalizeBiliUrl(input.shareUrl),
+        traceId: traceContext.traceId,
+        health: calculateDownloadHealth()
       })
     } catch (error) {
       const normalized = normalizeProviderError('bilibili', error, 'resolve')
+      const insight = getFailureInsight(error, 'resolve')
+      const diagnosis = diagnoseBilibiliFailure([insight], getTrace(traceContext.traceId), getCachedCookieHealth())
       return buildFallback(
         'bilibili',
         'single_video_mode',
@@ -109,18 +189,23 @@ export const bilibiliProvider: Provider = {
         'bilibili_resolve_failed',
         {
           error: normalized.code,
-          fallback: 'single_video_mode'
+          fallback: 'single_video_mode',
+          traceId: traceContext.traceId,
+          diagnosis,
+          health: diagnosis.health
         }
       )
     }
   },
   async list(input) {
-    const cached = getCacheEntry(input.shareId)
+    const traceContext = createTraceContext(input.shareId, 'list')
+    startTrace(traceContext)
+    const cached = await getOrRefreshCacheEntry(input.shareId, traceContext)
     if (!cached) {
       return buildFallback(
         'bilibili',
         'episode_cache_miss',
-        'Bilibili episode cache is missing or expired',
+        'B站选集缓存已过期，请重新解析资源后重试',
         'episode_cache_miss'
       )
     }
@@ -138,12 +223,14 @@ export const bilibiliProvider: Provider = {
     }
   },
   async getDownload(input) {
-    const cached = getCacheEntry(input.shareId)
+    const cacheTraceContext = createTraceContext(input.shareId, 'download')
+    startTrace(cacheTraceContext)
+    const cached = await getOrRefreshCacheEntry(input.shareId, cacheTraceContext)
     if (!cached) {
       return providerError(
         'bilibili',
         'episode_cache_miss',
-        'Bilibili episode cache is missing or expired',
+        'B站选集缓存已过期，自动恢复失败，请重新解析资源后重试',
         true,
         'fallback',
         'episode_cache_miss'
@@ -163,43 +250,54 @@ export const bilibiliProvider: Provider = {
       return providerError(
         'bilibili',
         'episode_cache_miss',
-        'Bilibili cached episode was not found for this file id',
+        '未找到该文件对应的B站选集，请重新解析资源后重试',
         true,
         'fallback',
         'missing_episode'
       )
     }
 
+    const traceContext = cacheTraceContext
+
     try {
       debugProvider('download', {
         episodeCount: cached.episodes.length,
         source: 'cache',
         resolvedEpisodeId: episode.id,
-        resolvedEpisodeUrl: episode.url
+        resolvedEpisodeUrl: episode.url,
+        traceId: traceContext.traceId
       })
       return providerOk(
         'bilibili',
-        await buildDownloadResult(cached.files[index], episode),
+        await buildDownloadResult(cached.files[index], episode, traceContext),
         'real',
         undefined,
         {
           episodeCount: cached.episodes.length,
           source: 'media',
           resolvedEpisodeId: episode.id,
-          resolvedEpisodeUrl: episode.url
+          resolvedEpisodeUrl: episode.url,
+          traceId: traceContext.traceId,
+          health: calculateDownloadHealth()
         }
       )
     } catch (error) {
       const normalized = normalizeProviderError('bilibili', error, 'download')
+      const insight = getFailureInsight(error, 'media')
+      const diagnosis = diagnoseBilibiliFailure([insight], getTrace(traceContext.traceId), getCachedCookieHealth())
       return providerError(
         'bilibili',
         normalized.code,
         normalized.message,
         normalized.recoverable,
         'fallback',
-        normalized.code
+        normalized.code,
+        {
+          traceId: traceContext.traceId,
+          diagnosis,
+          health: diagnosis.health
+        }
       )
     }
   }
 }
-

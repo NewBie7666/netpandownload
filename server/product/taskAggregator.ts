@@ -2,6 +2,7 @@ import type { DownloadTask, ProviderId, UnifiedTask, UnifiedTaskStatus } from '.
 import { listDownloadTasks } from '../downloader/downloadService.js'
 import { listTasks as listEngineTaskSnapshots } from '../download-engine/taskManager.js'
 import type { DownloadEngineTask, EngineTaskStatus } from '../download-engine/taskTypes.js'
+import { calculateDownloadHealth } from '../providers/bilibili/diagnostics/index.js'
 
 function mapAria2Status(status: DownloadTask['status']): UnifiedTaskStatus {
   if (status === 'active' || status === 'waiting') return 'running'
@@ -21,7 +22,8 @@ function engineToUnified(task: DownloadEngineTask): UnifiedTask {
     gid: task.gid,
     sourceUrl: task.sourceUrl,
     downloadUrl: task.downloadUrl,
-    error: task.error
+    error: task.error,
+    health: task.providerId === 'bilibili' ? calculateDownloadHealth() : undefined
   }
 }
 
@@ -60,7 +62,10 @@ function mergeTask(existing: UnifiedTask | undefined, incoming: UnifiedTask): Un
     gid: engineTask.gid || runtimeTask.gid,
     sourceUrl: engineTask.sourceUrl || runtimeTask.sourceUrl,
     downloadUrl: engineTask.downloadUrl || runtimeTask.downloadUrl,
-    error: engineTask.error || runtimeTask.error
+    error: engineTask.error || runtimeTask.error,
+    health: engineTask.health || runtimeTask.health,
+    diagnosis: engineTask.diagnosis || runtimeTask.diagnosis,
+    traceId: engineTask.traceId || runtimeTask.traceId
   }
 }
 

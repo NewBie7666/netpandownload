@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
 import { getAdaptiveParams } from '../adaptive/index.js'
+import { getCookie } from '../auth/envBridge.js'
 import { normalizeBiliUrl } from '../resolver/index.js'
 import { getBilibiliRequestProfile } from './profileManager.js'
 
@@ -39,7 +40,7 @@ function buildRefererChain(url: string, baseReferer: string) {
 export function buildAuthContext(episodeUrl: string): AuthContext {
   const profile = getBilibiliRequestProfile()
   const normalizedUrl = normalizeBiliUrl(String(episodeUrl || '').trim())
-  const cookies = String(process.env.BILIBILI_COOKIE || '').trim()
+  const cookies = getCookie()
   const episodeSessionId = stableHash(`${normalizedUrl}:${getTimeBucket()}`)
   const adaptiveParams = getAdaptiveParams(episodeSessionId)
 

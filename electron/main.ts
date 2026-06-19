@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, session } from 'electron'
 import { randomBytes } from 'node:crypto'
 import { spawn, type ChildProcessByStdio } from 'node:child_process'
 import { access } from 'node:fs/promises'
@@ -7,6 +7,18 @@ import type { Server } from 'node:http'
 import type { Readable } from 'node:stream'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import { openBilibiliLoginWindow } from './auth/BilibiliLoginWindow.js'
+import {
+  clearBilibiliCookieStore,
+  isValidBilibiliCookie,
+  loadBilibiliCookie,
+  saveBilibiliCookie
+} from './auth/bilibiliCookieStore.js'
+import {
+  attachWindowCrashRecovery,
+  installReleaseCrashHandler,
+  writeCrashLog
+} from './release/crashHandler.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -17,12 +29,29 @@ const defaultBackendPort = 3000
 const aria2RpcPort = 16800
 let backendPort = defaultBackendPort
 
+app.commandLine.appendSwitch('disable-gpu-compositing')
+app.commandLine.appendSwitch('disable-features', 'HardwareMediaKeyHandling')
+installReleaseCrashHandler(app)
+
+const hasSingleInstanceLock = app.requestSingleInstanceLock()
+if (!hasSingleInstanceLock) {
+  app.quit()
+}
+
 let mainWindow: BrowserWindow | null = null
 let backendServer: Server | null = null
 let aria2Process: ChildProcessByStdio<null, Readable, Readable> | null = null
 let backendLogs = ''
 let aria2Logs = ''
 let appQuitting = false
+let bilibiliLastLoginTime: number | undefined
+
+interface BilibiliLoginStatus {
+  loggedIn: boolean
+  cookieValid: boolean
+  lastLoginTime?: number
+  mode: 'anonymous' | 'cookie'
+}
 
 function appendBackendLog(chunk: string) {
   backendLogs = `${backendLogs}${chunk}`.slice(-4000)
@@ -34,6 +63,141 @@ function appendAria2Log(chunk: string) {
 
 async function ensureServerBuildExists() {
   await access(distServerEntry, fsConstants.R_OK)
+}
+
+function getBilibiliEnvBridgePath() {
+  return path.resolve(appRoot, 'dist-server', 'server', 'providers', 'bilibili', 'auth', 'envBridge.js')
+}
+
+function getRuntimeHealthCheckPath() {
+  return path.resolve(appRoot, 'dist-server', 'server', 'release', 'runtimeHealthCheck.js')
+}
+
+async function runStartupHealthCheck() {
+  try {
+    const healthModule = await import(pathToFileURL(getRuntimeHealthCheckPath()).href)
+    return await healthModule.runRuntimeHealthCheck?.()
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    writeCrashLog(app, {
+      timestamp: new Date().toISOString(),
+      level: 'error',
+      layer: 'runtime-health',
+      message: 'Runtime health check could not run',
+      meta: { error: message }
+    })
+    return {
+      status: 'FAILED',
+      message: 'Runtime health check failed to start',
+      checks: {}
+    }
+  }
+}
+
+async function showStartupHealthFailure(message: string) {
+  createWindow()
+  const safeMessage = message.replace(/[<>&"]/g, (char) => ({
+    '<': '&lt;',
+    '>': '&gt;',
+    '&': '&amp;',
+    '"': '&quot;'
+  })[char] || char)
+  const html = `<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <title>Startup check failed</title>
+  <style>
+    body { margin: 0; font-family: "Microsoft YaHei", Arial, sans-serif; background: #f8fafc; color: #172033; }
+    main { max-width: 680px; margin: 96px auto; padding: 32px; background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 12px 32px rgba(15, 23, 42, 0.08); }
+    h1 { margin: 0 0 16px; font-size: 24px; }
+    p { line-height: 1.7; color: #475569; }
+    code { display: block; margin-top: 16px; padding: 12px; background: #f1f5f9; border-radius: 8px; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Startup check failed</h1>
+    <p>The app did not enter the normal interface. Restart the app; if the problem continues, check the local logs.</p>
+    <code>${safeMessage}</code>
+  </main>
+</body>
+</html>`
+  await mainWindow?.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`)
+}
+
+async function setBilibiliRuntimeCookie(cookie: string) {
+  if (!isValidBilibiliCookie(cookie)) {
+    await clearBilibiliRuntimeCookie()
+    return
+  }
+
+  process.env.BILIBILI_COOKIE = cookie
+  try {
+    const bridge = await import(pathToFileURL(getBilibiliEnvBridgePath()).href)
+    bridge.setRuntimeCookie?.(cookie)
+  } catch {
+    // The server bridge may not be built yet in early startup. process.env remains the fallback channel.
+  }
+}
+
+async function clearBilibiliRuntimeCookie() {
+  delete process.env.BILIBILI_COOKIE
+  bilibiliLastLoginTime = undefined
+  try {
+    const bridge = await import(pathToFileURL(getBilibiliEnvBridgePath()).href)
+    bridge.clearRuntimeCookie?.()
+  } catch {
+    // Best-effort cleanup; process.env is already cleared.
+  }
+}
+
+async function loadStoredBilibiliCookieIntoRuntime() {
+  const stored = await loadBilibiliCookie()
+  if (!stored?.cookie || !isValidBilibiliCookie(stored.cookie)) {
+    await clearBilibiliRuntimeCookie()
+    return
+  }
+
+  bilibiliLastLoginTime = stored.lastLoginTime
+  await setBilibiliRuntimeCookie(stored.cookie)
+}
+
+async function getBilibiliLoginStatus(): Promise<BilibiliLoginStatus> {
+  const stored = await loadBilibiliCookie()
+  const cookie = stored?.cookie || String(process.env.BILIBILI_COOKIE || '').trim()
+  const cookieValid = isValidBilibiliCookie(cookie)
+
+  if (!cookieValid) {
+    await clearBilibiliRuntimeCookie()
+    return {
+      loggedIn: false,
+      cookieValid: false,
+      mode: 'anonymous'
+    }
+  }
+
+  bilibiliLastLoginTime = stored?.lastLoginTime || bilibiliLastLoginTime
+  await setBilibiliRuntimeCookie(cookie)
+  return {
+    loggedIn: true,
+    cookieValid: true,
+    lastLoginTime: bilibiliLastLoginTime,
+    mode: 'cookie'
+  }
+}
+
+async function clearBilibiliSessionCookies() {
+  const bilibiliSession = session.fromPartition('persist:bilibili')
+  const cookies = await bilibiliSession.cookies.get({})
+  await Promise.all(
+    cookies
+      .filter((cookie) => String(cookie.domain || '').toLowerCase().includes('bilibili.com'))
+      .map((cookie) => {
+        const domain = String(cookie.domain || 'www.bilibili.com').replace(/^\./, '') || 'www.bilibili.com'
+        return bilibiliSession.cookies.remove(`https://${domain}${cookie.path || '/'}`, cookie.name).catch(() => undefined)
+      })
+  )
 }
 
 function createWindow() {
@@ -57,6 +221,12 @@ function createWindow() {
 
   mainWindow.on('closed', () => {
     mainWindow = null
+  })
+
+  attachWindowCrashRecovery(app, mainWindow, () => {
+    if (!appQuitting && mainWindow && !mainWindow.isDestroyed()) {
+      void mainWindow.loadURL(getRendererUrl())
+    }
   })
 }
 
@@ -143,7 +313,7 @@ async function startAria2Sidecar() {
 
   const executable = await resolveAria2Executable()
   if (!executable) {
-    setAria2Disabled('未找到 aria2c.exe，请将 aria2c.exe 放到 resources/aria2/win/aria2c.exe')
+    setAria2Disabled('aria2c.exe not found. Put aria2c.exe at resources/aria2/win/aria2c.exe')
     return
   }
 
@@ -321,7 +491,13 @@ async function waitForBackendReady() {
 
 async function bootstrapDesktop() {
   await ensureServerBuildExists()
+  await loadStoredBilibiliCookieIntoRuntime()
   await startBackend()
+  const health = await runStartupHealthCheck()
+  if (health?.status === 'FAILED') {
+    await showStartupHealthFailure(health.message || 'Runtime health check failed')
+    return
+  }
   await startAria2Sidecar()
   await waitForBackendReady()
   createWindow()
@@ -336,6 +512,42 @@ ipcMain.handle('select-download-dir', async () => {
   return result.canceled ? null : result.filePaths[0] || null
 })
 
+ipcMain.handle('bilibili-login', async () => {
+  const result = await openBilibiliLoginWindow(mainWindow)
+  if (result.status !== 'success' || !result.cookie || !isValidBilibiliCookie(result.cookie)) {
+    return {
+      status: result.status,
+      loggedIn: false,
+      message: result.message || 'B站登录未完成'
+    }
+  }
+
+  const stored = await saveBilibiliCookie(result.cookie)
+  bilibiliLastLoginTime = stored.lastLoginTime
+  await setBilibiliRuntimeCookie(stored.cookie)
+
+  return {
+    status: 'success',
+    loggedIn: true,
+    message: 'B站登录成功'
+  }
+})
+
+ipcMain.handle('bilibili-login-status', async () => {
+  return getBilibiliLoginStatus()
+})
+
+ipcMain.handle('bilibili-logout', async () => {
+  await clearBilibiliCookieStore()
+  await clearBilibiliSessionCookies()
+  await clearBilibiliRuntimeCookie()
+  return {
+    loggedIn: false,
+    cookieValid: false,
+    mode: 'anonymous'
+  }
+})
+
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit()
@@ -344,6 +556,18 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   appQuitting = true
+  writeCrashLog(app, {
+    timestamp: new Date().toISOString(),
+    level: 'info',
+    layer: 'main',
+    message: 'Application graceful shutdown started'
+  })
+})
+
+app.on('second-instance', () => {
+  if (!mainWindow) return
+  if (mainWindow.isMinimized()) mainWindow.restore()
+  mainWindow.focus()
 })
 
 app.whenReady().then(async () => {
@@ -351,6 +575,13 @@ app.whenReady().then(async () => {
     await bootstrapDesktop()
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Desktop bootstrap failed'
+    writeCrashLog(app, {
+      timestamp: new Date().toISOString(),
+      level: 'error',
+      layer: 'main',
+      message: 'Desktop startup failed',
+      meta: { error: message }
+    })
     dialog.showErrorBox('Desktop startup failed', message)
     await stopBackend()
     await stopAria2Sidecar()
@@ -364,6 +595,13 @@ app.on('activate', async () => {
       await bootstrapDesktop()
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Desktop bootstrap failed'
+      writeCrashLog(app, {
+        timestamp: new Date().toISOString(),
+        level: 'error',
+        layer: 'main',
+        message: 'Desktop activation failed',
+        meta: { error: message }
+      })
       dialog.showErrorBox('Desktop startup failed', message)
       await stopBackend()
       await stopAria2Sidecar()

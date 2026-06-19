@@ -26,6 +26,13 @@ function statusLabel(status: ProductUiTask['status']) {
   return labels[status]
 }
 
+function healthLabel(health?: ProductUiTask['health']) {
+  if (health === 'unstable') return '不稳定'
+  if (health === 'degraded') return '降级'
+  if (health === 'stable') return '稳定'
+  return '未提供'
+}
+
 function formatDate(value: number) {
   return value ? new Date(value).toLocaleString() : '未提供'
 }
@@ -56,13 +63,21 @@ function formatDate(value: number) {
           <dd>{{ providerLabel(task.providerId) }}</dd>
         </div>
         <div>
-          <dt>错误</dt>
-          <dd v-if="task.error">
-            <strong>{{ task.error.title }}</strong>
-            <span>{{ task.error.message }}</span>
-            <small v-if="task.error.actionHint">{{ task.error.actionHint }}</small>
+          <dt>下载健康</dt>
+          <dd>{{ healthLabel(task.health) }}</dd>
+        </div>
+        <div>
+          <dt>失败原因</dt>
+          <dd v-if="task.presentedError">
+            <strong>{{ task.presentedError.title }}</strong>
+            <span>{{ task.presentedError.message }}</span>
+            <small v-if="task.presentedError.actionHint">{{ task.presentedError.actionHint }}</small>
           </dd>
           <dd v-else>未提供</dd>
+        </div>
+        <div>
+          <dt>技术信息</dt>
+          <dd>内部解析、重试和下载细节已隐藏</dd>
         </div>
         <div>
           <dt>创建时间</dt>

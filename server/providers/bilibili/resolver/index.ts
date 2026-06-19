@@ -1,6 +1,7 @@
 import { AppError } from '../../../http.js'
 import { bangumiResolver } from './bangumiResolver.js'
 import { heuristicResolver } from './heuristicResolver.js'
+import { spaceSearchResolver } from './spaceSearchResolver.js'
 import type { ResolveShareOptions, StableResolvedShare, YtDlpInfo } from './types.js'
 import { assertEpisodeConsistency } from './utils.js'
 import { ytDlpResolver } from './ytDlpResolver.js'
@@ -10,6 +11,15 @@ function consistent(result?: StableResolvedShare) {
   try {
     assertEpisodeConsistency(result)
     return result.episodes.length > 0
+  } catch {
+    return false
+  }
+}
+
+function isSpaceSearchInput(inputUrl: string) {
+  try {
+    const url = new URL(inputUrl)
+    return /^space\.bilibili\.com$/i.test(url.hostname) && /^\/\d+\/search\/?$/i.test(url.pathname)
   } catch {
     return false
   }
@@ -30,6 +40,9 @@ export async function resolveShare(inputUrl: string, options: ResolveShareOption
   if (consistent(bangumi.result)) return bangumi.result as StableResolvedShare
 
   if (raw) {
+    const spaceSearch = spaceSearchResolver(inputUrl, raw)
+    if (consistent(spaceSearch.result)) return spaceSearch.result as StableResolvedShare
+
     const ytDlp = await ytDlpResolver(inputUrl, { ...options, runYtDlpJson: async () => raw as YtDlpInfo })
     if (consistent(ytDlp.result)) return ytDlp.result as StableResolvedShare
   }
@@ -37,6 +50,11 @@ export async function resolveShare(inputUrl: string, options: ResolveShareOption
   if (options.fetchInitialStateJson) {
     try {
       const htmlRaw = await options.fetchInitialStateJson(inputUrl)
+      const htmlSpaceSearch = spaceSearchResolver(inputUrl, htmlRaw)
+      if (consistent(htmlSpaceSearch.result)) {
+        return htmlSpaceSearch.result as StableResolvedShare
+      }
+
       const html = await ytDlpResolver(inputUrl, { ...options, runYtDlpJson: async () => htmlRaw })
       if (consistent(html.result)) {
         return {
@@ -47,6 +65,10 @@ export async function resolveShare(inputUrl: string, options: ResolveShareOption
     } catch {
       // Fall through to the stable single-video heuristic.
     }
+  }
+
+  if (isSpaceSearchInput(inputUrl)) {
+    throw new AppError('bilibili_resolve_failed', 'Bilibili space search resolve failed; login or upstream access may be required')
   }
 
   const heuristic = await heuristicResolver(inputUrl, options)
