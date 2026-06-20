@@ -98,6 +98,95 @@ h1 {
   margin-left: 126px;
 }
 
+.decision-card {
+  margin: 18px 0 0 126px;
+  padding: 14px;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  background: #f8fbff;
+}
+
+.decision-main {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.decision-kicker {
+  margin: 0 0 4px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.decision-main h3 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 16px;
+  font-weight: 650;
+}
+
+.decision-text {
+  margin: 6px 0 0;
+  color: #475569;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.decision-badge {
+  flex: 0 0 auto;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.decision-badge.risk-low {
+  color: #047857;
+  background: #d1fae5;
+}
+
+.decision-badge.risk-medium {
+  color: #a16207;
+  background: #fef3c7;
+}
+
+.decision-badge.risk-high {
+  color: #b91c1c;
+  background: #fee2e2;
+}
+
+.decision-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.decision-grid div {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid #e5edf7;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.decision-grid span {
+  display: block;
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.decision-grid strong {
+  display: block;
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+  color: #1e293b;
+  font-size: 13px;
+}
+
 .primary-button,
 .ghost-button,
 .row-button,
@@ -810,6 +899,18 @@ textarea {
 
   .actions {
     margin-left: 0;
+  }
+
+  .decision-card {
+    margin-left: 0;
+  }
+
+  .decision-main {
+    display: grid;
+  }
+
+  .decision-grid {
+    grid-template-columns: 1fr;
   }
 
   .primary-button {

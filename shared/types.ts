@@ -52,6 +52,36 @@ export interface ProviderDownloadResult {
   download: DownloadResult
 }
 
+export type DecisionPlatform =
+  | 'bilibili'
+  | 'quark'
+  | 'youtube'
+  | 'douyin'
+  | 'zhihu'
+  | 'instagram'
+  | 'unknown'
+
+export type DecisionRiskLevel = 'low' | 'medium' | 'high'
+export type DecisionResourceType = 'video' | 'playlist' | 'bangumi' | 'file' | 'unknown'
+export type DecisionAction = 'use_desktop_downloader' | 'use_local_tool' | 'copy_url' | 'unsupported'
+
+export interface DecisionRecommendedTool {
+  type: 'desktop' | 'local-tool' | 'browser' | 'none'
+  name: 'desktop-downloader' | 'external-downloader' | 'browser' | 'not-supported'
+  capability: 'video-extract' | 'multi-thread-download' | 'metadata-only' | 'unsupported'
+}
+
+export interface DownloadDecision {
+  platform: DecisionPlatform
+  feasible: boolean
+  riskLevel: DecisionRiskLevel
+  resourceType: DecisionResourceType
+  recommendedTool: DecisionRecommendedTool
+  action: DecisionAction
+  confidence: number
+  explanation: string
+}
+
 export type DownloadTaskStatus =
   | 'active'
   | 'waiting'

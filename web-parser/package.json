@@ -1,0 +1,27 @@
+{
+  "name": "netpan-parser-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:client": "vite --host 127.0.0.1 --port 5183",
+    "dev:server": "tsx server/index.ts",
+    "build": "vite build",
+    "typecheck": "vue-tsc --noEmit -p tsconfig.json && tsc -p tsconfig.server.json --noEmit",
+    "freeze-check": "node scripts/freezeCheck.mjs",
+    "start": "tsx server/index.ts"
+  },
+  "dependencies": {
+    "@vitejs/plugin-vue": "^5.2.4",
+    "axios": "^1.7.9",
+    "concurrently": "^9.1.2",
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
+    "vite": "^6.0.7",
+    "vue": "^3.5.13",
+    "vue-tsc": "^2.2.0"
+  }
+}

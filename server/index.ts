@@ -7,6 +7,7 @@ import { config, setRuntimePort } from './config.js'
 import { ensureEngineStarted } from './download-engine/engine.js'
 import { AppError, fail } from './http.js'
 import { structuredLogger } from './logging/structuredLogger.js'
+import { downloadDecisionRouter } from './router/downloadDecisionRouter.js'
 import { downloadsRouter } from './routes/downloads.js'
 import { downloadEngineRouter } from './routes/downloadEngine.js'
 import { productRouter } from './routes/product.js'
@@ -40,6 +41,7 @@ app.use('/api/downloads', downloadsRouter)
 app.use('/api/download-engine', downloadEngineRouter)
 app.use('/api/providers', providersRouter)
 app.use('/api/product', productRouter)
+app.use('/api/decision', downloadDecisionRouter)
 
 void ensureEngineStarted().catch((error) => {
   structuredLogger.error('download-engine', 'Download engine startup failed', { error })

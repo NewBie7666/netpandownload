@@ -9,6 +9,7 @@ import {
   resumeDownloadTask,
   saveDownloadSettings
 } from './api/downloads'
+import { resolveDownloadDecision } from './api/decision'
 import {
   createQuarkAuthQrcode,
   fetchQuarkAuthStatus,
@@ -22,6 +23,7 @@ import {
 import DownloadCenter from './views/download-center/DownloadCenter.vue'
 import type {
   DownloadResult,
+  DownloadDecision,
   DownloadTask,
   DownloadTasksResult,
   ProviderId,
@@ -71,6 +73,8 @@ const folderLoadingFid = ref('')
 const downloadLoadingFid = ref('')
 const errorMessage = ref('')
 const noticeMessage = ref('')
+const decisionLoading = ref(false)
+const downloadDecision = ref<DownloadDecision | null>(null)
 const downloadDialog = ref<DownloadResult | null>(null)
 const authDialog = ref<QuarkAuthQrcodeResult | null>(null)
 const authStatus = ref<QuarkAuthStatusResult | null>(null)
@@ -106,6 +110,46 @@ const allSelectableSelected = computed(
 const batchDownloadProgressText = computed(() => {
   if (!batchDownloadLoading.value || !batchDownloadTotal.value) return ''
   return `正在加入下载任务：${batchDownloadDone.value} / ${batchDownloadTotal.value}`
+})
+
+const decisionPlatformText = computed(() => {
+  const platform = downloadDecision.value?.platform
+  const labels: Record<DownloadDecision['platform'], string> = {
+    bilibili: 'B站',
+    quark: '夸克',
+    youtube: 'YouTube',
+    douyin: '抖音',
+    zhihu: '知乎',
+    instagram: 'Instagram',
+    unknown: '未知来源'
+  }
+  return platform ? labels[platform] : ''
+})
+
+const decisionRiskText = computed(() => {
+  const risk = downloadDecision.value?.riskLevel
+  if (risk === 'low') return '低'
+  if (risk === 'medium') return '中'
+  if (risk === 'high') return '高'
+  return ''
+})
+
+const decisionToolText = computed(() => {
+  const tool = downloadDecision.value?.recommendedTool
+  if (!tool) return ''
+  if (tool.name === 'desktop-downloader' && tool.capability === 'video-extract') return '桌面端视频解析下载能力'
+  if (tool.name === 'desktop-downloader' && tool.capability === 'multi-thread-download') return '桌面端内置多线程下载器'
+  if (tool.name === 'external-downloader') return '本机外部下载工具'
+  if (tool.name === 'browser') return '浏览器'
+  return '暂不支持'
+})
+
+const decisionActionText = computed(() => {
+  const action = downloadDecision.value?.action
+  if (action === 'use_desktop_downloader') return '继续使用当前桌面端处理'
+  if (action === 'use_local_tool') return '使用本机工具处理'
+  if (action === 'copy_url') return '复制链接到本机工具'
+  return '当前版本暂不支持执行'
 })
 
 function clearMessages() {
@@ -184,6 +228,24 @@ function validateResourceUrl(value: string) {
 
   return '当前不支持该链接来源'
 }
+
+async function refreshDownloadDecision(url: string) {
+  const normalized = normalizeResourceUrlInput(url)
+  if (!normalized) {
+    downloadDecision.value = null
+    return
+  }
+
+  decisionLoading.value = true
+  try {
+    downloadDecision.value = await resolveDownloadDecision(normalized)
+  } catch {
+    downloadDecision.value = null
+  } finally {
+    decisionLoading.value = false
+  }
+}
+
 function formatSize(size: number) {
   if (!size) return '-'
   const units = ['B', 'KB', 'MB', 'GB', 'TB']
@@ -233,13 +295,14 @@ function stopTaskPolling() {
 
 async function loadShare() {
   clearMessages()
+  const normalizedShareUrl = normalizeResourceUrlInput(shareUrl.value)
+  void refreshDownloadDecision(normalizedShareUrl)
   const validation = validateResourceUrl(shareUrl.value)
   if (validation) {
     errorMessage.value = validation
     return
   }
 
-  const normalizedShareUrl = normalizeResourceUrlInput(shareUrl.value)
   loading.value = true
   try {
     shareUrl.value = normalizedShareUrl
@@ -695,6 +758,36 @@ onBeforeUnmount(() => {
           <button v-else class="ghost-button" type="button" :disabled="bilibiliAuthLoading" @click="logoutBilibiliLogin">
             B站已登录，退出
           </button>
+        </div>
+        <div v-if="decisionLoading || downloadDecision" class="decision-card">
+          <div class="decision-main">
+            <div>
+              <p class="decision-kicker">下载决策</p>
+              <h3>{{ decisionLoading && !downloadDecision ? '正在判断链接...' : decisionPlatformText }}</h3>
+              <p v-if="downloadDecision" class="decision-text">{{ downloadDecision.explanation }}</p>
+            </div>
+            <span v-if="downloadDecision" class="decision-badge" :class="`risk-${downloadDecision.riskLevel}`">
+              风险：{{ decisionRiskText }}
+            </span>
+          </div>
+          <div v-if="downloadDecision" class="decision-grid">
+            <div>
+              <span>是否可处理</span>
+              <strong>{{ downloadDecision.feasible ? '可处理' : '暂不支持' }}</strong>
+            </div>
+            <div>
+              <span>推荐能力</span>
+              <strong>{{ decisionToolText }}</strong>
+            </div>
+            <div>
+              <span>下一步</span>
+              <strong>{{ decisionActionText }}</strong>
+            </div>
+            <div>
+              <span>置信度</span>
+              <strong>{{ Math.round(downloadDecision.confidence * 100) }}%</strong>
+            </div>
+          </div>
         </div>
       </section>
 
