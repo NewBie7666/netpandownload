@@ -1,4 +1,10 @@
-import type { DecisionAction, DecisionAssessment, DecisionCore, DecisionRecommendation, Tool } from './types'
+import type { DecisionAction, DecisionAssessment, DecisionCore, DecisionRecommendation, OpaqueActionToken, Tool } from './types'
+
+export const OPAQUE_ACTIONS = {
+  copySource: 'oa_01' as OpaqueActionToken,
+  openDesktop: 'oa_02' as OpaqueActionToken,
+  copyCommand: 'oa_03' as OpaqueActionToken
+} as const
 
 function toolsFor(core: DecisionCore, assessment: DecisionAssessment): DecisionRecommendation['tools'] {
   if (core.platform === 'bilibili') {
@@ -28,25 +34,51 @@ function mapAction(core: DecisionCore, recommendedTool: Tool): DecisionAction {
 }
 
 function buildHumanMessage(core: DecisionCore) {
-  if (core.status === 'blocked') return '该资源当前受限，在线版不会生成下载地址。'
-  if (core.platform === 'bilibili') return '在线版只展示选集信息；B站媒体地址是临时资源，建议用桌面端获取和下载。'
-  if (core.platform === 'quark') return '该资源适合交给桌面端或本地下载工具处理，在线版只做解析和可行性判断。'
-  return '当前只能判断资源结构，暂不建议直接下载。'
+  if (core.status === 'blocked') return '当前结果只适合查看，不建议继续下载。'
+  if (core.platform === 'bilibili') return '在线版只展示选集信息，实际获取请在本地完成。'
+  if (core.platform === 'quark') return '该资源适合交给本地客户端继续处理。'
+  return '当前只提供识别结果，请使用支持该来源的本地工具继续处理。'
 }
 
-function commandToolFor(recommendedTool: Tool): Tool | undefined {
-  return recommendedTool === 'yt-dlp' ? recommendedTool : undefined
+function actionStepsFor(action: DecisionAction) {
+  const steps: Record<DecisionAction, readonly string[]> = {
+    use_desktop: ['复制当前链接。', '打开本地客户端。', '在本地继续解析和处理。'],
+    open_tool: ['复制当前链接。', '打开合适的本地工具。', '粘贴链接后继续处理。'],
+    copy_url: ['复制当前链接。', '粘贴到支持该来源的工具中继续处理。'],
+    unsupported: ['当前在线版只提供资源识别结果。', '请更换链接，或使用支持该来源的本地工具。']
+  }
+  return steps[action]
+}
+
+function actionPayloadsFor(action: DecisionAction, recommendedTool: Tool): DecisionRecommendation['actionPayloads'] {
+  if (action === 'unsupported') return []
+
+  const payloads: Array<DecisionRecommendation['actionPayloads'][number]> = [
+    { label: '复制链接', token: OPAQUE_ACTIONS.copySource }
+  ]
+
+  if (action === 'use_desktop') {
+    payloads.push({ label: '打开本地客户端', token: OPAQUE_ACTIONS.openDesktop })
+  }
+
+  if (recommendedTool === 'yt-dlp') {
+    payloads.push({ label: '复制参考命令', token: OPAQUE_ACTIONS.copyCommand })
+  }
+
+  return payloads
 }
 
 export function buildRecommendation(core: DecisionCore, assessment: DecisionAssessment): DecisionRecommendation {
   const tools = toolsFor(core, assessment)
   const recommendedTool = core.canDownload ? tools[0]?.name ?? 'unsupported' : 'unsupported'
+  const action = mapAction(core, recommendedTool)
 
   return {
     tools,
     recommendedTool,
-    action: mapAction(core, recommendedTool),
+    action,
     humanMessage: buildHumanMessage(core),
-    commandTool: commandToolFor(recommendedTool)
+    actionSteps: actionStepsFor(action),
+    actionPayloads: actionPayloadsFor(action, recommendedTool)
   }
 }

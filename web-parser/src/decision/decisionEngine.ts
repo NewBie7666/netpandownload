@@ -7,6 +7,14 @@ import { computeRisk } from './riskEngine'
 import { buildRecommendation } from './toolRouter'
 import type { DecisionAssessment, DecisionModel } from './types'
 
+export const DECISION_ENGINE_VERSION = 'v1-frozen'
+
+/**
+ * DO NOT:
+ * - add UI fields here
+ * - add formatting logic here
+ * - add platform-specific branches here
+ */
 export function decisionEngine(result: WebParseResult): DecisionModel {
   const facts = detectPlatformFacts(result)
   const core = applyCapabilityRules(facts)

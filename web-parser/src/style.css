@@ -169,31 +169,20 @@ input {
   color: #334155;
 }
 
-.status-ok span {
+.badge-positive {
   color: #047857;
 }
 
-.status-limited span {
+.badge-notice {
   color: #b45309;
 }
 
-.status-blocked span,
-.status-unknown span {
+.badge-warning {
   color: #b91c1c;
 }
 
-.success-meter {
-  height: 9px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: #e2e8f0;
-}
-
-.success-meter span {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, #059669, #22c55e);
+.badge-muted {
+  color: #64748b;
 }
 
 .decision-summary p {
@@ -230,16 +219,11 @@ input {
   font-size: 16px;
 }
 
-.risk-low {
-  color: #047857 !important;
-}
-
-.risk-medium {
-  color: #b45309 !important;
-}
-
-.risk-high {
-  color: #b91c1c !important;
+.decision-grid ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  color: #334155;
+  line-height: 1.7;
 }
 
 .reason-tags {
