@@ -26,6 +26,7 @@ The long-term product direction is a **local desktop download client**. The Elec
   - Optional aria2 delivery for local multithreaded downloads
   - Download task API and UI in the desktop client
   - Configurable download directory
+  - Generic HTTP/HTTPS file downloads from a direct-link form (aria2 required; see [HTTP_DOWNLOAD.md](docs/HTTP_DOWNLOAD.md))
   - Download task removal with optional local file deletion
   - Bilibili public-resource parsing through local `yt-dlp.exe` when available
   - Bilibili mock fallback when `yt-dlp.exe` is missing or parsing fails

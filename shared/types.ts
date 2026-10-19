@@ -132,6 +132,30 @@ export interface AddDownloadRequest {
   dir?: string
 }
 
+export interface PageFileLink {
+  url: string
+  fileName: string
+  extension: string
+}
+
+export interface ScanPageRequest {
+  url: string
+  /** Optional scan-time suffix restriction; omit for automatic discovery. */
+  extensions?: string
+}
+
+export interface ScanPageResult {
+  pageUrl: string
+  extensions: string[]
+  items: PageFileLink[]
+  truncated: boolean
+}
+
+export interface AddDirectDownloadRequest {
+  url: string
+  fileName?: string
+}
+
 export interface AddDownloadResult {
   gid: string
 }

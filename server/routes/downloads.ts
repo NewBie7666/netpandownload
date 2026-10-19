@@ -1,7 +1,9 @@
 import { Router } from 'express'
 import { ok } from '../http.js'
+import { scanPageForFiles } from '../downloader/pageLinkScanner.js'
 import {
   addDownloadTask,
+  addDirectDownloadTask,
   getDownloadHealth,
   getDownloadSettings,
   getDownloadTaskStatus,
@@ -19,6 +21,22 @@ downloadsRouter.post('/add', async (req, res, next) => {
   try {
     const result = await addDownloadTask(req.body)
     res.json(ok(result))
+  } catch (error) {
+    next(error)
+  }
+})
+
+downloadsRouter.post('/direct', async (req, res, next) => {
+  try {
+    res.json(ok(await addDirectDownloadTask(req.body)))
+  } catch (error) {
+    next(error)
+  }
+})
+
+downloadsRouter.post('/scan-page', async (req, res, next) => {
+  try {
+    res.json(ok(await scanPageForFiles(req.body)))
   } catch (error) {
     next(error)
   }
