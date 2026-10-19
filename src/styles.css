@@ -998,3 +998,12 @@ textarea {
 
 .page-scan-interactive-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 0; }
 .page-scan-interactive-actions .path-text { width: 100%; }
+
+/* File suffix filters generated from scan results */
+.page-type-filters { margin: 16px 0 12px; padding: 12px; border-radius: 8px; background: #f1f5f9; }
+.page-type-header { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; font-size: 13px; }
+.page-type-options { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.page-type-option { display: inline-flex; align-items: center; gap: 6px; padding: 7px 10px; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; font-size: 13px; cursor: pointer; }
+.page-type-option:has(input:checked) { border-color: #86efac; background: #ecfdf5; }
+.page-type-option input { accent-color: #059669; }
+.page-scan-toolbar-actions .ghost-button { flex: 0 0 auto; }
