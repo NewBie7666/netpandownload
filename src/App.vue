@@ -58,7 +58,7 @@ declare global {
     desktopApi?: {
       selectDownloadDir: () => Promise<string | null>
       openPageScanBrowser?: (url: string) => Promise<{ pageUrl: string }>
-      scanInteractivePage?: (extensions: string) => Promise<{ pageUrl: string, extensions: string[], items: PageFileLink[], truncated: boolean }>
+      scanInteractivePage?: (extensions: string) => Promise<{ pageUrl: string, extensions: string[], items: PageFileLink[], truncated: boolean, domCandidates?: number, networkCandidates?: number }>
       loginBilibili?: () => Promise<BilibiliLoginResult>
       getBilibiliLoginStatus?: () => Promise<BilibiliLoginStatus>
       logoutBilibili?: () => Promise<BilibiliLoginStatus>
@@ -476,7 +476,9 @@ async function scanInteractiveBrowser() {
     const result = await window.desktopApi.scanInteractivePage(pageScanExtensions.value.trim())
     pageScanLinks.value = result.items
     pageScanTruncated.value = result.truncated
-    pageScanMessage.value = '已从交互网页提取 ' + result.items.length + ' 条匹配链接。'
+    pageScanMessage.value = result.items.length > 0
+      ? '交互式扫描：找到 ' + result.items.length + ' 条匹配链接，请核对并勾选。'
+      : '交互式扫描：0 条匹配链接（DOM 候选 ' + (result.domCandidates ?? 0) + '，网页请求候选 ' + (result.networkCandidates ?? 0) + '）。请在交互窗口展开补丁详情、点击真正的 JSON / SC / 下载链接后再扫描。'
   } catch (error) {
     pageScanError.value = error instanceof Error ? error.message : '交互式扫描失败'
   } finally {
@@ -499,7 +501,7 @@ async function submitPageScan() {
     })
     pageScanLinks.value = result.items
     pageScanTruncated.value = result.truncated
-    pageScanMessage.value = '找到 ' + result.items.length + ' 条匹配链接，勾选后再下载'
+    pageScanMessage.value = '静态 HTML 扫描：找到 ' + result.items.length + ' 条匹配链接。' + (result.items.length ? '勾选后再下载。' : '如果网页通过弹窗加载文件链接，请改用交互式扫描。')
   } catch (error) {
     pageScanError.value = error instanceof Error ? error.message : '网页扫描失败'
   } finally {
@@ -1033,7 +1035,7 @@ onBeforeUnmount(() => {
               placeholder="zip,pdf,mp4,exe" :disabled="pageScanLoading || pageBatchLoading" />
             <div class="page-scan-action">
               <button class="primary-button" type="submit" :disabled="pageScanLoading || pageBatchLoading">
-                {{ pageScanLoading ? '正在扫描...' : '扫描网页文件链接' }}
+                {{ pageScanLoading ? '正在扫描...' : '扫描 HTML（静态）' }}
               </button>
             </div>
           </form>
@@ -1042,7 +1044,7 @@ onBeforeUnmount(() => {
               打开交互网页
             </button>
             <button class="ghost-button" type="button" :disabled="pageScanLoading || pageBatchLoading" @click="scanInteractiveBrowser">
-              扫描已打开页面
+              扫描已打开页面（交互）
             </button>
             <span class="path-text">适用于需要点击“详情/分享”后才显示链接的网站；先在弹出的网页里手动展开，再返回扫描。</span>
           </div>
