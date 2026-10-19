@@ -17,5 +17,7 @@ jobs:
       - run: npm ci
       - run: npm run test:direct
       - run: npm run test:pause
+      - run: npm run test:unified-actions
+      - run: npm run test:contracts
       - run: npm run build
       - run: npm run build:electron

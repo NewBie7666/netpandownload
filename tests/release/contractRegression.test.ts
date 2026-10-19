@@ -65,7 +65,7 @@ function testUiContract() {
   assert.equal(uiTask.progress, 100)
   assert.deepEqual(
     Object.keys(uiTask).filter((key) => uiTask[key as keyof typeof uiTask] !== undefined).sort(),
-    ['createdAt', 'id', 'progress', 'providerId', 'status', 'title'].sort()
+    ['createdAt', 'id', 'progress', 'providerId', 'source', 'status', 'title'].sort()
   )
 
   const presented = presentTaskError({ ...task, status: 'error', error: 'timeout' })
