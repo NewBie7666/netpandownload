@@ -48,3 +48,15 @@ test('finds static media src attributes but does not execute scripts', () => {
     ['image.jpg', 'film.MP4', 'sound.mp3', 'real.zip']
   )
 })
+
+test('automatic discovery derives suffixes rather than requiring an input filter', () => {
+  const html = '<a href="/updates/a.pkg">PKG</a><a href="/manifest.JSON?sig=1">JSON</a><a href="/index.html">Home</a><a href="/download?id=42" download>Other</a><a href="/updates/a.pkg#duplicate">Again</a>'
+  const result = extractFileLinks(html,'https://example.org/')
+  assert.deepEqual(result.items.map(item=>item.extension), ['pkg','json','other'])
+  assert.equal(result.items.length,3)
+})
+
+test('legacy explicit extension filter still limits the result', () => {
+  const html = '<a href="/a.pkg">PKG</a><a href="/manifest.json">JSON</a>'
+  assert.deepEqual(extractFileLinks(html,'https://example.org/',['pkg']).items.map(item=>item.extension), ['pkg'])
+})
