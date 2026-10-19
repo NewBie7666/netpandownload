@@ -481,6 +481,10 @@ async function stopAria2Sidecar() {
   // Save active and paused downloads before ending the process.
   try {
     await sendAria2Rpc('saveSession')
+  } catch (error) {
+    appendAria2Log('aria2 session save failed: ' + String(error))
+  }
+  try {
     await sendAria2Rpc('shutdown')
   } catch (error) {
     appendAria2Log('Graceful aria2 RPC shutdown error: ' + String(error))
