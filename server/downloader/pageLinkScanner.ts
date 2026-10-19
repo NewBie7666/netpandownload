@@ -5,6 +5,7 @@ import { request as httpsRequest } from 'node:https'
 import { AppError } from '../http.js'
 import { isPublicIp, validateDirectDownloadInput } from './directDownload.js'
 import type { PageFileLink, ScanPageResult } from '../../shared/types.js'
+import { identifyFileLink } from '../../shared/fileLinkDiscovery.js'
 
 export const MAX_PAGE_LINKS = 200
 const MAX_HTML_BYTES = 1024 * 1024
@@ -39,7 +40,7 @@ function attrValue(tag: string, name: string): string | undefined {
 }
 
 // Static anchor and media-source extraction only; no JS execution or recursive crawl.
-export function extractFileLinks(html: string, pageUrl: string, extensions: string[]): Pick<ScanPageResult, 'items' | 'truncated'> {
+export function extractFileLinks(html: string, pageUrl: string, extensions: string[] = []): Pick<ScanPageResult, 'items' | 'truncated'> {
   const baseTag = html.match(/<base\b[^>]{0,4000}>/i)?.[0]
   let base = pageUrl
   if (baseTag) {
@@ -64,21 +65,15 @@ export function extractFileLinks(html: string, pageUrl: string, extensions: stri
       if (!['http:', 'https:'].includes(link.protocol) || link.username || link.password) continue
       link.hash = ''
     } catch { continue }
-    let name: string
-    try {
-      name = decodeURIComponent(link.pathname.split('/').pop() || '')
-    } catch { continue }
-    // Never treat path traversal or an encoded slash as a filename.
-    if (!name || /[/\\\x00-\x1f]/.test(name)) continue
-    const dot = name.lastIndexOf('.')
-    const ext = dot >= 0 ? name.slice(dot + 1).toLowerCase() : ''
-    if (!suffixes.has(ext) || seen.has(link.toString())) continue
-    seen.add(link.toString())
+    const explicitDownload = /^<a\b/i.test(tag) && /\sdownload(?:\s|=|>)/i.test(tag)
+    const file = identifyFileLink(link.toString(), explicitDownload)
+    if (!file || (suffixes.size && !suffixes.has(file.extension)) || seen.has(file.url)) continue
+    seen.add(file.url)
     if (items.length >= MAX_PAGE_LINKS) {
       truncated = true
       break
     }
-    items.push({ url: link.toString(), fileName: name, extension: ext })
+    items.push(file)
   }
   return { items, truncated }
 }
@@ -176,7 +171,8 @@ export async function scanPageForFiles(
     throw new AppError('invalid_page_scan', '请输入有效的网页链接和文件后缀')
   }
   const request = input as { url?: unknown, extensions?: unknown }
-  const extensions = parseExtensionFilter(request.extensions)
+  // No filter means discover first, group later; explicit filter keeps old callers working.
+  const extensions = request.extensions === undefined || request.extensions === '' ? [] : parseExtensionFilter(request.extensions)
   let currentUrl = (await validateDirectDownloadInput({ url: request.url })).url
   for (let redirects = 0; redirects <= MAX_REDIRECTS; redirects++) {
     const page = await fetcher(currentUrl)
