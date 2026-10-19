@@ -41,7 +41,10 @@ test('handles URL encoding and rejects encoded slash traversal, unsafe protocols
   assert.deepEqual(result.items.map(i => i.fileName), ['a b.zip'])
 })
 
-test('does not follow scripts or non-anchor resource tags', () => {
-  const html = '<script>fetch("/hidden.zip")</script><img src="/image.zip"><a href="/real.zip">link</a>'
-  assert.deepEqual(extractFileLinks(html, 'https://example.org', ['zip']).items.map(i => i.fileName), ['real.zip'])
+test('finds static media src attributes but does not execute scripts', () => {
+  const html = '<script>fetch("/hidden.zip")</script><img src="/image.jpg"><video src="/film.MP4"></video><source src="/sound.mp3"><a href="/real.zip">link</a>'
+  assert.deepEqual(
+    extractFileLinks(html, 'https://example.org', ['zip', 'jpg', 'mp4', 'mp3']).items.map(i => i.fileName),
+    ['image.jpg', 'film.MP4', 'sound.mp3', 'real.zip']
+  )
 })

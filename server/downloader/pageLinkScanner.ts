@@ -37,7 +37,7 @@ function attrValue(tag: string, name: string): string | undefined {
   return match ? decodeHtmlAttribute(match[1] ?? match[2] ?? match[3] ?? '') : undefined
 }
 
-// Static HTML extraction only; no JS execution, recursive crawl or DOM emulation.
+// Static anchor and media-source extraction only; no JS execution or recursive crawl.
 export function extractFileLinks(html: string, pageUrl: string, extensions: string[]): Pick<ScanPageResult, 'items' | 'truncated'> {
   const baseTag = html.match(/<base\b[^>]{0,4000}>/i)?.[0]
   let base = pageUrl
@@ -52,14 +52,14 @@ export function extractFileLinks(html: string, pageUrl: string, extensions: stri
   const seen = new Set<string>()
   const items: PageFileLink[] = []
   let truncated = false
-  const tags = html.match(/<a\b[^>]{0,8192}>/gi) || []
+  const tags = html.match(/<(?:a|img|video|audio|source)\b[^>]{0,8192}>/gi) || []
 
   for (const tag of tags) {
-    const href = attrValue(tag, 'href')
-    if (!href) continue
+    const reference = attrValue(tag, /^<a\b/i.test(tag) ? 'href' : 'src')
+    if (!reference) continue
     let link: URL
     try {
-      link = new URL(href, base)
+      link = new URL(reference, base)
       if (!['http:', 'https:'].includes(link.protocol) || link.username || link.password) continue
       link.hash = ''
     } catch { continue }
