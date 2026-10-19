@@ -140,7 +140,8 @@ export interface PageFileLink {
 
 export interface ScanPageRequest {
   url: string
-  extensions: string
+  /** Optional scan-time suffix restriction; omit for automatic discovery. */
+  extensions?: string
 }
 
 export interface ScanPageResult {
