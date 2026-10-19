@@ -671,6 +671,7 @@ async function toggleDownloadTask(task: DownloadTask) {
     } else {
       await pauseDownloadTask(task.gid)
     }
+    noticeMessage.value = task.status === 'paused' ? '已继续下载任务' : '已暂停下载任务'
     await refreshDownloadTasks(true)
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '更新下载任务失败'
@@ -732,12 +733,12 @@ async function openDownloaderDir() {
 
 function formatTaskStatus(status: DownloadTask['status']) {
   const labels: Record<DownloadTask['status'], string> = {
-    active: 'Downloading',
-    waiting: 'Waiting',
-    paused: 'Paused',
-    error: 'Failed',
-    complete: 'Complete',
-    removed: 'Removed'
+    active: '下载中',
+    waiting: '排队中',
+    paused: '已暂停',
+    error: '失败',
+    complete: '已完成',
+    removed: '已移除'
   }
   return labels[status] || status
 }
@@ -912,8 +913,8 @@ onBeforeUnmount(() => {
                 <td>{{ formatSpeed(task.downloadSpeed) }}</td>
                 <td>{{ formatSize(task.completedLength) }} / {{ formatSize(task.totalLength) }}</td>
                 <td class="task-actions">
-                  <button class="row-button" type="button" :disabled="taskActionGid === task.gid || !['active', 'paused'].includes(task.status)" @click="toggleDownloadTask(task)">
-                    {{ task.status === 'paused' ? '继续' : '暂停' }}
+                  <button class="row-button" type="button" v-if="['active', 'waiting', 'paused'].includes(task.status)" :disabled="taskActionGid === task.gid" @click="toggleDownloadTask(task)">
+                    {{ taskActionGid === task.gid ? '处理中...' : task.status === 'paused' ? '继续' : '暂停' }}
                   </button>
                   <button class="ghost-button" type="button" :disabled="taskActionGid === task.gid" @click="requestDeleteDownloadTask(task)">删除</button>
                 </td>

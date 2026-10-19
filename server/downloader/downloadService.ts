@@ -15,6 +15,7 @@ import type {
 } from '../../shared/types.js'
 import { getRuntimePort } from '../config.js'
 import { validateDirectDownloadInput } from './directDownload.js'
+import { requireTaskAction } from './taskActionPolicy.js'
 import { AppError } from '../http.js'
 import {
   getConfiguredDownloadDir,
@@ -325,7 +326,8 @@ export async function pauseDownloadTask(gid: string) {
     throw new AppError('aria2_unavailable', availability.message, 503)
   }
 
-  await aria2Pause(gid)
+  const task = await getDownloadTaskStatus(gid)
+  if (requireTaskAction('pause', task.status)) await aria2Pause(gid)
   return { gid }
 }
 
@@ -335,7 +337,8 @@ export async function resumeDownloadTask(gid: string) {
     throw new AppError('aria2_unavailable', availability.message, 503)
   }
 
-  await aria2Unpause(gid)
+  const task = await getDownloadTaskStatus(gid)
+  if (requireTaskAction('resume', task.status)) await aria2Unpause(gid)
   return { gid }
 }
 

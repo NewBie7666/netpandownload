@@ -17,7 +17,8 @@
     "pre-release-check": "node scripts/pre-release-check.mjs",
     "build:desktop": "npm run build && npm run build:electron && electron-builder --win portable",
     "dist:win": "npm run pre-release-check && electron-builder --win portable && node scripts/release/artifactIntegrityCheck.mjs",
-    "test:direct": "tsx --test tests/downloads/directDownload.test.ts"
+    "test:direct": "tsx --test tests/downloads/directDownload.test.ts",
+    "test:pause": "tsx --test tests/downloads/pauseResume.test.ts"
   },
   "dependencies": {
     "@types/qrcode": "^1.5.6",
