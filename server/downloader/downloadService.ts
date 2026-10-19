@@ -14,6 +14,7 @@ import type {
   RemoveDownloadRequest
 } from '../../shared/types.js'
 import { getRuntimePort } from '../config.js'
+import { validateDirectDownloadInput } from './directDownload.js'
 import { AppError } from '../http.js'
 import {
   getConfiguredDownloadDir,
@@ -220,13 +221,13 @@ async function deleteTaskFile(task: Aria2TaskPayload) {
   }
 }
 
-export async function addDownloadTask(input: AddDownloadRequest): Promise<AddDownloadResult> {
+async function submitDownloadTask(input: AddDownloadRequest, direct = false): Promise<AddDownloadResult> {
   if (!getAria2Availability().enabled) {
     throw new AppError('aria2_unavailable', getAria2Availability().message, 503)
   }
 
   const normalizedUrl = normalizeRequestedDownloadUrl(input.url)
-  ensureDownloadUrlAllowed(input.url, normalizedUrl)
+  if (!direct) ensureDownloadUrlAllowed(input.url, normalizedUrl)
 
   const dir = await ensureDownloadDir(input.dir || (await getEffectiveDownloadDir()))
   const options = getDefaultDownloadOptions(input.fileName, dir)
@@ -247,6 +248,19 @@ export async function addDownloadTask(input: AddDownloadRequest): Promise<AddDow
 
   const gid = await aria2AddUri(normalizedUrl.toString(), sanitizedOptions)
   return { gid }
+}
+
+export async function addDownloadTask(input: AddDownloadRequest): Promise<AddDownloadResult> {
+  return submitDownloadTask(input)
+}
+
+// Only this separately validated route bypasses Provider URL registration.
+export async function addDirectDownloadTask(input: unknown): Promise<AddDownloadResult> {
+  if (!getAria2Availability().enabled) {
+    throw new AppError('aria2_unavailable', getAria2Availability().message, 503)
+  }
+  const safe = await validateDirectDownloadInput(input)
+  return submitDownloadTask({ url: safe.url, fileName: safe.fileName }, true)
 }
 
 export async function listDownloadTasks(): Promise<DownloadTasksResult> {

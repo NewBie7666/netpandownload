@@ -132,6 +132,11 @@ export interface AddDownloadRequest {
   dir?: string
 }
 
+export interface AddDirectDownloadRequest {
+  url: string
+  fileName?: string
+}
+
 export interface AddDownloadResult {
   gid: string
 }

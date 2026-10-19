@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import {
   addDownloadTask as addDownloaderTask,
+  addDirectDownloadTask,
   fetchDownloadTasks,
   openDownloadDir,
   pauseDownloadTask,
@@ -61,6 +62,9 @@ declare global {
   }
 }
 
+const directDownloadUrl = ref('')
+const directDownloadFileName = ref('')
+const directDownloadLoading = ref(false)
 const shareUrl = ref('')
 const passcode = ref('')
 const currentProviderId = ref<ProviderId | ''>('')
@@ -427,6 +431,26 @@ function getDownloadFileName(download: DownloadResult) {
   }
 
   return download.source === 'direct' ? `${baseName}.mp4` : baseName
+}
+
+async function submitDirectDownload() {
+  if (directDownloadLoading.value) return
+  clearMessages()
+  directDownloadLoading.value = true
+  try {
+    const { gid } = await addDirectDownloadTask({
+      url: directDownloadUrl.value,
+      fileName: directDownloadFileName.value.trim() || undefined
+    })
+    noticeMessage.value = `已添加 HTTP 下载任务：${gid}`
+    directDownloadUrl.value = ''
+    directDownloadFileName.value = ''
+    await refreshDownloadTasks(true)
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : '添加 HTTP 下载任务失败'
+  } finally {
+    directDownloadLoading.value = false
+  }
 }
 
 async function useBuiltInDownloader() {
@@ -860,6 +884,21 @@ onBeforeUnmount(() => {
             <button class="ghost-button" type="button" @click="refreshDownloadTasks(false)">刷新</button>
           </div>
         </div>
+        <form class="direct-download-form" @submit.prevent="submitDirectDownload">
+          <h3>HTTP/HTTPS 直链下载</h3>
+          <p class="path-text">粘贴公开文件直链，直接交给 aria2 下载；不需要先解析网盘链接。</p>
+          <div class="direct-download-fields">
+            <label for="direct-download-url">文件链接</label>
+            <input id="direct-download-url" v-model="directDownloadUrl" type="url" required
+              placeholder="https://example.com/archive.zip" :disabled="directDownloadLoading || !downloaderEnabled" />
+            <label for="direct-download-filename">保存文件名（可选）</label>
+            <input id="direct-download-filename" v-model="directDownloadFileName" type="text"
+              placeholder="留空则由下载服务器决定" :disabled="directDownloadLoading || !downloaderEnabled" />
+          </div>
+          <button class="primary-button" type="submit" :disabled="directDownloadLoading || !downloaderEnabled || !directDownloadUrl.trim()">
+            {{ directDownloadLoading ? '添加中...' : '添加 HTTP 下载任务' }}
+          </button>
+        </form>
         <div class="table-wrap">
           <table>
             <thead>

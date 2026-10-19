@@ -1,5 +1,6 @@
 import type {
   AddDownloadResult,
+  AddDirectDownloadRequest,
   AddDownloadRequest,
   ApiResponse,
   DownloadSettingsResult,
@@ -39,6 +40,10 @@ async function getJson<T>(url: string): Promise<T> {
 
 export function addDownloadTask(payload: AddDownloadRequest) {
   return postJson<AddDownloadResult>('/api/downloads/add', payload)
+}
+
+export function addDirectDownloadTask(payload: AddDirectDownloadRequest) {
+  return postJson<AddDownloadResult>('/api/downloads/direct', payload)
 }
 
 export function fetchDownloadTasks() {
