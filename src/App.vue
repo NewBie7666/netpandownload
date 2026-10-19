@@ -454,6 +454,7 @@ async function submitPageScan() {
   pageScanMessage.value = ''
   pageScanLinks.value = []
   pageScanSelected.value = []
+  pageScanTruncated.value = false
   try {
     const result = await scanPageForFiles({
       url: pageScanUrl.value.trim(),
