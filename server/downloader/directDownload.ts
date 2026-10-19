@@ -12,7 +12,7 @@ export interface ValidatedDirectDownload {
 // this check, so the downloader API must remain bound to loopback only.
 type HostResolver = (hostname: string) => Promise<string[]>
 
-function publicIp(address: string): boolean {
+export function isPublicIp(address: string): boolean {
   const normalized = address.replace(/^\[|\]$/g, '').toLowerCase()
   const family = isIP(normalized)
   if (family === 4) {
@@ -50,7 +50,7 @@ function parseDirectUrl(value: unknown): URL {
   const host = url.hostname.replace(/^\[|\]$/g, '').replace(/\.$/, '').toLowerCase()
   if (!host || (!host.includes('.') && !isIP(host)) ||
       /(^|\.)(localhost|local|internal|test|invalid)$/.test(host) ||
-      (isIP(host) && !publicIp(host))) {
+      (isIP(host) && !isPublicIp(host))) {
     throw new AppError('direct_url_private_host', '不允许下载本机、局域网或保留地址')
   }
   url.hash = ''
@@ -95,7 +95,7 @@ export async function validateDirectDownloadInput(
     } catch {
       throw new AppError('direct_url_dns_failed', '下载地址的域名解析失败，请检查网络或链接')
     }
-    if (!addresses.length || addresses.some((address) => !publicIp(address))) {
+    if (!addresses.length || addresses.some((address) => !isPublicIp(address))) {
       throw new AppError('direct_url_private_host', '域名指向本机、局域网或保留地址，已阻止下载')
     }
   }

@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import {
   addDownloadTask as addDownloaderTask,
   addDirectDownloadTask,
+  scanPageForFiles,
   fetchDownloadTasks,
   openDownloadDir,
   pauseDownloadTask,
@@ -27,6 +28,7 @@ import type {
   DownloadDecision,
   DownloadTask,
   DownloadTasksResult,
+  PageFileLink,
   ProviderId,
   QuarkAuthQrcodeResult,
   QuarkAuthStatusResult,
@@ -62,6 +64,18 @@ declare global {
   }
 }
 
+const pageScanUrl = ref('')
+const pageScanExtensions = ref('zip,7z,rar,pdf,mp4')
+const pageScanLoading = ref(false)
+const pageBatchLoading = ref(false)
+const pageBatchCompleted = ref(0)
+const pageScanLinks = ref<PageFileLink[]>([])
+const pageScanSelected = ref<string[]>([])
+const pageScanTruncated = ref(false)
+const pageScanMessage = ref('')
+const pageScanError = ref('')
+const pageBatchLimit = 30
+const selectedPageLinks = computed(() => pageScanLinks.value.filter((item) => pageScanSelected.value.includes(item.url)))
 const directDownloadUrl = ref('')
 const directDownloadFileName = ref('')
 const directDownloadLoading = ref(false)
@@ -431,6 +445,74 @@ function getDownloadFileName(download: DownloadResult) {
   }
 
   return download.source === 'direct' ? `${baseName}.mp4` : baseName
+}
+
+async function submitPageScan() {
+  if (pageScanLoading.value) return
+  pageScanLoading.value = true
+  pageScanError.value = ''
+  pageScanMessage.value = ''
+  pageScanLinks.value = []
+  pageScanSelected.value = []
+  try {
+    const result = await scanPageForFiles({
+      url: pageScanUrl.value.trim(),
+      extensions: pageScanExtensions.value.trim()
+    })
+    pageScanLinks.value = result.items
+    pageScanTruncated.value = result.truncated
+    pageScanMessage.value = '找到 ' + result.items.length + ' 条匹配链接，勾选后再下载'
+  } catch (error) {
+    pageScanError.value = error instanceof Error ? error.message : '网页扫描失败'
+  } finally {
+    pageScanLoading.value = false
+  }
+}
+
+function selectAllPageLinks() {
+  if (pageScanSelected.value.length === pageScanLinks.value.length || pageScanSelected.value.length >= pageBatchLimit) {
+    pageScanSelected.value = []
+  } else {
+    pageScanSelected.value = pageScanLinks.value.slice(0, pageBatchLimit).map((item) => item.url)
+  }
+}
+
+function togglePageLink(url: string) {
+  if (pageBatchLoading.value) return
+  if (pageScanSelected.value.includes(url)) {
+    pageScanSelected.value = pageScanSelected.value.filter((item) => item !== url)
+  } else if (pageScanSelected.value.length < pageBatchLimit) {
+    pageScanSelected.value = [...pageScanSelected.value, url]
+  }
+}
+
+async function submitPageDownloads() {
+  if (pageBatchLoading.value || !selectedPageLinks.value.length || !downloaderEnabled.value) return
+  const items = selectedPageLinks.value.slice(0, pageBatchLimit)
+  pageBatchLoading.value = true
+  pageBatchCompleted.value = 0
+  pageScanError.value = ''
+  pageScanMessage.value = ''
+  const failures: string[] = []
+  const completed: string[] = []
+  // Download one URL at a time to keep batch submission bounded and cancellable.
+  try {
+    for (const link of items) {
+      try {
+        await addDirectDownloadTask({ url: link.url })
+        completed.push(link.url)
+      } catch (error) {
+        failures.push(link.fileName + '：' + (error instanceof Error ? error.message : '无法添加'))
+      }
+      pageBatchCompleted.value += 1
+    }
+    pageScanSelected.value = pageScanSelected.value.filter((url) => !completed.includes(url))
+    pageScanMessage.value = '已加入 ' + completed.length + '/' + items.length + ' 个下载任务'
+    if (failures.length) pageScanError.value = failures.slice(0, 3).join('；') + (failures.length > 3 ? '（还有更多失败项）' : '')
+    await refreshDownloadTasks(true)
+  } finally {
+    pageBatchLoading.value = false
+  }
 }
 
 async function submitDirectDownload() {
@@ -900,6 +982,54 @@ onBeforeUnmount(() => {
             {{ directDownloadLoading ? '添加中...' : '添加 HTTP 下载任务' }}
           </button>
         </form>
+
+        <div class="page-scan-form">
+          <h3>从网页筛选文件下载</h3>
+          <p class="path-text">读取网页中的 HTML 链接，按文件后缀筛选；不执行网页脚本或递归扫描。</p>
+          <form class="page-scan-fields" @submit.prevent="submitPageScan">
+            <label for="page-scan-url">网页地址</label>
+            <input id="page-scan-url" v-model="pageScanUrl" type="url" required placeholder="https://example.com/downloads/"
+              :disabled="pageScanLoading || pageBatchLoading" />
+            <label for="page-scan-ext">文件后缀</label>
+            <input id="page-scan-ext" v-model="pageScanExtensions" type="text" required
+              placeholder="zip,pdf,mp4,exe" :disabled="pageScanLoading || pageBatchLoading" />
+            <div class="page-scan-action">
+              <button class="primary-button" type="submit" :disabled="pageScanLoading || pageBatchLoading">
+                {{ pageScanLoading ? '正在扫描...' : '扫描网页文件链接' }}
+              </button>
+            </div>
+          </form>
+          <p v-if="pageScanError" class="page-scan-error" role="alert">{{ pageScanError }}</p>
+          <p v-if="pageScanMessage" class="page-scan-message" role="status">{{ pageScanMessage }}</p>
+          <p v-if="pageScanTruncated" class="path-text">匹配项超过 200 条，仅展示前 200 条。</p>
+          <div v-if="pageScanLinks.length" class="page-scan-results">
+            <div class="page-scan-toolbar">
+              <span>已选 {{ selectedPageLinks.length }} / {{ pageScanLinks.length }}（每批最多 {{ pageBatchLimit }} 条）</span>
+              <div class="page-scan-toolbar-actions">
+                <button class="ghost-button" type="button" :disabled="pageBatchLoading" @click="selectAllPageLinks">
+                  {{ selectedPageLinks.length ? '切换全选/清空' : '选择前 30 条' }}
+                </button>
+                <button class="primary-button" type="button"
+                  :disabled="pageBatchLoading || !downloaderEnabled || !selectedPageLinks.length"
+                  @click="submitPageDownloads">
+                  {{ pageBatchLoading ? '添加中 ' + pageBatchCompleted + '/' + selectedPageLinks.length : '下载选中 (' + selectedPageLinks.length + ')' }}
+                </button>
+              </div>
+            </div>
+            <div class="page-scan-list">
+              <label v-for="link in pageScanLinks" :key="link.url" class="page-scan-item">
+                <input type="checkbox" :checked="pageScanSelected.includes(link.url)"
+                  :disabled="pageBatchLoading || (!pageScanSelected.includes(link.url) && pageScanSelected.length >= pageBatchLimit)"
+                  @change="togglePageLink(link.url)" />
+                <span class="page-scan-link-text">
+                  <strong>{{ link.fileName }}</strong>
+                  <small :title="link.url">{{ link.url }}</small>
+                </span>
+                <span class="page-scan-extension">.{{ link.extension }}</span>
+              </label>
+            </div>
+          </div>
+        </div>
         <div class="table-wrap">
           <table>
             <thead>

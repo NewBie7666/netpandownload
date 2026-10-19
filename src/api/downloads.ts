@@ -7,7 +7,9 @@ import type {
   DownloadTask,
   DownloadTasksResult,
   OpenDownloadDirResult,
-  RemoveDownloadRequest
+  RemoveDownloadRequest,
+  ScanPageRequest,
+  ScanPageResult
 } from '../../shared/types'
 
 async function postJson<T>(url: string, body: unknown): Promise<T> {
@@ -44,6 +46,10 @@ export function addDownloadTask(payload: AddDownloadRequest) {
 
 export function addDirectDownloadTask(payload: AddDirectDownloadRequest) {
   return postJson<AddDownloadResult>('/api/downloads/direct', payload)
+}
+
+export function scanPageForFiles(payload: ScanPageRequest) {
+  return postJson<ScanPageResult>('/api/downloads/scan-page', payload)
 }
 
 export function fetchDownloadTasks() {

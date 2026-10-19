@@ -20,7 +20,8 @@
     "test:direct": "tsx --test tests/downloads/directDownload.test.ts",
     "test:pause": "tsx --test tests/downloads/pauseResume.test.ts",
     "test:unified-actions": "tsx --test tests/downloads/unifiedTaskActions.test.ts",
-    "test:contracts": "tsx tests/release/contractRegression.test.ts"
+    "test:contracts": "tsx tests/release/contractRegression.test.ts",
+    "test:page-scan": "tsx --test tests/downloads/pageLinkScanner.test.ts"
   },
   "dependencies": {
     "@types/qrcode": "^1.5.6",

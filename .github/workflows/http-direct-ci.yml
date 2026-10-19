@@ -16,6 +16,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run test:direct
+      - run: npm run test:page-scan
       - run: npm run test:pause
       - run: npm run test:unified-actions
       - run: npm run test:contracts
