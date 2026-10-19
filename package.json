@@ -23,7 +23,8 @@
     "test:contracts": "tsx tests/release/contractRegression.test.ts",
     "test:page-scan": "tsx --test tests/downloads/pageLinkScanner.test.ts",
     "test:dns": "tsx --test tests/downloads/safeDnsLookup.test.ts",
-    "test:interactive-page": "tsx --test tests/downloads/interactivePageLinks.test.ts"
+    "test:interactive-page": "tsx --test tests/downloads/interactivePageLinks.test.ts",
+    "test:file-request": "tsx --test tests/downloads/fileRequestCandidate.test.ts"
   },
   "dependencies": {
     "@types/qrcode": "^1.5.6",

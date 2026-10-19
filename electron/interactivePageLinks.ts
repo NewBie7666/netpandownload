@@ -9,6 +9,8 @@ export interface BrowserScanResult {
   extensions: string[]
   items: BrowserScanLink[]
   truncated: boolean
+  domCandidates?: number
+  networkCandidates?: number
 }
 
 export function parseBrowserExtensions(input: unknown): string[] {

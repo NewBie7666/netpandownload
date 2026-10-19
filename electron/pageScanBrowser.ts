@@ -1,5 +1,6 @@
 import { BrowserWindow, session } from 'electron'
 import { browserFileLinks, parseBrowserExtensions, type BrowserScanResult } from './interactivePageLinks.js'
+import { isDownloadCandidateUrl } from './fileRequestCandidate.js'
 
 let browser: BrowserWindow | null = null
 const capturedUrls = new Set<string>()
@@ -25,6 +26,14 @@ function ensureScanWindow() {
   if (browser && !browser.isDestroyed()) return browser
   const scanSession = session.fromPartition(scanPartition)
   if (!downloadListenerInstalled) {
+    // Passive observation of package/manifest URLs requested after user clicks.
+    scanSession.webRequest.onBeforeRequest(
+      { urls: ['http://*/*', 'https://*/*'] },
+      (details, callback) => {
+        if (isDownloadCandidateUrl(details.url)) rememberCandidate(details.url)
+        callback({ cancel: false })
+      }
+    )
     // Never download arbitrary files through Chromium while discovering links.
     // Keep the chosen URL so the user can explicitly submit it to aria2.
     scanSession.on('will-download', (_event, item) => {
@@ -53,7 +62,7 @@ function ensureScanWindow() {
   })
   browser.webContents.on('will-navigate', (event, url) => {
     if (!isBrowserUrl(url)) event.preventDefault()
-    if (/\.(pkg|json)(?:[?#]|$)/i.test(url)) {
+    if (isDownloadCandidateUrl(url)) {
       rememberCandidate(url)
       event.preventDefault()
     }
@@ -80,20 +89,9 @@ export async function scanInteractivePage(input: unknown): Promise<BrowserScanRe
 
   // Only inspect the DOM already rendered in a separately sandboxed Electron
   // window. Do not execute user-provided code or synthesize clicks.
-  const snapshot = await browser.webContents.executeJavaScript(String.raw`(() => {
-    const urls = []
-    const nodes = document.querySelectorAll(
-      'a[href],img[src],video[src],audio[src],source[src],[data-href],[data-url],[data-download-url]'
-    )
-    for (const el of Array.from(nodes).slice(0, 5000)) {
-      for (const attr of ['href', 'src', 'data-href', 'data-url', 'data-download-url']) {
-        const value = el.getAttribute(attr)
-        if (value) urls.push(value)
-      }
-    }
-    return { pageUrl: location.href, urls }
-  })()`, true) as { pageUrl: string, urls: string[] }
+  const snapshot = await browser.webContents.executeJavaScript("(() => {\n  const urls = []\n  const nodes = document.querySelectorAll(\n    'a[href],img[src],video[src],audio[src],source[src],button,[data-href],[data-url],[data-download-url],[data-clipboard-text]'\n  )\n  for (const el of Array.from(nodes).slice(0, 5000)) {\n    for (const attr of ['href', 'src', 'data-href', 'data-url',\n      'data-download-url', 'data-clipboard-text', 'data-link']) {\n      const value = el.getAttribute(attr)\n      if (value) urls.push(value)\n    }\n  }\n  // Some dialogs show the URL in visible text rather than in an anchor.\n  const textUrls = (document.body?.innerText || '').slice(0, 150000)\n    .match(/https?:\\/\\/[^\\s<>\"']+/g) || []\n  urls.push(...textUrls.slice(0, 500))\n  return { pageUrl: location.href, urls }\n})()", true) as { pageUrl: string, urls: string[] }
 
   const links = [...snapshot.urls, ...capturedUrls]
-  return browserFileLinks(snapshot.pageUrl, links, extensions)
+  const result = browserFileLinks(snapshot.pageUrl, links, extensions)
+  return { ...result, domCandidates: snapshot.urls.length, networkCandidates: capturedUrls.size }
 }

@@ -18,6 +18,7 @@ jobs:
       - run: npm run test:direct
       - run: npm run test:page-scan
       - run: npm run test:interactive-page
+      - run: npm run test:file-request
       - run: npm run test:dns
       - run: npm run test:pause
       - run: npm run test:unified-actions
