@@ -1,4 +1,5 @@
-import { lookup } from 'node:dns'
+import { lookup } from 'node:dns/promises'
+import type { LookupAddress } from 'node:dns'
 import { request as httpRequest } from 'node:http'
 import { request as httpsRequest } from 'node:https'
 import { AppError } from '../http.js'
@@ -89,6 +90,17 @@ interface PageResponse {
   text: string
 }
 
+export async function lookupPublicAddresses(
+  hostname: string,
+  resolver: (hostname: string) => Promise<LookupAddress[]> = (host) => lookup(host, { all: true })
+): Promise<LookupAddress[]> {
+  const addresses = await resolver(hostname)
+  if (!addresses.length || addresses.some((item) => !item.address || !isPublicIp(item.address))) {
+    throw new AppError('page_scan_private_dns', '网页域名解析到本地或私有地址，已拒绝连接', 403)
+  }
+  return addresses
+}
+
 function requestHtml(url: string): Promise<PageResponse> {
   return new Promise((resolve, reject) => {
     const transport = url.startsWith('https:') ? httpsRequest : httpRequest
@@ -101,13 +113,14 @@ function requestHtml(url: string): Promise<PageResponse> {
       },
       // Recheck the actual connection address to resist DNS rebinding between
       // validation and transport. The callback never accepts a private IP.
-      lookup: (hostname, _options, callback) => {
-        lookup(hostname, (error, address, family) => {
-          if (error || !isPublicIp(address)) {
-            callback(error || new Error('Private IP is not allowed'), address, family)
-          } else {
-            callback(null, address, family)
-          }
+      lookup: (hostname, options, callback) => {
+        // Node's HTTP client can request { all: true }; that callback MUST
+        // receive LookupAddress[], not one string. The former code broke here.
+        void lookupPublicAddresses(hostname).then((addresses) => {
+          if (options.all) callback(null, addresses, 0)
+          else callback(null, addresses[0].address, addresses[0].family)
+        }, (error) => {
+          callback(error instanceof Error ? error : new Error(String(error)), '', 0)
         })
       }
     }, (response) => {
