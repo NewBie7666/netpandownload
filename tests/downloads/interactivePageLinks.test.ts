@@ -23,6 +23,12 @@ test('does not pretend that an interactive modal contains links when none are re
 
 test('enforces limit and validates requested extensions', () => {
   assert.equal(browserFileLinks('https://example.com', ['/a.pkg','/b.pkg'], ['pkg'], 1).truncated, true)
-  assert.throws(()=>parseBrowserExtensions(''))
+  assert.deepEqual(parseBrowserExtensions(''), [])
   assert.throws(()=>parseBrowserExtensions('pkg,../../secret'))
+})
+
+test('interactive automatic suffix discovery works with no filter', () => {
+  const result = browserFileLinks('https://example.org/', ['/update.PKG','/manifest.json','/home.html','/download?id=42'])
+  assert.deepEqual(result.items.map(item=>item.extension), ['pkg','json','other'])
+  assert.deepEqual(parseBrowserExtensions(undefined), [])
 })
