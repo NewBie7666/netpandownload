@@ -1006,4 +1006,6 @@ textarea {
 .page-type-option { display: inline-flex; align-items: center; gap: 6px; padding: 7px 10px; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; font-size: 13px; cursor: pointer; }
 .page-type-option:has(input:checked) { border-color: #86efac; background: #ecfdf5; }
 .page-type-option input { accent-color: #059669; }
+.page-type-option:has(input:indeterminate) { border-color: #86efac; background: #ecfdf5; }
+.page-type-header select { margin-left: 6px; padding: 6px; border: 1px solid #cbd5e1; border-radius: 6px; background: #fff; }
 .page-scan-toolbar-actions .ghost-button { flex: 0 0 auto; }

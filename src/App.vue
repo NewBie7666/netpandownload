@@ -23,7 +23,7 @@ import {
   resolveProviderResource
 } from './api/providers'
 import DownloadCenter from './views/download-center/DownloadCenter.vue'
-import { chooseVisibleFiles, dropVisibleFiles, filterFileLinks, groupFileExtensions, PAGE_BATCH_LIMIT } from './api/pageFileSelection'
+import { chooseVisibleFiles, dropVisibleFiles, filterFileLinks, getFileSelectionState, groupFileExtensions, setFileTypeSelected, submitPageDownloadBatch, PAGE_BATCH_LIMIT } from './api/pageFileSelection'
 import type {
   DownloadResult,
   DownloadDecision,
@@ -72,17 +72,23 @@ const pageScanExtensions = ref('')
 const pageScanLoading = ref(false)
 const pageBatchLoading = ref(false)
 const pageBatchCompleted = ref(0)
+const pageBatchTotal = ref(0)
 const pageScanLinks = ref<PageFileLink[]>([])
 const pageScanSelected = ref<string[]>([])
-const pageSelectedTypes = ref<string[]>([])
+const pageVisibleType = ref('')
 const pageScanTruncated = ref(false)
 const pageScanMessage = ref('')
 const pageScanError = ref('')
 const pageBatchLimit = PAGE_BATCH_LIMIT
-const pageTypeGroups = computed(() => groupFileExtensions(pageScanLinks.value))
-const visiblePageLinks = computed(() => filterFileLinks(pageScanLinks.value, pageSelectedTypes.value))
+const pageTypeGroups = computed(() => groupFileExtensions(pageScanLinks.value).map(group => ({
+  ...group,
+  ...getFileSelectionState(pageScanSelected.value, filterFileLinks(pageScanLinks.value, [group.extension]))
+})))
+const visiblePageLinks = computed(() => pageVisibleType.value
+  ? filterFileLinks(pageScanLinks.value, [pageVisibleType.value]) : pageScanLinks.value)
 const selectedPageLinks = computed(() => pageScanLinks.value.filter((item) => pageScanSelected.value.includes(item.url)))
-const hiddenPageSelectionCount = computed(() => selectedPageLinks.value.filter((item) => !pageSelectedTypes.value.includes(item.extension)).length)
+const hiddenPageSelectionCount = computed(() => selectedPageLinks.value.filter((item) => !visiblePageLinks.value.includes(item)).length)
+const nextPageBatchCount = computed(() => Math.min(selectedPageLinks.value.length, pageBatchLimit))
 const visibleSelectedCount = computed(() => visiblePageLinks.value.filter((item) => pageScanSelected.value.includes(item.url)).length)
 const directDownloadUrl = ref('')
 const directDownloadFileName = ref('')
@@ -471,18 +477,18 @@ async function openInteractivePage() {
 }
 
 async function scanInteractiveBrowser() {
+  if (pageScanLoading.value || pageBatchLoading.value) return
   pageScanLoading.value = true
   pageScanError.value = ''
   pageScanMessage.value = ''
   pageScanLinks.value = []
   pageScanSelected.value = []
-  pageSelectedTypes.value = []
+  pageVisibleType.value = ''
   pageScanTruncated.value = false
   try {
     if (!window.desktopApi?.scanInteractivePage) throw new Error('该功能需要 Electron 桌面端')
     const result = await window.desktopApi.scanInteractivePage(pageScanExtensions.value.trim())
     pageScanLinks.value = result.items
-    pageSelectedTypes.value = groupFileExtensions(result.items).map((group) => group.extension)
     pageScanTruncated.value = result.truncated
     pageScanMessage.value = result.items.length > 0
       ? '交互式扫描：找到 ' + result.items.length + ' 条匹配链接，请核对并勾选。'
@@ -495,13 +501,13 @@ async function scanInteractiveBrowser() {
 }
 
 async function submitPageScan() {
-  if (pageScanLoading.value) return
+  if (pageScanLoading.value || pageBatchLoading.value) return
   pageScanLoading.value = true
   pageScanError.value = ''
   pageScanMessage.value = ''
   pageScanLinks.value = []
   pageScanSelected.value = []
-  pageSelectedTypes.value = []
+  pageVisibleType.value = ''
   pageScanTruncated.value = false
   try {
     const result = await scanPageForFiles({
@@ -509,7 +515,6 @@ async function submitPageScan() {
       extensions: pageScanExtensions.value.trim()
     })
     pageScanLinks.value = result.items
-    pageSelectedTypes.value = groupFileExtensions(result.items).map((group) => group.extension)
     pageScanTruncated.value = result.truncated
     pageScanMessage.value = '静态 HTML 扫描：找到 ' + result.items.length + ' 条匹配链接。' + (result.items.length ? '勾选后再下载。' : '如果网页通过弹窗加载文件链接，请改用交互式扫描。')
   } catch (error) {
@@ -519,15 +524,9 @@ async function submitPageScan() {
   }
 }
 
-function togglePageType(extension: string) {
+function togglePageType(extension: string, checked: boolean) {
   if (pageBatchLoading.value) return
-  pageSelectedTypes.value = pageSelectedTypes.value.includes(extension)
-    ? pageSelectedTypes.value.filter((type) => type !== extension)
-    : [...pageSelectedTypes.value, extension]
-}
-
-function showAllPageTypes() {
-  if (!pageBatchLoading.value) pageSelectedTypes.value = pageTypeGroups.value.map((group) => group.extension)
+  pageScanSelected.value = setFileTypeSelected(pageScanSelected.value, pageScanLinks.value, extension, checked)
 }
 
 function selectAllPageLinks() {
@@ -536,7 +535,7 @@ function selectAllPageLinks() {
   if (visible.length && visible.every((item) => pageScanSelected.value.includes(item.url))) {
     pageScanSelected.value = dropVisibleFiles(pageScanSelected.value, visible)
   } else {
-    pageScanSelected.value = chooseVisibleFiles(pageScanSelected.value, visible, pageBatchLimit)
+    pageScanSelected.value = chooseVisibleFiles(pageScanSelected.value, visible)
   }
 }
 
@@ -548,34 +547,28 @@ function togglePageLink(url: string) {
   if (pageBatchLoading.value) return
   if (pageScanSelected.value.includes(url)) {
     pageScanSelected.value = pageScanSelected.value.filter((item) => item !== url)
-  } else if (pageScanSelected.value.length < pageBatchLimit) {
+  } else {
     pageScanSelected.value = [...pageScanSelected.value, url]
   }
 }
 
 async function submitPageDownloads() {
-  if (pageBatchLoading.value || !selectedPageLinks.value.length || !downloaderEnabled.value) return
-  const items = selectedPageLinks.value.slice(0, pageBatchLimit)
+  if (pageScanLoading.value || pageBatchLoading.value || !selectedPageLinks.value.length || !downloaderEnabled.value) return
+  const items = [...selectedPageLinks.value]
   pageBatchLoading.value = true
   pageBatchCompleted.value = 0
+  pageBatchTotal.value = Math.min(items.length, pageBatchLimit)
   pageScanError.value = ''
   pageScanMessage.value = ''
-  const failures: string[] = []
-  const completed: string[] = []
-  // Download one URL at a time to keep batch submission bounded and cancellable.
   try {
-    for (const link of items) {
-      try {
-        await addDirectDownloadTask({ url: link.url })
-        completed.push(link.url)
-      } catch (error) {
-        failures.push(link.fileName + '：' + (error instanceof Error ? error.message : '无法添加'))
-      }
-      pageBatchCompleted.value += 1
-    }
-    pageScanSelected.value = pageScanSelected.value.filter((url) => !completed.includes(url))
-    pageScanMessage.value = '已加入 ' + completed.length + '/' + items.length + ' 个下载任务'
-    if (failures.length) pageScanError.value = failures.slice(0, 3).join('；') + (failures.length > 3 ? '（还有更多失败项）' : '')
+    const result = await submitPageDownloadBatch(items, addDirectDownloadTask, count => { pageBatchCompleted.value = count })
+    pageScanSelected.value = result.remaining.map(link => link.url)
+    pageScanMessage.value = '本次提交 ' + result.attemptedCount + ' 个：已加入 aria2 ' + result.completed.length
+      + ' 个，失败 ' + result.failures.length + ' 个，未提交 ' + result.unattemptedCount + ' 个。'
+      + (result.remaining.length ? '剩余 ' + result.remaining.length + ' 个仍勾选，请核对后再次点击下载。' : '')
+    if (result.failures.length) pageScanError.value = result.failures.slice(0, 3)
+      .map(({ link, message }) => link.fileName + '：' + message).join('；')
+      + (result.failures.length > 3 ? '（还有更多失败项）' : '')
     await refreshDownloadTasks(true)
   } finally {
     pageBatchLoading.value = false
@@ -1052,7 +1045,7 @@ onBeforeUnmount(() => {
 
         <div class="page-scan-form">
           <h3>从网页筛选文件下载</h3>
-          <p class="path-text">先扫描网页资源，自动识别后缀；再按文件类型筛选，并逐个勾选要下载的文件。</p>
+          <p class="path-text">扫描后勾选类型可全选该类型文件，也可逐个调整。勾选不会开始下载，点击下载按钮后才提交到 aria2。</p>
           <form class="page-scan-fields" @submit.prevent="submitPageScan">
             <label for="page-scan-url">网页地址</label>
             <input id="page-scan-url" v-model="pageScanUrl" type="url" required placeholder="https://example.com/downloads/"
@@ -1079,37 +1072,44 @@ onBeforeUnmount(() => {
           <p v-if="pageScanMessage" class="page-scan-message" role="status">{{ pageScanMessage }}</p>
           <p v-if="pageScanTruncated" class="path-text">匹配项超过 200 条，仅展示前 200 条。</p>
           <div v-if="pageScanLinks.length" class="page-scan-results">
-            <div class="page-type-filters" aria-label="按文件后缀筛选">
+            <div class="page-type-filters" aria-label="按文件后缀选择">
               <div class="page-type-header">
-                <strong>文件类型筛选（仅控制显示）</strong>
-                <button class="ghost-button" type="button" :disabled="pageBatchLoading" @click="showAllPageTypes">显示全部类型</button>
+                <strong>按类型勾选文件（部分选中显示横线）</strong>
+                <label>显示类型
+                  <select v-model="pageVisibleType" :disabled="pageBatchLoading">
+                    <option value="">全部类型</option>
+                    <option v-for="group in pageTypeGroups" :key="group.extension" :value="group.extension">
+                      {{ group.extension === 'other' ? '其他/未知' : '.' + group.extension }} ({{ group.count }})
+                    </option>
+                  </select>
+                </label>
               </div>
               <div class="page-type-options">
                 <label v-for="group in pageTypeGroups" :key="group.extension" class="page-type-option">
-                  <input type="checkbox" :checked="pageSelectedTypes.includes(group.extension)"
-                    :disabled="pageBatchLoading" @change="togglePageType(group.extension)" />
+                  <input type="checkbox" :checked="group.checked" :indeterminate="group.indeterminate"
+                    :disabled="pageBatchLoading" @change="togglePageType(group.extension, ($event.target as HTMLInputElement).checked)" />
                   <span>{{ group.extension === 'other' ? '其他/未知' : '.' + group.extension }} ({{ group.count }})</span>
                 </label>
               </div>
             </div>
             <div class="page-scan-toolbar">
-              <span>显示 {{ visiblePageLinks.length }} / {{ pageScanLinks.length }}；已选 {{ selectedPageLinks.length }} 个文件（隐藏 {{ hiddenPageSelectionCount }}）；每批最多 {{ pageBatchLimit }} 条</span>
+              <span>显示 {{ visiblePageLinks.length }} / {{ pageScanLinks.length }}；已选 {{ selectedPageLinks.length }} 个（隐藏 {{ hiddenPageSelectionCount }}）；本次提交 {{ nextPageBatchCount }} 个，剩余 {{ selectedPageLinks.length - nextPageBatchCount }} 个需再次点击下载；每批最多 {{ pageBatchLimit }} 个</span>
               <div class="page-scan-toolbar-actions">
                 <button class="ghost-button" type="button" :disabled="pageBatchLoading" @click="selectAllPageLinks">
-                  {{ visiblePageLinks.length && visibleSelectedCount === visiblePageLinks.length ? '取消选择当前筛选' : '选择当前筛选（最多30）' }}
+                  {{ visiblePageLinks.length && visibleSelectedCount === visiblePageLinks.length ? '取消选择当前筛选' : '选择当前筛选' }}
                 </button>
                 <button class="ghost-button" type="button" :disabled="pageBatchLoading || !pageScanSelected.length" @click="clearPageFileSelection">清空已选</button>
                 <button class="primary-button" type="button"
                   :disabled="pageBatchLoading || !downloaderEnabled || !selectedPageLinks.length"
                   @click="submitPageDownloads">
-                  {{ pageBatchLoading ? '添加中 ' + pageBatchCompleted + '/' + selectedPageLinks.length : '下载选中 (' + selectedPageLinks.length + ')' }}
+                  {{ pageBatchLoading ? '提交中 ' + pageBatchCompleted + '/' + pageBatchTotal : '下载本批 (' + nextPageBatchCount + '/' + selectedPageLinks.length + ')' }}
                 </button>
               </div>
             </div>
             <div class="page-scan-list">
               <label v-for="link in visiblePageLinks" :key="link.url" class="page-scan-item">
                 <input type="checkbox" :checked="pageScanSelected.includes(link.url)"
-                  :disabled="pageBatchLoading || (!pageScanSelected.includes(link.url) && pageScanSelected.length >= pageBatchLimit)"
+                  :disabled="pageBatchLoading"
                   @change="togglePageLink(link.url)" />
                 <span class="page-scan-link-text">
                   <strong>{{ link.fileName }}</strong>
@@ -1118,7 +1118,7 @@ onBeforeUnmount(() => {
                 <span class="page-scan-extension">{{ link.extension === 'other' ? '其他/未知' : '.' + link.extension }}</span>
               </label>
             </div>
-            <p v-if="!visiblePageLinks.length" class="path-text">当前筛选没有显示文件，请重新选择上方的文件类型。</p>
+            <p v-if="!visiblePageLinks.length" class="path-text">当前筛选没有显示文件，请调整“显示类型”。</p>
           </div>
         </div>
         <div class="table-wrap">
