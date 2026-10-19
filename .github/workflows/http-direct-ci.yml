@@ -17,6 +17,7 @@ jobs:
       - run: npm ci
       - run: npm run test:direct
       - run: npm run test:page-scan
+      - run: npm run test:page-selection
       - run: npm run test:interactive-page
       - run: npm run test:file-request
       - run: npm run test:dns
