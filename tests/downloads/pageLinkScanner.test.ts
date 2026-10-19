@@ -5,7 +5,7 @@ import { extractFileLinks, parseExtensionFilter } from '../../server/downloader/
 test('parses multiple suffixes with comma/Chinese comma/space and removes duplicates', () => {
   assert.deepEqual(parseExtensionFilter('.ZIP，pdf; mp4 .zip'), ['zip', 'pdf', 'mp4'])
   for (const invalid of ['', 'zip,../../etc', 'zip;*', Array.from({ length: 21 }, () => 'zip').join(',')]) {
-    await assert.rejects(async () => parseExtensionFilter(invalid))
+    assert.throws(() => parseExtensionFilter(invalid))
   }
 })
 
