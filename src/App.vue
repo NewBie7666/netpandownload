@@ -57,6 +57,8 @@ declare global {
   interface Window {
     desktopApi?: {
       selectDownloadDir: () => Promise<string | null>
+      openPageScanBrowser?: (url: string) => Promise<{ pageUrl: string }>
+      scanInteractivePage?: (extensions: string) => Promise<{ pageUrl: string, extensions: string[], items: PageFileLink[], truncated: boolean }>
       loginBilibili?: () => Promise<BilibiliLoginResult>
       getBilibiliLoginStatus?: () => Promise<BilibiliLoginStatus>
       logoutBilibili?: () => Promise<BilibiliLoginStatus>
@@ -445,6 +447,41 @@ function getDownloadFileName(download: DownloadResult) {
   }
 
   return download.source === 'direct' ? `${baseName}.mp4` : baseName
+}
+
+async function openInteractivePage() {
+  pageScanError.value = ''
+  pageScanMessage.value = ''
+  if (!window.desktopApi?.openPageScanBrowser) {
+    pageScanError.value = '该功能需要 Electron 桌面端'
+    return
+  }
+  try {
+    await window.desktopApi.openPageScanBrowser(pageScanUrl.value.trim())
+    pageScanMessage.value = '已打开网页。请在新窗口点击补丁详情/分享，随后返回主窗口点击“扫描已打开页面”。'
+  } catch (error) {
+    pageScanError.value = error instanceof Error ? error.message : '无法打开交互式网页'
+  }
+}
+
+async function scanInteractiveBrowser() {
+  pageScanLoading.value = true
+  pageScanError.value = ''
+  pageScanMessage.value = ''
+  pageScanLinks.value = []
+  pageScanSelected.value = []
+  pageScanTruncated.value = false
+  try {
+    if (!window.desktopApi?.scanInteractivePage) throw new Error('该功能需要 Electron 桌面端')
+    const result = await window.desktopApi.scanInteractivePage(pageScanExtensions.value.trim())
+    pageScanLinks.value = result.items
+    pageScanTruncated.value = result.truncated
+    pageScanMessage.value = '已从交互网页提取 ' + result.items.length + ' 条匹配链接。'
+  } catch (error) {
+    pageScanError.value = error instanceof Error ? error.message : '交互式扫描失败'
+  } finally {
+    pageScanLoading.value = false
+  }
 }
 
 async function submitPageScan() {
@@ -1000,6 +1037,15 @@ onBeforeUnmount(() => {
               </button>
             </div>
           </form>
+          <div class="page-scan-interactive-actions">
+            <button class="ghost-button" type="button" :disabled="pageScanLoading || pageBatchLoading" @click="openInteractivePage">
+              打开交互网页
+            </button>
+            <button class="ghost-button" type="button" :disabled="pageScanLoading || pageBatchLoading" @click="scanInteractiveBrowser">
+              扫描已打开页面
+            </button>
+            <span class="path-text">适用于需要点击“详情/分享”后才显示链接的网站；先在弹出的网页里手动展开，再返回扫描。</span>
+          </div>
           <p v-if="pageScanError" class="page-scan-error" role="alert">{{ pageScanError }}</p>
           <p v-if="pageScanMessage" class="page-scan-message" role="status">{{ pageScanMessage }}</p>
           <p v-if="pageScanTruncated" class="path-text">匹配项超过 200 条，仅展示前 200 条。</p>

@@ -8,6 +8,7 @@ import type { Readable } from 'node:stream'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { aria2SessionArgs, aria2SessionPath, ensureAria2SessionFile } from './aria2Session.js'
+import { openPageScanBrowser, scanInteractivePage } from './pageScanBrowser.js'
 import { openBilibiliLoginWindow } from './auth/BilibiliLoginWindow.js'
 import {
   clearBilibiliCookieStore,
@@ -543,6 +544,14 @@ async function bootstrapDesktop() {
   createWindow()
   await mainWindow?.loadURL(getRendererUrl())
 }
+
+ipcMain.handle('open-page-scan-browser', async (_event, url: unknown) => {
+  return openPageScanBrowser(url)
+})
+
+ipcMain.handle('scan-interactive-page', async (_event, extensions: unknown) => {
+  return scanInteractivePage(extensions)
+})
 
 ipcMain.handle('select-download-dir', async () => {
   const result = await dialog.showOpenDialog({

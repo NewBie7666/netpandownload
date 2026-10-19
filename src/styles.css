@@ -995,3 +995,6 @@ textarea {
   .page-scan-fields { grid-template-columns: minmax(0, 1fr); }
   .page-scan-action { grid-column: 1; }
 }
+
+.page-scan-interactive-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 0; }
+.page-scan-interactive-actions .path-text { width: 100%; }
