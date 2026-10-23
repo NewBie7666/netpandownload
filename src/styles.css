@@ -1009,3 +1009,15 @@ textarea {
 .page-type-option:has(input:indeterminate) { border-color: #86efac; background: #ecfdf5; }
 .page-type-header select { margin-left: 6px; padding: 6px; border: 1px solid #cbd5e1; border-radius: 6px; background: #fff; }
 .page-scan-toolbar-actions .ghost-button { flex: 0 0 auto; }
+
+/* Private browser downloader: make file handoff and task controls usable on phones. */
+.file-save-link { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; color: #047857; white-space: nowrap; }
+@media (max-width: 700px) {
+  .container, .page-shell, .panel { min-width: 0; max-width: 100%; }
+  .task-header-actions { flex-wrap: wrap; gap: 8px; }
+  .task-actions { display: flex; flex-wrap: wrap; gap: 6px; min-width: 200px; }
+  .table-wrap { max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .page-scan-form, .direct-download-form { margin: 12px; padding: 12px; }
+  .modal { max-width: calc(100vw - 24px); }
+  .file-save-link { min-height: 36px; padding: 8px 12px; }
+}

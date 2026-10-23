@@ -14,6 +14,7 @@ import type {
   RemoveDownloadRequest
 } from '../../shared/types.js'
 import { getRuntimePort } from '../config.js'
+import { resolveSafeDownloadFile } from './privateWebFile.js'
 import { validateDirectDownloadInput } from './directDownload.js'
 import { requireTaskAction } from './taskActionPolicy.js'
 import { AppError } from '../http.js'
@@ -51,7 +52,9 @@ function cleanupAllowedUrls() {
 }
 
 export function getDefaultDownloadDir() {
-  return path.join(homedir(), 'Downloads', 'QuarkDownloads')
+  return process.env.NETPAN_PRIVATE_WEB === 'true'
+    ? path.resolve(process.env.NETPAN_DOWNLOAD_DIR || '/srv/netpandownload/downloads')
+    : path.join(homedir(), 'Downloads', 'QuarkDownloads')
 }
 
 async function ensureDownloadDir(dir = getDefaultDownloadDir()) {
@@ -60,7 +63,9 @@ async function ensureDownloadDir(dir = getDefaultDownloadDir()) {
 }
 
 async function getEffectiveDownloadDir() {
-  return ensureDownloadDir(await getConfiguredDownloadDir(getDefaultDownloadDir()))
+  const dir = process.env.NETPAN_PRIVATE_WEB === 'true'
+    ? getDefaultDownloadDir() : await getConfiguredDownloadDir(getDefaultDownloadDir())
+  return ensureDownloadDir(dir)
 }
 
 function buildLocalBackendBaseUrl() {
@@ -232,6 +237,9 @@ async function submitDownloadTask(input: AddDownloadRequest, direct = false): Pr
   const normalizedUrl = normalizeRequestedDownloadUrl(input.url)
   if (!direct) ensureDownloadUrlAllowed(input.url, normalizedUrl)
 
+  if (process.env.NETPAN_PRIVATE_WEB === 'true' && input.dir) {
+    throw new AppError('download_dir_forbidden', '网页模式只允许使用服务器固定下载目录', 403)
+  }
   const dir = await ensureDownloadDir(input.dir || (await getEffectiveDownloadDir()))
   const options = getDefaultDownloadOptions(input.fileName, dir)
   const rpcOptions = options.out ? options : { ...options, out: undefined }
@@ -310,6 +318,9 @@ export async function getDownloadSettings(): Promise<DownloadSettingsResult> {
 }
 
 export async function updateDownloadSettings(input: { downloadDir?: string }): Promise<DownloadSettingsResult> {
+  if (process.env.NETPAN_PRIVATE_WEB === 'true') {
+    throw new AppError('download_dir_forbidden', '网页模式不能更改服务器下载目录', 403)
+  }
   return saveDownloadSettings(input, getDefaultDownloadDir())
 }
 
@@ -365,10 +376,24 @@ export async function removeDownloadTask(gid: string, input: RemoveDownloadReque
 }
 
 export async function openDownloadDirectory(): Promise<OpenDownloadDirResult> {
+  if (process.env.NETPAN_PRIVATE_WEB === 'true') {
+    throw new AppError('desktop_only', '云端无法打开本机目录，请在任务完成后点击“保存到此设备”', 403)
+  }
   const dir = await getEffectiveDownloadDir()
   spawn('explorer.exe', [dir], {
     detached: true,
     stdio: 'ignore'
   }).unref()
   return { dir }
+}
+
+/** Return only a completed aria2 task's file; never accept arbitrary file paths from HTTP clients. */
+export async function getCompletedDownloadFile(gid: string) {
+  if (!/^[0-9a-f]{16}$/i.test(gid)) throw new AppError('invalid_gid', '任务 ID 格式不正确', 400)
+  if (!getAria2Availability().enabled) throw new AppError('aria2_unavailable', '下载引擎不可用', 503)
+  const task = await aria2TellStatus(gid)
+  if (task.status !== 'complete') throw new AppError('download_not_complete', '任务尚未完成，请稍后重试', 409)
+  const pathname = task.files?.[0]?.path || ''
+  if (!pathname) throw new AppError('download_file_missing', '任务未关联下载文件', 404)
+  return resolveSafeDownloadFile(await getEffectiveDownloadDir(), pathname)
 }

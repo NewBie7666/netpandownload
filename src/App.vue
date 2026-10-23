@@ -94,6 +94,8 @@ const directDownloadUrl = ref('')
 const directDownloadFileName = ref('')
 const directDownloadLoading = ref(false)
 const shareUrl = ref('')
+const privateWeb = ref(false)
+const desktopAvailable = Boolean(window.desktopApi?.selectDownloadDir)
 const passcode = ref('')
 const currentProviderId = ref<ProviderId | ''>('')
 const shareId = ref('')
@@ -906,6 +908,7 @@ function formatTaskStatus(status: DownloadTask['status']) {
 }
 
 onMounted(() => {
+  void fetch('/api/health').then(r => r.json()).then(r => { privateWeb.value = r.result?.privateWeb === true }).catch(() => {})
   void refreshBilibiliLoginStatus()
   void refreshDownloadTasks(true)
   taskPollTimer = window.setInterval(() => {
@@ -1039,12 +1042,13 @@ onBeforeUnmount(() => {
           <div>
             <h2>下载任务</h2>
             <p class="path-text">内置下载器：{{ downloaderEnabled ? '可用' : '不可用' }}</p>
-            <p class="path-text">默认下载目录：{{ downloaderDefaultDir || '-' }}</p>
+            <p class="path-text">{{ privateWeb ? '服务器临时下载目录' : '默认下载目录' }}：{{ downloaderDefaultDir || '-' }}</p>
+            <p v-if="privateWeb" class="path-text">云端下载完成后，点击“保存到此设备”即可保存到手机或电脑。</p>
             <p v-if="downloaderMessage" class="path-text">{{ downloaderMessage }}</p>
           </div>
           <div class="task-header-actions">
-            <button class="ghost-button" type="button" @click="selectDownloadDirectory">选择下载目录</button>
-            <button class="ghost-button" type="button" @click="openDownloaderDir">打开下载目录</button>
+            <button v-if="desktopAvailable" class="ghost-button" type="button" @click="selectDownloadDirectory">选择下载目录</button>
+            <button v-if="desktopAvailable" class="ghost-button" type="button" @click="openDownloaderDir">打开下载目录</button>
             <button class="ghost-button" type="button" @click="refreshDownloadTasks(false)">刷新</button>
           </div>
         </div>
@@ -1158,6 +1162,7 @@ onBeforeUnmount(() => {
                   <button class="row-button" type="button" v-if="['active', 'waiting', 'paused'].includes(task.status)" :disabled="taskActionGid === task.gid" @click="toggleDownloadTask(task)">
                     {{ taskActionGid === task.gid ? '处理中...' : task.status === 'paused' ? '继续' : '暂停' }}
                   </button>
+                  <a v-if="task.status === 'complete'" class="row-button file-save-link" :href="`/api/downloads/file/${encodeURIComponent(task.gid)}`" :download="task.fileName">保存到此设备</a>
                   <button class="ghost-button" type="button" :disabled="taskActionGid === task.gid" @click="requestDeleteDownloadTask(task)">删除</button>
                 </td>
               </tr>
@@ -1182,7 +1187,7 @@ onBeforeUnmount(() => {
         <p class="cache-note">过期时间：{{ new Date(downloadDialog.expiresAt).toLocaleString() }}</p>
         <div class="modal-actions">
           <button class="ghost-button" type="button" @click="downloadDialog = null">关闭</button>
-          <button class="ghost-button" type="button" @click="startBrowserDownload">浏览器下载</button>
+          <button v-if="!privateWeb" class="ghost-button" type="button" @click="startBrowserDownload">浏览器下载</button>
           <button v-if="downloadDialog.downloadUrl" class="ghost-button" type="button" @click="copyDownloadUrl">复制直链</button>
           <button v-if="downloadDialog.proxyUrl" class="ghost-button" type="button" @click="copyProxyDownloadUrl">复制代理地址</button>
           <button class="primary-button" type="button" @click="useBuiltInDownloader">用内置下载器下载</button>

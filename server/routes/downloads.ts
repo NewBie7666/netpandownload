@@ -1,4 +1,5 @@
 import { Router } from 'express'
+import { createReadStream } from 'node:fs'
 import { ok } from '../http.js'
 import { scanPageForFiles } from '../downloader/pageLinkScanner.js'
 import {
@@ -7,6 +8,7 @@ import {
   getDownloadHealth,
   getDownloadSettings,
   getDownloadTaskStatus,
+  getCompletedDownloadFile,
   listDownloadTasks,
   openDownloadDirectory,
   pauseDownloadTask,
@@ -37,6 +39,26 @@ downloadsRouter.post('/direct', async (req, res, next) => {
 downloadsRouter.post('/scan-page', async (req, res, next) => {
   try {
     res.json(ok(await scanPageForFiles(req.body)))
+  } catch (error) {
+    next(error)
+  }
+})
+
+/** Browser handoff: download the completed file to the device making this request. */
+downloadsRouter.get('/file/:gid', async (req, res, next) => {
+  try {
+    const file = await getCompletedDownloadFile(String(req.params.gid || ''))
+    res.setHeader('Content-Type', 'application/octet-stream')
+    res.setHeader('X-Content-Type-Options', 'nosniff')
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8\'\'${encodeURIComponent(file.name)}`)
+    res.setHeader('Content-Length', String(file.size))
+    res.setHeader('Cache-Control', 'private, no-store')
+    const stream = createReadStream(file.absolutePath)
+    stream.on('error', (error) => {
+      if (!res.headersSent) next(error)
+      else res.destroy(error)
+    })
+    stream.pipe(res)
   } catch (error) {
     next(error)
   }
