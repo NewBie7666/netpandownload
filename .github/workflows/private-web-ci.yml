@@ -49,3 +49,4 @@ jobs:
           npm run test:instagram
           npm run test:youtube
           npm run test:private-web
+          npm run test:private-web-api

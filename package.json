@@ -29,7 +29,8 @@
     "test:instagram": "tsx tests/instagram/instagramParser.test.ts",
     "test:youtube": "tsx tests/downloads/youtubeProvider.test.ts",
     "test:private-web": "tsx tests/downloads/privateWebFile.test.ts",
-    "test:all-preserved": "npm run test:direct && npm run test:page-scan && npm run test:page-selection && npm run test:interactive-page && npm run test:file-request && npm run test:dns && npm run test:pause && npm run test:unified-actions && npm run test:contracts && npm run test:instagram && npm run test:youtube && npm run test:private-web"
+    "test:all-preserved": "npm run test:direct && npm run test:page-scan && npm run test:page-selection && npm run test:interactive-page && npm run test:file-request && npm run test:dns && npm run test:pause && npm run test:unified-actions && npm run test:contracts && npm run test:instagram && npm run test:youtube && npm run test:private-web && npm run test:private-web-api",
+    "test:private-web-api": "tsx tests/downloads/privateWebApi.test.ts"
   },
   "dependencies": {
     "@types/qrcode": "^1.5.6",
