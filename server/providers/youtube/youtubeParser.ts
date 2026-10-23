@@ -1,5 +1,8 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
+import { access } from 'node:fs/promises'
+import { constants } from 'node:fs'
+import path from 'node:path'
 import type { QuarkFile } from '../../../shared/types.js'
 import { AppError } from '../../http.js'
 
@@ -78,9 +81,26 @@ export function parseYoutubeInfo(json: string, source: ReturnType<typeof normali
   return { ...source, file, mediaUrl }
 }
 
+async function resolveYtdlpExecutable() {
+  const configured = String(process.env.YTDLP_PATH || '').trim()
+  if (configured) return configured
+  const desktopRoot = String(process.env.QUARK_DESKTOP_ROOT || '').trim()
+  const resourcesPath = String((process as NodeJS.Process & { resourcesPath?: string }).resourcesPath || '').trim()
+  const candidates = [
+    path.resolve(process.cwd(), 'resources', 'yt-dlp', 'win', 'yt-dlp.exe'),
+    desktopRoot ? path.resolve(desktopRoot, 'resources', 'yt-dlp', 'win', 'yt-dlp.exe') : '',
+    resourcesPath ? path.resolve(resourcesPath, 'yt-dlp', 'win', 'yt-dlp.exe') : ''
+  ].filter(Boolean)
+  for (const candidate of candidates) {
+    try { await access(candidate, constants.X_OK); return candidate }
+    catch { /* try next candidate */ }
+  }
+  return process.platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp'
+}
+
 export async function extractYoutubeVideo(input: string): Promise<YoutubeVideo> {
   const source = normalizeYoutubeUrl(input)
-  const executable = String(process.env.YTDLP_PATH || '').trim() || (process.platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp')
+  const executable = await resolveYtdlpExecutable()
   let stdout: string
   try {
     const result = await run(executable, [
