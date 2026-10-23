@@ -58,7 +58,7 @@ async function integrationTest() {
       [3, 'https://scontent.cdninstagram.com/p/a.jpg?key=1', { extension: 'jpg' }],
       [3, 'https://instagram.fna.fbcdn.net/p/b.mp4?key=1', { extension: 'mp4' }]
     ])
-    await writeFile(executable, '#!/usr/bin/env node\\nprocess.stdout.write(' + JSON.stringify(output) + ')\\n')
+    await writeFile(executable, '#!/usr/bin/env node' + String.fromCharCode(10) + 'process.stdout.write(' + JSON.stringify(output) + ')' + String.fromCharCode(10))
     await chmod(executable, 0o755)
     process.env.GALLERY_DL_PATH = executable
     assert.equal(getProvider('instagram').id, 'instagram')
@@ -74,7 +74,7 @@ async function integrationTest() {
     assert.equal(dl.ok, true)
     if (dl.ok) {
       assert.equal(dl.data.name, 'instagram_Test12_02.mp4')
-      assert.match(dl.data.downloadUrl || '', /^https:\\/\\/instagram\\.fna\\.fbcdn\\.net/)
+      assert.ok((dl.data.downloadUrl || '').startsWith('https://instagram.fna.fbcdn.net/'))
     }
     const spoofed = await instagramProvider.getDownload({
       shareId: shared.data.shareId,
