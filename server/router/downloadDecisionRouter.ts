@@ -75,15 +75,11 @@ function decideTool(inference: PlatformInference): DecisionRecommendedTool {
   if (inference.platform === 'quark') {
     return { type: 'desktop', name: 'desktop-downloader', capability: 'multi-thread-download' }
   }
-  if (inference.platform === 'youtube') {
-    return { type: 'local-tool', name: 'external-downloader', capability: 'video-extract' }
-  }
   return { type: 'none', name: 'not-supported', capability: 'unsupported' }
 }
 
 function decideAction(inference: PlatformInference): DecisionAction {
   if (inference.platform === 'bilibili' || inference.platform === 'quark' || inference.platform === 'instagram' || inference.platform === 'youtube') return 'use_desktop_downloader'
-  if (inference.platform === 'youtube') return 'use_local_tool'
   return 'unsupported'
 }
 
