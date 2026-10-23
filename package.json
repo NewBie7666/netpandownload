@@ -26,7 +26,9 @@
     "test:interactive-page": "tsx --test tests/downloads/interactivePageLinks.test.ts",
     "test:file-request": "tsx --test tests/downloads/fileRequestCandidate.test.ts",
     "test:page-selection": "tsx --test tests/downloads/pageFileSelection.test.ts",
-    "test:instagram": "tsx tests/instagram/instagramParser.test.ts"
+    "test:instagram": "tsx tests/instagram/instagramParser.test.ts",
+    "test:youtube": "tsx tests/downloads/youtubeProvider.test.ts",
+    "test:private-web": "tsx tests/downloads/privateWebFile.test.ts"
   },
   "dependencies": {
     "@types/qrcode": "^1.5.6",

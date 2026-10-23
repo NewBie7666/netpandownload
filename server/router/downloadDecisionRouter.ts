@@ -63,6 +63,9 @@ async function enrichWithWebParser(url: string) {
 }
 
 function decideTool(inference: PlatformInference): DecisionRecommendedTool {
+  if (inference.platform === 'youtube') {
+    return { type: 'desktop', name: 'desktop-downloader', capability: 'video-extract' }
+  }
   if (inference.platform === 'instagram') {
     return { type: 'desktop', name: 'desktop-downloader', capability: 'video-extract' }
   }
@@ -79,7 +82,7 @@ function decideTool(inference: PlatformInference): DecisionRecommendedTool {
 }
 
 function decideAction(inference: PlatformInference): DecisionAction {
-  if (inference.platform === 'bilibili' || inference.platform === 'quark' || inference.platform === 'instagram') return 'use_desktop_downloader'
+  if (inference.platform === 'bilibili' || inference.platform === 'quark' || inference.platform === 'instagram' || inference.platform === 'youtube') return 'use_desktop_downloader'
   if (inference.platform === 'youtube') return 'use_local_tool'
   return 'unsupported'
 }
@@ -100,7 +103,7 @@ function buildExplanation(inference: PlatformInference, parsed?: WebParseLike) {
     return `${enriched} 夸克资源建议使用桌面端内置下载器或多线程下载能力处理。`
   }
   if (inference.platform === 'youtube') {
-    return `${enriched} 当前桌面端未内置 YouTube Provider，可使用本机外部下载工具处理。`
+    return `${enriched} 支持使用 yt-dlp 解析单个视频；仅支持已包含音频的可用直链，受版权/地区/登录限制的内容可能无法下载。`
   }
   if (inference.platform === 'instagram') {
     return `${enriched} 单个 Instagram 帖子可在桌面端通过 gallery-dl 解析图片、视频，并使用 aria2 下载。`

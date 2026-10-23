@@ -185,6 +185,14 @@ function mapAppErrorCode(
 ): ProviderErrorCode {
   if (errorCode === 'unsupported_provider') return 'unsupported_provider'
 
+  if (providerId === 'youtube') {
+    if (errorCode === 'dependency_missing') return 'dependency_missing'
+    if (errorCode === 'media_extract_timeout') return 'media_extract_timeout'
+    if (errorCode === 'download_url_missing') return 'download_url_missing'
+    if (errorCode === 'youtube_no_progressive') return 'restricted'
+    return 'parse_failed'
+  }
+
   if (providerId === 'instagram') {
     if (errorCode === 'dependency_missing') return 'dependency_missing'
     if (errorCode === 'media_extract_timeout') return 'media_extract_timeout'

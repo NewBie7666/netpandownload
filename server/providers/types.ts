@@ -5,7 +5,7 @@ import type {
   ShareResult
 } from '../../shared/types.js'
 
-export type ProviderId = 'quark' | 'bilibili' | 'instagram'
+export type ProviderId = 'quark' | 'bilibili' | 'instagram' | 'youtube'
 export type ProviderSource = 'real' | 'mock' | 'fallback' | 'cache'
 export type ProviderStatus = 'ok' | 'error'
 export type ProviderResultKind = 'success' | 'error' | 'fallback'

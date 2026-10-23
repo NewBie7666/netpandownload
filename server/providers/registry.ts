@@ -3,9 +3,10 @@ import { bilibiliProvider } from './bilibiliProvider.js'
 import { getLastExecutionTrace } from './executionTrace.js'
 import { quarkProvider } from './quarkProvider.js'
 import { instagramProvider } from './instagramProvider.js'
+import { youtubeProvider } from './youtubeProvider.js'
 import type { Provider, ProviderId } from './types.js'
 
-const providers: Provider[] = [quarkProvider, bilibiliProvider, instagramProvider]
+const providers: Provider[] = [quarkProvider, bilibiliProvider, instagramProvider, youtubeProvider]
 let matchedProvider: string | undefined
 
 export function listProviders() {

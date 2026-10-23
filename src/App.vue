@@ -232,12 +232,14 @@ function normalizeResourceUrlInput(value: string) {
     return `https://${trimmed}`
   }
   if (/^(www\.)?instagram\.com\//i.test(trimmed)) return `https://${trimmed}`
+  if (/^(?:(?:www|m)\.)?(?:youtube\.com|youtu\.be)\//i.test(trimmed)) return `https://${trimmed}`
   if (/^(www\.)?bilibili\.com\//i.test(trimmed) || /^space\.bilibili\.com\//i.test(trimmed) || /^b23\.tv\//i.test(trimmed)) {
     return `https://${trimmed}`
   }
 
   const matched = trimmed.match(/https?:\/\/pan\.quark\.cn\/s\/[^\s"'<>]+/i)
     || trimmed.match(/https?:\/\/(?:www\.)?instagram\.com\/[^\s"'<>]+/i)
+    || trimmed.match(/https?:\/\/(?:(?:www|m)\.)?(?:youtube\.com|youtu\.be)\/[^\s"'<>]+/i)
     || trimmed.match(/https?:\/\/(?:www\.)?bilibili\.com\/[^\s"'<>]+/i)
     || trimmed.match(/https?:\/\/space\.bilibili\.com\/[^\s"'<>]+/i)
     || trimmed.match(/https?:\/\/b23\.tv\/[^\s"'<>]+/i)
@@ -250,6 +252,11 @@ function validateResourceUrl(value: string) {
 
   try {
     const url = new URL(trimmed)
+    if (/^(?:www\.|m\.)?youtube\.com$/i.test(url.hostname)) {
+      return url.pathname === '/watch' && /^[A-Za-z0-9_-]{11}$/.test(url.searchParams.get('v') || '') || /^\/(shorts|live)\/[A-Za-z0-9_-]{11}\/?$/.test(url.pathname)
+        ? '' : '仅支持 YouTube 单个视频'
+    }
+    if (url.hostname.toLowerCase() === 'youtu.be') return /^\/[A-Za-z0-9_-]{11}\/?$/.test(url.pathname) ? '' : '无效的 YouTube 短链接'
     if (/^(?:www\.|m\.)?instagram\.com$/i.test(url.hostname)) {
       return /^\/(?:p|reel|tv)\/[A-Za-z0-9_-]+\/?$/.test(url.pathname)
         ? '' : '只支持 Instagram 单个 /p/、/reel/ 或 /tv/ 帖子'
@@ -367,7 +374,7 @@ async function loadShare() {
     clearFileSelection()
     mediaFilter.value = 'all'
     pathStack.value = []
-    noticeMessage.value = `已通过 ${result.providerId === 'quark' ? '夸克' : result.providerId === 'instagram' ? 'Instagram' : 'Bilibili'} 获取 ${result.share.files.length} 个文件`
+    noticeMessage.value = `已通过 ${result.providerId === 'quark' ? '夸克' : result.providerId === 'instagram' ? 'Instagram' : result.providerId === 'youtube' ? 'YouTube' : 'Bilibili'} 获取 ${result.share.files.length} 个文件`
   } catch (error) {
     currentProviderId.value = ''
     shareId.value = ''
@@ -928,7 +935,7 @@ onBeforeUnmount(() => {
       <section class="panel parser-panel">
         <div class="form-row">
           <label for="share-url">资源链接</label>
-          <input id="share-url" v-model="shareUrl" type="text" placeholder="夸克、B站或 Instagram 单帖链接" :disabled="loading" />
+          <input id="share-url" v-model="shareUrl" type="text" placeholder="夸克、B站、YouTube 或 Instagram 单帖链接" :disabled="loading" />
         </div>
         <div class="form-row">
           <label for="passcode">提取码</label>

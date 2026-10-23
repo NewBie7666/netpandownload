@@ -37,6 +37,12 @@ async function resolveYtDlpExecutable() {
       // Try next candidate.
     }
   }
+  if (process.platform !== 'win32') {
+    try {
+      await execFileAsync('yt-dlp', ['--version'], { encoding: 'utf8', windowsHide: true, timeout: 4000 })
+      return 'yt-dlp'
+    } catch { /* optional Linux PATH dependency is missing */ }
+  }
   return ''
 }
 
