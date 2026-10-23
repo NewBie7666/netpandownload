@@ -1,4 +1,9 @@
 import assert from 'node:assert/strict'
+import { mkdtemp, writeFile, chmod, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
+import { instagramProvider } from '../../server/providers/instagramProvider.js'
+import { getProvider } from '../../server/providers/registry.js'
 import { isInstagramPostUrl, normalizeInstagramPost, parseInstagramGalleryJson } from '../../server/providers/instagram/galleryParser.js'
 
 const normalized = normalizeInstagramPost('https://www.instagram.com/p/Abc_123/?igsh=foo')
@@ -42,3 +47,46 @@ assert.throws(() => parseInstagramGalleryJson(
 assert.throws(() => parseInstagramGalleryJson('[]', normalized))
 assert.throws(() => parseInstagramGalleryJson('not json', normalized))
 console.log('Instagram single post parser tests passed')
+
+async function integrationTest() {
+  const dir = await mkdtemp(path.join(tmpdir(), 'netpan-instagram-test-'))
+  const executable = path.join(dir, 'gallery-dl')
+  const previous = process.env.GALLERY_DL_PATH
+  try {
+    const output = JSON.stringify([
+      [1, { category: 'instagram' }],
+      [3, 'https://scontent.cdninstagram.com/p/a.jpg?key=1', { extension: 'jpg' }],
+      [3, 'https://instagram.fna.fbcdn.net/p/b.mp4?key=1', { extension: 'mp4' }]
+    ])
+    await writeFile(executable, '#!/usr/bin/env node\\nprocess.stdout.write(' + JSON.stringify(output) + ')\\n')
+    await chmod(executable, 0o755)
+    process.env.GALLERY_DL_PATH = executable
+    assert.equal(getProvider('instagram').id, 'instagram')
+    const shared = await instagramProvider.resolveShare({ shareUrl: 'https://www.instagram.com/p/Test12/' })
+    assert.equal(shared.ok, true)
+    if (!shared.ok) return
+    assert.equal(shared.data.files.length, 2)
+    const dl = await instagramProvider.getDownload({
+      shareId: shared.data.shareId,
+      stoken: shared.data.stoken,
+      file: shared.data.files[1]
+    })
+    assert.equal(dl.ok, true)
+    if (dl.ok) {
+      assert.equal(dl.data.name, 'instagram_Test12_02.mp4')
+      assert.match(dl.data.downloadUrl || '', /^https:\\/\\/instagram\\.fna\\.fbcdn\\.net/)
+    }
+    const spoofed = await instagramProvider.getDownload({
+      shareId: shared.data.shareId,
+      stoken: shared.data.stoken,
+      file: { ...shared.data.files[0], fid: 'unrelated' }
+    })
+    assert.equal(spoofed.ok, false)
+  } finally {
+    if (previous === undefined) delete process.env.GALLERY_DL_PATH
+    else process.env.GALLERY_DL_PATH = previous
+    await rm(dir, { recursive: true, force: true })
+  }
+}
+await integrationTest()
+console.log('Instagram provider integration tests passed')

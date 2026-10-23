@@ -167,3 +167,34 @@ Responses wrap the existing contracts:
 - Provider main entry is available at `/api/providers/resolve`, `/api/providers/list`, and `/api/providers/download`
 - Current download behavior supports both browser delivery and embedded aria2 delivery
 - Electron manages the local desktop shell, backend lifecycle, and aria2 sidecar lifecycle
+
+## Instagram single-post downloads (desktop, experimental)
+
+The Instagram Provider supports individual `https://www.instagram.com/p/<shortcode>/`,
+`/reel/<shortcode>/`, and `/tv/<shortcode>/` links. It extracts individual
+images and videos from one post or carousel using **gallery-dl** and lists
+them in the existing file selection UI (All / Images / Videos). Selected
+media are handed to the existing aria2 task manager for pause, resume and deletion.
+
+**Installation:** Install the official [gallery-dl](https://github.com/mikf/gallery-dl)
+executable, then put `gallery-dl.exe` in
+`resources/gallery-dl/win/gallery-dl.exe` before building a Windows desktop
+package; or set `GALLERY_DL_PATH` to a local executable. On Linux/macOS, install
+`gallery-dl` on PATH. Restart the application after changing environment variables.
+The executable is **not** included in source control or downloaded automatically.
+
+If Instagram requires a login, optionally set `INSTAGRAM_COOKIES_FILE` to a
+locally stored Netscape-format cookies file that you control. No passwords,
+Cookies, or account credentials are accepted by the public API; never put
+Cookies in a GitHub issue or PR. Public posts may also be restricted or rate limited.
+
+The download links are short-lived and may fail with HTTP 403 after expiration:
+re-parse the post and retry if needed. Browser download links are not guaranteed
+to work when Instagram requires request headers; use the built-in desktop aria2
+downloader for the intended flow. No Stories, private material without access,
+profile crawling, DRM circumvention, or mass account scraping.
+
+Tests: `npx tsx tests/instagram/instagramParser.test.ts` (fixture-only
+and local mock-executable integration test). This does **not** validate
+Instagram's live service: manually test an accessible photo post, Reel
+and mixed carousel before release.

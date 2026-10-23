@@ -140,16 +140,16 @@ function candidateBinaries() {
   const resourcesPath = String((process as NodeJS.Process & { resourcesPath?: string }).resourcesPath || '').trim()
   const desktopRoot = String(process.env.QUARK_DESKTOP_ROOT || '').trim()
   const filename = process.platform === 'win32' ? 'gallery-dl.exe' : 'gallery-dl'
-  return [...new Set([
+  return { paths: [...new Set([
     configured,
     path.resolve(process.cwd(), 'resources', 'gallery-dl', 'win', 'gallery-dl.exe'),
     resourcesPath && path.resolve(resourcesPath, 'gallery-dl', 'win', 'gallery-dl.exe'),
     desktopRoot && path.resolve(desktopRoot, 'resources', 'gallery-dl', 'win', 'gallery-dl.exe')
-  ].filter(Boolean))], filename
+  ].filter(Boolean))], fallback: filename }
 }
 
 async function findBinary() {
-  const [paths, fallback] = candidateBinaries()
+  const { paths, fallback } = candidateBinaries()
   for (const candidate of paths) {
     try {
       await access(candidate, constants.X_OK)
@@ -174,7 +174,7 @@ export async function extractInstagramPost(input: string): Promise<InstagramPost
     })
     stdout = response.stdout
   } catch (error) {
-    const ex = error as NodeJS.ErrnoException
+    const ex = error as NodeJS.ErrnoException & { killed?: boolean }
     if (ex.code === 'ENOENT') {
       throw new AppError('dependency_missing', '未找到 gallery-dl：请安装它或设置 GALLERY_DL_PATH')
     }
