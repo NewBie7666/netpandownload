@@ -1,0 +1,51 @@
+name: Unified downloader - regression and private web
+
+on:
+  push:
+    branches:
+      - feat/private-web-unified-download-20261023
+  pull_request:
+    paths:
+      - 'server/**'
+      - 'src/**'
+      - 'shared/**'
+      - 'electron/**'
+      - 'tests/**'
+      - 'package.json'
+      - '.github/workflows/private-web-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Dependencies
+        run: npm ci --ignore-scripts
+      - name: Client and server build
+        run: npm run build
+      - name: Electron type check
+        run: npm run build:electron
+      - name: Legacy HTTP/direct link regressions
+        run: |
+          npm run test:direct
+          npm run test:page-scan
+          npm run test:page-selection
+          npm run test:interactive-page
+          npm run test:file-request
+          npm run test:dns
+          npm run test:pause
+          npm run test:unified-actions
+          npm run test:contracts
+      - name: Instagram, YouTube and private web regressions
+        run: |
+          npm run test:instagram
+          npm run test:youtube
+          npm run test:private-web
