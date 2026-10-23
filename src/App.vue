@@ -87,6 +87,7 @@ const downloaderDefaultDir = ref('')
 const taskActionGid = ref('')
 const deleteTaskDialog = ref<DownloadTask | null>(null)
 const selectedFileIds = ref<string[]>([])
+const mediaFilter = ref<'all' | 'image' | 'video'>('all')
 const batchDownloadLoading = ref(false)
 const batchDownloadDone = ref(0)
 const batchDownloadTotal = ref(0)
@@ -103,9 +104,16 @@ let taskPollTimer: number | undefined
 const hasFiles = computed(() => files.value.length > 0)
 const canGoBack = computed(() => pathStack.value.length > 0)
 const selectableFiles = computed(() => files.value.filter((file) => !file.isDir))
+const visibleFiles = computed(() => {
+  if (currentProviderId.value !== 'instagram' || mediaFilter.value === 'all') return files.value
+  return files.value.filter((file) => mediaFilter.value === 'image'
+    ? /\.(jpg|jpeg|png|webp|gif)$/i.test(file.name)
+    : /\.(mp4|mov|webm)$/i.test(file.name))
+})
+const visibleSelectableFiles = computed(() => visibleFiles.value.filter((file) => !file.isDir))
 const selectedFiles = computed(() => selectableFiles.value.filter((file) => selectedFileIds.value.includes(file.fid)))
 const allSelectableSelected = computed(
-  () => selectableFiles.value.length > 0 && selectableFiles.value.every((file) => selectedFileIds.value.includes(file.fid))
+  () => visibleSelectableFiles.value.length > 0 && visibleSelectableFiles.value.every((file) => selectedFileIds.value.includes(file.fid))
 )
 const batchDownloadProgressText = computed(() => {
   if (!batchDownloadLoading.value || !batchDownloadTotal.value) return ''
@@ -174,7 +182,12 @@ function toggleFileSelection(file: QuarkFile) {
 
 function toggleSelectAllFiles() {
   if (batchDownloadLoading.value) return
-  selectedFileIds.value = allSelectableSelected.value ? [] : selectableFiles.value.map((file) => file.fid)
+  const ids = new Set(selectedFileIds.value)
+  for (const file of visibleSelectableFiles.value) {
+    if (allSelectableSelected.value) ids.delete(file.fid)
+    else ids.add(file.fid)
+  }
+  selectedFileIds.value = [...ids]
 }
 
 function normalizeResourceUrlInput(value: string) {
@@ -184,11 +197,13 @@ function normalizeResourceUrlInput(value: string) {
   if (/^pan\.quark\.cn\/s\//i.test(trimmed)) {
     return `https://${trimmed}`
   }
+  if (/^(www\.)?instagram\.com\//i.test(trimmed)) return `https://${trimmed}`
   if (/^(www\.)?bilibili\.com\//i.test(trimmed) || /^space\.bilibili\.com\//i.test(trimmed) || /^b23\.tv\//i.test(trimmed)) {
     return `https://${trimmed}`
   }
 
   const matched = trimmed.match(/https?:\/\/pan\.quark\.cn\/s\/[^\s"'<>]+/i)
+    || trimmed.match(/https?:\/\/(?:www\.)?instagram\.com\/[^\s"'<>]+/i)
     || trimmed.match(/https?:\/\/(?:www\.)?bilibili\.com\/[^\s"'<>]+/i)
     || trimmed.match(/https?:\/\/space\.bilibili\.com\/[^\s"'<>]+/i)
     || trimmed.match(/https?:\/\/b23\.tv\/[^\s"'<>]+/i)
@@ -201,6 +216,10 @@ function validateResourceUrl(value: string) {
 
   try {
     const url = new URL(trimmed)
+    if (/^(?:www\.|m\.)?instagram\.com$/i.test(url.hostname)) {
+      return /^\/(?:p|reel|tv)\/[A-Za-z0-9_-]+\/?$/.test(url.pathname)
+        ? '' : '仅支持 Instagram 单个 /p/、/reel/ 或 /tv/ 帖子链接'
+    }
     if (/pan\.quark\.cn$/i.test(url.hostname)) {
       if (!/\/s\/[^/?#]+/.test(url.pathname)) {
         return '未识别到夸克分享 ID'
@@ -312,8 +331,9 @@ async function loadShare() {
     stoken.value = result.share.stoken
     files.value = result.share.files
     clearFileSelection()
+    mediaFilter.value = 'all'
     pathStack.value = []
-    noticeMessage.value = `已通过 ${result.providerId === 'quark' ? '夸克' : 'Bilibili'} 获取 ${result.share.files.length} 个文件`
+    noticeMessage.value = `已通过 ${result.providerId === 'quark' ? '夸克' : result.providerId === 'instagram' ? 'Instagram' : 'Bilibili'} 获取 ${result.share.files.length} 个文件`
   } catch (error) {
     currentProviderId.value = ''
     shareId.value = ''
@@ -738,11 +758,11 @@ onBeforeUnmount(() => {
       <section class="panel parser-panel">
         <div class="form-row">
           <label for="share-url">资源链接</label>
-          <input id="share-url" v-model="shareUrl" type="text" placeholder="夸克链接、B 站视频或 B 站空间搜索链接" :disabled="loading" />
+          <input id="share-url" v-model="shareUrl" type="text" placeholder="夸克、B站或 Instagram 单帖链接" :disabled="loading" />
         </div>
         <div class="form-row">
           <label for="passcode">提取码</label>
-          <input id="passcode" v-model="passcode" type="text" placeholder="夸克链接可填；B 站链接无需填写" :disabled="loading" />
+          <input id="passcode" v-model="passcode" type="text" placeholder="仅夸克需要提取码" :disabled="loading" />
         </div>
         <div class="actions">
           <button class="primary-button" type="button" :disabled="loading" @click="loadShare">
@@ -802,7 +822,12 @@ onBeforeUnmount(() => {
             <p v-if="batchDownloadProgressText" class="path-text">{{ batchDownloadProgressText }}</p>
           </div>
           <div class="task-header-actions">
-            <button class="ghost-button" type="button" :disabled="!selectableFiles.length || batchDownloadLoading" @click="toggleSelectAllFiles">
+            <label v-if="currentProviderId === 'instagram'" class="path-text">显示：
+              <select v-model="mediaFilter" aria-label="筛选媒体类型">
+                <option value="all">全部</option><option value="image">图片</option><option value="video">视频</option>
+              </select>
+            </label>
+            <button class="ghost-button" type="button" :disabled="!visibleSelectableFiles.length || batchDownloadLoading" @click="toggleSelectAllFiles">
               {{ allSelectableSelected ? '取消全选' : '全选' }}
             </button>
             <button class="primary-button" type="button" :disabled="!selectedFiles.length || batchDownloadLoading || !downloaderEnabled" @click="downloadSelectedFiles">
@@ -816,7 +841,7 @@ onBeforeUnmount(() => {
           <table>
             <thead>
               <tr>
-                <th><input type="checkbox" :checked="allSelectableSelected" :disabled="!selectableFiles.length || batchDownloadLoading" aria-label="全选当前列表文件" @change="toggleSelectAllFiles" /></th>
+                <th><input type="checkbox" :checked="allSelectableSelected" :disabled="!visibleSelectableFiles.length || batchDownloadLoading" aria-label="全选当前列表文件" @change="toggleSelectAllFiles" /></th>
                 <th>名称</th>
                 <th>大小</th>
                 <th>类型</th>
@@ -824,7 +849,7 @@ onBeforeUnmount(() => {
               </tr>
             </thead>
             <tbody>
-              <tr v-for="file in files" :key="file.fid">
+              <tr v-for="file in visibleFiles" :key="file.fid">
                 <td><input type="checkbox" :checked="isFileSelected(file)" :disabled="file.isDir || batchDownloadLoading" :aria-label="`选择 ${file.name}`" @change="toggleFileSelection(file)" /></td>
                 <td><span class="file-name" :title="file.name"><span class="file-icon">{{ file.isDir ? '文件夹' : '文件' }}</span> {{ file.name }}</span></td>
                 <td>{{ formatSize(file.size) }}</td>
@@ -838,7 +863,7 @@ onBeforeUnmount(() => {
                   </button>
                 </td>
               </tr>
-              <tr v-if="!files.length">
+              <tr v-if="!visibleFiles.length">
                 <td class="empty-cell" colspan="5">暂无文件</td>
               </tr>
             </tbody>
