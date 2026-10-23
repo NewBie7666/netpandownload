@@ -142,8 +142,16 @@ function ensureDownloadUrlAllowed(rawUrl: string, normalizedUrl: URL) {
 
 function getDownloadRequestHeaders(normalizedUrl: URL) {
   const hostname = normalizedUrl.hostname.toLowerCase()
-  if (!hostname.endsWith('bilivideo.com')) {
+  const instagramMedia = ['cdninstagram.com', 'fbcdn.net'].some((host) => hostname === host || hostname.endsWith('.' + host))
+  if (!hostname.endsWith('bilivideo.com') && !instagramMedia) {
     return []
+  }
+
+  if (instagramMedia) {
+    return [
+      'Referer: https://www.instagram.com/',
+      'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126.0.0.0 Safari/537.36'
+    ]
   }
 
   return [

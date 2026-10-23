@@ -5,6 +5,7 @@ const commands = [
   ['npm', ['run', 'build:electron'], 'Electron TypeScript check'],
   ['node', ['scripts/release/buildDeterminismCheck.mjs'], 'Build determinism check'],
   ['npx', ['tsx', 'server/providers/bilibili/resolver/resolver.test.ts'], 'Bilibili resolver regression test'],
+  ['npx', ['tsx', 'tests/instagram/instagramParser.test.ts'], 'Instagram parser regression test'],
   ['npx', ['tsx', 'tests/release/failureRegression.test.ts'], 'Release failure regression test'],
   ['npx', ['tsx', 'tests/release/contractRegression.test.ts'], 'Release contract regression test'],
   ['npx', ['tsx', 'scripts/stability/runLongSession.ts', '--mock'], 'Long-run stability mock test'],
