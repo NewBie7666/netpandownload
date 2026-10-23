@@ -35,7 +35,7 @@ export interface DownloadResult {
   cached: boolean
 }
 
-export type ProviderId = 'quark' | 'bilibili'
+export type ProviderId = 'quark' | 'bilibili' | 'instagram'
 
 export interface ProviderShareResult {
   providerId: ProviderId

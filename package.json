@@ -25,7 +25,8 @@
     "test:dns": "tsx --test tests/downloads/safeDnsLookup.test.ts",
     "test:interactive-page": "tsx --test tests/downloads/interactivePageLinks.test.ts",
     "test:file-request": "tsx --test tests/downloads/fileRequestCandidate.test.ts",
-    "test:page-selection": "tsx --test tests/downloads/pageFileSelection.test.ts"
+    "test:page-selection": "tsx --test tests/downloads/pageFileSelection.test.ts",
+    "test:instagram": "tsx tests/instagram/instagramParser.test.ts"
   },
   "dependencies": {
     "@types/qrcode": "^1.5.6",
@@ -74,6 +75,13 @@
       {
         "from": "resources/yt-dlp",
         "to": "yt-dlp",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "resources/gallery-dl",
+        "to": "gallery-dl",
         "filter": [
           "**/*"
         ]

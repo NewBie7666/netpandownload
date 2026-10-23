@@ -19,6 +19,7 @@ function normalizeInput(input: string) {
   if (/^(www\.)?bilibili\.com\//i.test(trimmed)) return `https://${trimmed}`
   if (/^space\.bilibili\.com\//i.test(trimmed)) return `https://${trimmed}`
   if (/^b23\.tv\//i.test(trimmed)) return `https://${trimmed}`
+  if (/^(www\.)?instagram\.com\//i.test(trimmed)) return `https://${trimmed}`
   return trimmed
 }
 
@@ -100,9 +101,9 @@ export function detectPlatform(input: string): PlatformInference {
       return {
         normalizedUrl,
         platform: 'instagram',
-        resourceType: 'video',
+        resourceType: /^\/p\//i.test(url.pathname) ? 'file' : 'video',
         baseRisk: 'high',
-        baseFeasible: false,
+        baseFeasible: /^\/(?:p|reel|tv)\/[A-Za-z0-9_-]+\/?$/.test(url.pathname),
         confidence: 0.62
       }
     }

@@ -144,6 +144,8 @@ function ensureDownloadUrlAllowed(rawUrl: string, normalizedUrl: URL) {
 
 function getDownloadRequestHeaders(normalizedUrl: URL) {
   const hostname = normalizedUrl.hostname.toLowerCase()
+  const instagram = ['cdninstagram.com', 'fbcdn.net'].some((host) => hostname === host || hostname.endsWith('.' + host))
+  if (instagram) return ['Referer: https://www.instagram.com/', 'User-Agent: Mozilla/5.0 (compatible; NetPanDownload/1.0)']
   if (!hostname.endsWith('bilivideo.com')) {
     return []
   }
