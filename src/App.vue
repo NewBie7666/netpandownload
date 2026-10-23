@@ -1091,7 +1091,7 @@ onBeforeUnmount(() => {
               </button>
             </div>
           </form>
-          <div class="page-scan-interactive-actions">
+          <div v-if="desktopAvailable" class="page-scan-interactive-actions">
             <button class="ghost-button" type="button" :disabled="pageScanLoading || pageBatchLoading" @click="openInteractivePage">
               打开交互网页
             </button>
@@ -1100,6 +1100,7 @@ onBeforeUnmount(() => {
             </button>
             <span class="path-text">适用于需要点击“详情/分享”后才显示链接的网站；先在弹出的网页里手动展开，再返回扫描。</span>
           </div>
+          <p v-if="privateWeb" class="path-text">网页模式保留静态扫描及类型筛选；需要手动点击弹窗后捕获链接时，请使用原 Windows Electron 版。</p>
           <p v-if="pageScanError" class="page-scan-error" role="alert">{{ pageScanError }}</p>
           <p v-if="pageScanMessage" class="page-scan-message" role="status">{{ pageScanMessage }}</p>
           <p v-if="pageScanTruncated" class="path-text">匹配项超过 200 条，仅展示前 200 条。</p>
