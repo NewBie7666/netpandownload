@@ -68,10 +68,15 @@ def unpack(archive, target, sha, checksum):
             require(m.isfile() and not m.name.startswith('/') and '..' not in name.parts and '\\' not in m.name and m.name == name.as_posix() and m.name not in seen, 'unsafe archive entry')
             seen.add(m.name)
         require(shutil.disk_usage(ROOT).free > sum(m.size for m in members) + 512 * 1024**2, 'insufficient release disk space')
-        target.mkdir(mode=0o750)
+        target.mkdir(mode=0o2750)
+        target.chmod(0o2750)
         for m in members:
             dest = target / m.name
             dest.parent.mkdir(parents=True, exist_ok=True)
+            for parent in dest.parents:
+                if parent == target.parent:
+                    break
+                parent.chmod(0o2750)
             with tf.extractfile(m) as source, dest.open('xb') as output:
                 shutil.copyfileobj(source, output, 1024 * 1024)
             dest.chmod(0o755 if m.mode & 0o111 else 0o644)
@@ -174,6 +179,7 @@ def undo(sha):
         print(f'ROLLBACK stopped first release {sha}', flush=True)
 
 def main():
+    os.umask(0o027)
     p = argparse.ArgumentParser()
     p.add_argument('action', choices=['deploy', 'rollback', 'undo', 'verify-current'])
     p.add_argument('--sha')

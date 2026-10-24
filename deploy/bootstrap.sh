@@ -42,6 +42,7 @@ getent group netpan-release >/dev/null || groupadd --system netpan-release
 useradd --system --gid netpan --home-dir /srv/netpandownload/data --shell /usr/sbin/nologin netpan
 usermod -a -G netpan-release netpan
 useradd --system --user-group --create-home --home-dir /var/lib/netpan-deploy --shell /bin/bash netpan-deploy
+usermod -a -G netpan-release netpan-deploy
 install -d -o netpan-deploy -g netpan-release -m 2750 /opt/netpandownload /opt/netpandownload/{releases,.staging,logs}
 chown root:netpan /srv/netpandownload
 chmod 0750 /srv/netpandownload

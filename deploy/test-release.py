@@ -3,6 +3,7 @@ import hashlib
 import importlib.util
 import io
 import json
+import os
 from pathlib import Path
 import tarfile
 import tempfile
@@ -132,6 +133,17 @@ class ReleaseTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, 'different current'):
             r.undo('b' * 40)
         self.assertEqual(r.current_sha(), 'a' * 40)
+
+    def test_release_group_can_read_with_restrictive_login_umask(self):
+        previous = os.umask(0o077)
+        try:
+            r.deploy(*self.artifact('a'))
+        finally:
+            os.umask(previous)
+        release = r.ROOT / 'releases' / ('a' * 40)
+        for directory in (release, release / 'node_modules', release / 'node_modules/express'):
+            self.assertEqual(directory.stat().st_mode & 0o070, 0o050)
+        self.assertEqual((release / 'dist-server/server/index.js').stat().st_mode & 0o040, 0o040)
 
     def test_retention_preserves_current_previous_and_caps_old_releases(self):
         for char in 'abcdef01':
