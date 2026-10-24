@@ -30,7 +30,9 @@
     "test:youtube": "tsx tests/downloads/youtubeProvider.test.ts",
     "test:private-web": "tsx tests/downloads/privateWebFile.test.ts",
     "test:all-preserved": "npm run test:direct && npm run test:page-scan && npm run test:page-selection && npm run test:interactive-page && npm run test:file-request && npm run test:dns && npm run test:pause && npm run test:unified-actions && npm run test:contracts && npm run test:instagram && npm run test:youtube && npm run test:private-web && npm run test:private-web-api",
-    "test:private-web-api": "tsx tests/downloads/privateWebApi.test.ts"
+    "test:private-web-api": "tsx tests/downloads/privateWebApi.test.ts",
+    "test:testbot": "node tests/testbot/run.mjs",
+    "test:browser": "playwright test"
   },
   "dependencies": {
     "@types/qrcode": "^1.5.6",
@@ -48,12 +50,13 @@
     "vue-tsc": "^2.2.0"
   },
   "devDependencies": {
+    "@playwright/test": "1.64.1",
     "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.10.5",
     "cross-env": "^7.0.3",
     "electron": "^31.7.7",
     "electron-builder": "^24.13.3",
-    "@types/express": "^5.0.0",
-    "@types/node": "^22.10.5",
     "wait-on": "^7.2.0"
   },
   "build": {

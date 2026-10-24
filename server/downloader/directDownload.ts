@@ -57,7 +57,7 @@ function parseDirectUrl(value: unknown): URL {
   return url
 }
 
-function parseFileName(value: unknown): string | undefined {
+export function validateDownloadFileName(value: unknown): string | undefined {
   if (value === undefined || value === null || value === '') return undefined
   if (typeof value !== 'string') {
     throw new AppError('invalid_direct_filename', '文件名必须是字符串')
@@ -85,7 +85,7 @@ export async function validateDirectDownloadInput(
   }
   const request = input as AddDirectDownloadRequest
   const url = parseDirectUrl(request.url)
-  const fileName = parseFileName(request.fileName)
+  const fileName = validateDownloadFileName(request.fileName)
 
   const hostname = url.hostname.replace(/^\[|\]$/g, '')
   if (!isIP(hostname)) {

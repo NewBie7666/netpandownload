@@ -140,11 +140,12 @@ function candidateBinaries() {
   const resourcesPath = String((process as NodeJS.Process & { resourcesPath?: string }).resourcesPath || '').trim()
   const desktopRoot = String(process.env.QUARK_DESKTOP_ROOT || '').trim()
   const filename = process.platform === 'win32' ? 'gallery-dl.exe' : 'gallery-dl'
+  const resourceRelativePath = process.platform === 'win32' ? path.join('win', 'gallery-dl.exe') : path.join('linux', 'gallery-dl')
   return { paths: [...new Set([
     configured,
-    path.resolve(process.cwd(), 'resources', 'gallery-dl', 'win', 'gallery-dl.exe'),
-    resourcesPath && path.resolve(resourcesPath, 'gallery-dl', 'win', 'gallery-dl.exe'),
-    desktopRoot && path.resolve(desktopRoot, 'resources', 'gallery-dl', 'win', 'gallery-dl.exe')
+    path.resolve(process.cwd(), 'resources', 'gallery-dl', resourceRelativePath),
+    resourcesPath && path.resolve(resourcesPath, 'gallery-dl', resourceRelativePath),
+    desktopRoot && path.resolve(desktopRoot, 'resources', 'gallery-dl', resourceRelativePath)
   ].filter(Boolean))], fallback: filename }
 }
 

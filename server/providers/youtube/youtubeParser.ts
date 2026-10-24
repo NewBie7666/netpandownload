@@ -54,10 +54,13 @@ function getDownloadableFormat(info: Record<string, unknown>) {
     const format = item as Record<string, unknown>
     if (typeof format.url !== 'string' || format.vcodec === 'none' || format.acodec === 'none') continue
     if (!format.vcodec || !format.acodec) continue
+    const extension = String(format.ext || '')
+    if (!['mp4', 'webm'].includes(extension)) continue
+    if (format.protocol && format.protocol !== 'https') continue
     let parsed: URL
     try { parsed = new URL(format.url) } catch { continue }
     if (parsed.protocol !== 'https:' || !(/^(?:[a-z0-9-]+\.)*googlevideo\.com$/i.test(parsed.hostname))) continue
-    return format.url
+    return { url: format.url, extension }
   }
   throw new AppError('youtube_no_progressive', '没有可用的含音频 MP4 视频直链；本版本暂不合并分离音视频')
 }
@@ -70,15 +73,15 @@ export function parseYoutubeInfo(json: string, source: ReturnType<typeof normali
     throw new AppError('youtube_parse_failed', '不支持播放列表结果')
   }
   if (info.id !== source.id) throw new AppError('youtube_parse_failed', '解析视频 ID 与输入不一致')
-  const mediaUrl = getDownloadableFormat(info)
+  const media = getDownloadableFormat(info)
   const file: QuarkFile = {
     fid: source.shareId,
-    name: `youtube_${source.id}.mp4`,
+    name: `youtube_${source.id}.${media.extension}`,
     isDir: false,
     size: 0,
     createdAt: ''
   }
-  return { ...source, file, mediaUrl }
+  return { ...source, file, mediaUrl: media.url }
 }
 
 async function resolveYtdlpExecutable() {
@@ -86,10 +89,11 @@ async function resolveYtdlpExecutable() {
   if (configured) return configured
   const desktopRoot = String(process.env.QUARK_DESKTOP_ROOT || '').trim()
   const resourcesPath = String((process as NodeJS.Process & { resourcesPath?: string }).resourcesPath || '').trim()
+  const resourceRelativePath = process.platform === 'win32' ? path.join('win', 'yt-dlp.exe') : path.join('linux', 'yt-dlp')
   const candidates = [
-    path.resolve(process.cwd(), 'resources', 'yt-dlp', 'win', 'yt-dlp.exe'),
-    desktopRoot ? path.resolve(desktopRoot, 'resources', 'yt-dlp', 'win', 'yt-dlp.exe') : '',
-    resourcesPath ? path.resolve(resourcesPath, 'yt-dlp', 'win', 'yt-dlp.exe') : ''
+    path.resolve(process.cwd(), 'resources', 'yt-dlp', resourceRelativePath),
+    desktopRoot ? path.resolve(desktopRoot, 'resources', 'yt-dlp', resourceRelativePath) : '',
+    resourcesPath ? path.resolve(resourcesPath, 'yt-dlp', resourceRelativePath) : ''
   ].filter(Boolean)
   for (const candidate of candidates) {
     try { await access(candidate, constants.X_OK); return candidate }

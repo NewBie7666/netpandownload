@@ -1162,7 +1162,7 @@ onBeforeUnmount(() => {
             <tbody>
               <tr v-for="task in downloadTasks" :key="task.gid">
                 <td>{{ task.fileName }}</td>
-                <td>{{ formatTaskStatus(task.status) }}</td>
+                <td>{{ formatTaskStatus(task.status) }}<p v-if="task.failureReason" class="page-scan-error">{{ task.failureReason }}</p></td>
                 <td>{{ task.progress }}%</td>
                 <td>{{ formatSpeed(task.downloadSpeed) }}</td>
                 <td>{{ formatSize(task.completedLength) }} / {{ formatSize(task.totalLength) }}</td>

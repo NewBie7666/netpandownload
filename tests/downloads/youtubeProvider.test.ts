@@ -16,6 +16,29 @@ for (const url of ['https://youtube.com/channel/test','https://youtube.com/playl
 const media = 'https://r2---sn-test.googlevideo.com/videoplayback?token=abc'
 const info = { id: 'AbCdEf12345', ext: 'mp4', requested_downloads: [{ url: media, ext: 'mp4', vcodec: 'avc1', acodec: 'mp4a' }] }
 assert.equal(parseYoutubeInfo(JSON.stringify(info), good).mediaUrl, media)
+const webmMedia = 'https://r2---sn-test.googlevideo.com/videoplayback?token=webm'
+const webmInfo = {
+  id: 'AbCdEf12345',
+  ext: 'webm',
+  requested_downloads: [{
+    url: webmMedia, ext: 'webm', protocol: 'https', vcodec: 'vp9', acodec: 'opus'
+  }]
+}
+const webm = parseYoutubeInfo(JSON.stringify(webmInfo), good)
+assert.equal(webm.mediaUrl, webmMedia)
+assert.equal(webm.file.name, 'youtube_AbCdEf12345.webm')
+const rejectsNonProgressive = (format: Record<string, unknown>) => {
+  assert.throws(
+    () => parseYoutubeInfo(JSON.stringify({ id: good.id, requested_downloads: [format] }), good),
+    (error: unknown) => Boolean(error && typeof error === 'object' && 'error' in error && error.error === 'youtube_no_progressive')
+  )
+}
+rejectsNonProgressive({
+  url: 'https://r2---sn-test.googlevideo.com/master.m3u8', ext: 'mp4', protocol: 'm3u8', vcodec: 'avc1', acodec: 'mp4a'
+})
+rejectsNonProgressive({
+  url: 'https://r2---sn-test.googlevideo.com/manifest.mpd', ext: 'mp4', protocol: 'http_dash_segments', vcodec: 'avc1', acodec: 'mp4a'
+})
 assert.throws(() => parseYoutubeInfo(JSON.stringify({ id: 'Other123456', requested_downloads: info.requested_downloads }), good))
 assert.throws(() => parseYoutubeInfo(JSON.stringify({ id: good.id, requested_downloads: [{ url: 'http://localhost/a', vcodec: 'avc1', acodec: 'mp4a' }] }), good))
 const dir = await mkdtemp(path.join(os.tmpdir(), 'netpan-youtube-'))

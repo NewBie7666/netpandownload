@@ -1,0 +1,3 @@
+# Deployment scripts and systemd files are consumed on Linux.
+deploy/** text eol=lf
+.github/workflows/** text eol=lf

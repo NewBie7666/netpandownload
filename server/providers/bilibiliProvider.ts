@@ -182,6 +182,22 @@ export const bilibiliProvider: Provider = {
       const normalized = normalizeProviderError('bilibili', error, 'resolve')
       const insight = getFailureInsight(error, 'resolve')
       const diagnosis = diagnoseBilibiliFailure([insight], getTrace(traceContext.traceId), getCachedCookieHealth())
+      if (process.env.NETPAN_PRIVATE_WEB === 'true') {
+        return providerError(
+          'bilibili',
+          normalized.code,
+          normalized.message,
+          normalized.recoverable,
+          undefined,
+          'real_resolution_failed',
+          {
+            error: normalized.code,
+            traceId: traceContext.traceId,
+            diagnosis,
+            health: diagnosis.health
+          }
+        )
+      }
       return buildFallback(
         'bilibili',
         'single_video_mode',
@@ -202,6 +218,9 @@ export const bilibiliProvider: Provider = {
     startTrace(traceContext)
     const cached = await getOrRefreshCacheEntry(input.shareId, traceContext)
     if (!cached) {
+      if (process.env.NETPAN_PRIVATE_WEB === 'true') {
+        return providerError('bilibili', 'episode_cache_miss', 'B站选集缓存已过期，请重新解析资源后重试', true)
+      }
       return buildFallback(
         'bilibili',
         'episode_cache_miss',

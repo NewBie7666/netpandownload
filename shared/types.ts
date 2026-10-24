@@ -91,6 +91,7 @@ export type DownloadTaskStatus =
   | 'removed'
 
 export interface DownloadTask {
+  failureReason?: string
   gid: string
   fileName: string
   status: DownloadTaskStatus
