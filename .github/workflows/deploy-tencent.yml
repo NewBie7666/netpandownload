@@ -73,6 +73,7 @@ jobs:
           npm prune --omit=dev --ignore-scripts
           npm audit --omit=dev --audit-level=high
           python3 deploy/package-release.py --sha "$GITHUB_SHA"
+          python3 deploy/verify-package.py --sha "$GITHUB_SHA" --archive ".release/netpan-$GITHUB_SHA.tar.gz"
           read -r checksum archive < .release/archive.sha256
           [[ "$checksum" =~ ^[0-9a-f]{64}$ ]]
           echo "checksum=$checksum" >> "$GITHUB_OUTPUT"

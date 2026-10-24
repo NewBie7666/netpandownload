@@ -61,6 +61,7 @@ jobs:
           npm prune --omit=dev --ignore-scripts
           python3 deploy/package-release.py --sha "$GITHUB_SHA"
           (cd .release && sha256sum -c archive.sha256)
+          python3 deploy/verify-package.py --sha "$GITHUB_SHA" --archive ".release/netpan-$GITHUB_SHA.tar.gz"
       - name: Preserve Linux package (never deploy on push)
         if: github.event_name == 'push'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

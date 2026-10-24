@@ -22,6 +22,7 @@ import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
+const runtimeRoot = process.env.NETPAN_TEST_RUNTIME_ROOT || repoRoot
 const reportPath = path.join(repoRoot, 'reports', 'testbot.json')
 const token = 'testbot-private-web-token-0123456789abcdef0123456789'
 const origin = 'https://netpan.test'
@@ -281,7 +282,7 @@ async function apiJson(pathname, init = {}) {
 }
 
 async function addAppTask(url, fileName) {
-  const { registerAllowedDownloadUrl } = await import(pathToFileURL(path.join(repoRoot, 'dist-server/server/downloader/downloadService.js')).href)
+  const { registerAllowedDownloadUrl } = await import(pathToFileURL(path.join(runtimeRoot, 'dist-server/server/downloader/downloadService.js')).href)
   registerAllowedDownloadUrl(url, Date.now() + 10 * 60 * 1000)
   const result = await apiJson('/api/downloads/add', {
     method: 'POST',
@@ -357,7 +358,8 @@ async function run() {
   process.env.ARIA2_RPC_URL = `http://127.0.0.1:${rpcPort}/jsonrpc`
   process.env.ARIA2_RPC_SECRET = rpcSecret
 
-  const { startServer } = await import(pathToFileURL(path.join(repoRoot, 'dist-server/server/index.js')).href)
+  report.evidence.runtime = process.env.NETPAN_TEST_RUNTIME_ROOT ? 'verified-linux-release-package' : 'compiled-checkout'
+  const { startServer } = await import(pathToFileURL(path.join(runtimeRoot, 'dist-server/server/index.js')).href)
   appServer = await startServer(0)
   const appAddress = appServer.address()
   if (!appAddress || typeof appAddress === 'string') throw new Error('app server did not expose a TCP address')
