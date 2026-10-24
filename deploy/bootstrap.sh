@@ -17,7 +17,7 @@ mountpoint -q "$quota_mount" || { echo 'Prepare a dedicated, capacity-limited /s
 for port in 3300 16801; do
   [[ -z $(ss -H -ltn "sport = :$port") ]] || { echo "Port $port is already occupied" >&2; exit 1; }
 done
-[[ $(node --version) == v22.23.4 && -x /usr/bin/node ]] || { echo 'Install reviewed Node 22.23.4 at /usr/bin/node first' >&2; exit 1; }
+[[ -x /usr/bin/node && $(/usr/bin/node --version) == v22.23.4 ]] || { echo 'Install reviewed Node 22.23.4 at /usr/bin/node first' >&2; exit 1; }
 for cmd in aria2c nginx openssl python3 htpasswd visudo systemctl; do command -v "$cmd" >/dev/null; done
 [[ -x /usr/local/bin/yt-dlp && -x /usr/local/bin/gallery-dl ]]
 nginx -t
@@ -30,6 +30,7 @@ for dest in /opt/netpandownload /etc/netpandownload /etc/nginx/netpandownload.ht
 done
 openssl x509 -in "$cert" -noout -checkend 604800 >/dev/null
 openssl x509 -in "$cert" -noout -checkhost "$domain" >/dev/null
+openssl verify -CApath /etc/ssl/certs -untrusted "$cert" -verify_hostname "$domain" "$cert" >/dev/null
 cert_hash=$(openssl x509 -in "$cert" -pubkey -noout | openssl sha256)
 key_hash=$(openssl pkey -in "$key" -pubout | openssl sha256)
 [[ "$cert_hash" == "$key_hash" ]] || { echo 'Certificate and key mismatch' >&2; exit 1; }
