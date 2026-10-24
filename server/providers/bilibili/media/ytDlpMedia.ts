@@ -16,13 +16,14 @@ function getYtDlpCandidates() {
   const configured = String(process.env.YTDLP_PATH || '').trim()
   const desktopRoot = String(process.env.QUARK_DESKTOP_ROOT || '').trim()
   const resourcesPath = String((process as NodeJS.Process & { resourcesPath?: string }).resourcesPath || '').trim()
+  const resourceRelativePath = process.platform === 'win32' ? path.join('win', 'yt-dlp.exe') : path.join('linux', 'yt-dlp')
   return Array.from(
     new Set(
       [
         configured,
-        path.resolve(process.cwd(), 'resources', 'yt-dlp', 'win', 'yt-dlp.exe'),
-        desktopRoot ? path.resolve(desktopRoot, 'resources', 'yt-dlp', 'win', 'yt-dlp.exe') : '',
-        resourcesPath ? path.resolve(resourcesPath, 'yt-dlp', 'win', 'yt-dlp.exe') : ''
+        path.resolve(process.cwd(), 'resources', 'yt-dlp', resourceRelativePath),
+        desktopRoot ? path.resolve(desktopRoot, 'resources', 'yt-dlp', resourceRelativePath) : '',
+        resourcesPath ? path.resolve(resourcesPath, 'yt-dlp', resourceRelativePath) : ''
       ].filter(Boolean)
     )
   )

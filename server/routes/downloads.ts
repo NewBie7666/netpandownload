@@ -1,10 +1,13 @@
 import { Router } from 'express'
 import { ok } from '../http.js'
+import { scanPageForFiles } from '../downloader/pageLinkScanner.js'
 import {
   addDownloadTask,
+  addDirectDownloadTask,
   getDownloadHealth,
   getDownloadSettings,
   getDownloadTaskStatus,
+  openCompletedDownloadFile,
   listDownloadTasks,
   openDownloadDirectory,
   pauseDownloadTask,
@@ -20,6 +23,59 @@ downloadsRouter.post('/add', async (req, res, next) => {
     const result = await addDownloadTask(req.body)
     res.json(ok(result))
   } catch (error) {
+    next(error)
+  }
+})
+
+downloadsRouter.post('/direct', async (req, res, next) => {
+  try {
+    res.json(ok(await addDirectDownloadTask(req.body)))
+  } catch (error) {
+    next(error)
+  }
+})
+
+downloadsRouter.post('/scan-page', async (req, res, next) => {
+  try {
+    res.json(ok(await scanPageForFiles(req.body)))
+  } catch (error) {
+    next(error)
+  }
+})
+
+/** Browser handoff: download the completed file to the device making this request. */
+downloadsRouter.get('/file/:gid', async (req, res, next) => {
+  let file: Awaited<ReturnType<typeof openCompletedDownloadFile>> | undefined
+  try {
+    file = await openCompletedDownloadFile(String(req.params.gid || ''))
+    res.setHeader('Content-Type', 'application/octet-stream')
+    res.setHeader('X-Content-Type-Options', 'nosniff')
+    const encodedName = encodeURIComponent(file.name).replace(/['()*]/g, (character) => '%' + character.charCodeAt(0).toString(16).toUpperCase())
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8\'\'${encodedName}`)
+    res.setHeader('Content-Length', String(file.size))
+    res.setHeader('Cache-Control', 'private, no-store')
+    let bytesSent = 0
+    const stream = file.handle.createReadStream({
+      start: 0,
+      end: Math.max(0, file.size - 1),
+      autoClose: true
+    })
+    res.on('close', () => stream.destroy())
+    stream.on('data', (chunk: Buffer | string) => {
+      bytesSent += Buffer.byteLength(chunk)
+    })
+    stream.on('error', (error) => {
+      if (!res.headersSent) next(error)
+      else res.destroy(error)
+    })
+    stream.on('end', () => {
+      if (bytesSent !== file?.size && !res.destroyed) {
+        res.destroy(new Error('download file changed while streaming'))
+      }
+    })
+    stream.pipe(res)
+  } catch (error) {
+    try { await file?.handle.close() } catch { /* best effort */ }
     next(error)
   }
 })

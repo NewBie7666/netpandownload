@@ -1,4 +1,4 @@
-import { mkdir, rm, stat } from 'node:fs/promises'
+import { mkdir, rm, stat, statfs } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import path from 'node:path'
 import { spawn } from 'node:child_process'
@@ -14,6 +14,9 @@ import type {
   RemoveDownloadRequest
 } from '../../shared/types.js'
 import { getRuntimePort } from '../config.js'
+import { openSafeDownloadFile, resolveSafeDownloadFile } from './privateWebFile.js'
+import { validateDirectDownloadInput, validateDownloadFileName } from './directDownload.js'
+import { requireTaskAction } from './taskActionPolicy.js'
 import { AppError } from '../http.js'
 import {
   getConfiguredDownloadDir,
@@ -38,6 +41,16 @@ import {
 const allowedDownloadUrlCache = new Map<string, number>()
 const allowedDownloadUrlTtlMs = 30 * 60 * 1000
 const downloadTaskHistorySize = 20
+const defaultPrivateWebMinFreeBytes = 1024 * 1024 * 1024
+
+function getMinimumFreeBytes() {
+  const raw = String(process.env.NETPAN_MIN_FREE_BYTES || '').trim()
+  if (raw) {
+    const configured = Number(raw)
+    if (Number.isFinite(configured) && configured >= 0) return Math.floor(configured)
+  }
+  return process.env.NETPAN_PRIVATE_WEB === 'true' ? defaultPrivateWebMinFreeBytes : 0
+}
 
 function cleanupAllowedUrls() {
   const now = Date.now()
@@ -49,7 +62,9 @@ function cleanupAllowedUrls() {
 }
 
 export function getDefaultDownloadDir() {
-  return path.join(homedir(), 'Downloads', 'QuarkDownloads')
+  return process.env.NETPAN_PRIVATE_WEB === 'true'
+    ? path.resolve(process.env.NETPAN_DOWNLOAD_DIR || '/srv/netpandownload/downloads')
+    : path.join(homedir(), 'Downloads', 'QuarkDownloads')
 }
 
 async function ensureDownloadDir(dir = getDefaultDownloadDir()) {
@@ -57,8 +72,25 @@ async function ensureDownloadDir(dir = getDefaultDownloadDir()) {
   return dir
 }
 
+async function assertMinimumFreeSpace(dir: string) {
+  const minimum = getMinimumFreeBytes()
+  if (minimum <= 0) return
+  let filesystem
+  try {
+    filesystem = await statfs(dir, { bigint: true })
+  } catch {
+    throw new AppError('download_disk_unavailable', '无法检查下载目录剩余空间', 503)
+  }
+  const available = filesystem.bavail * filesystem.bsize
+  if (available < BigInt(minimum)) {
+    throw new AppError('download_disk_full', `下载目录剩余空间不足（至少需要 ${minimum} 字节）`, 507)
+  }
+}
+
 async function getEffectiveDownloadDir() {
-  return ensureDownloadDir(await getConfiguredDownloadDir(getDefaultDownloadDir()))
+  const dir = process.env.NETPAN_PRIVATE_WEB === 'true'
+    ? getDefaultDownloadDir() : await getConfiguredDownloadDir(getDefaultDownloadDir())
+  return ensureDownloadDir(dir)
 }
 
 function buildLocalBackendBaseUrl() {
@@ -141,7 +173,13 @@ function ensureDownloadUrlAllowed(rawUrl: string, normalizedUrl: URL) {
 }
 
 function getDownloadRequestHeaders(normalizedUrl: URL) {
+  if (process.env.NETPAN_PRIVATE_WEB === 'true' && normalizedUrl.origin === buildLocalBackendBaseUrl() && normalizedUrl.pathname === '/api/quark/download-proxy') {
+    return [`X-Netpan-Token: ${String(process.env.NETPAN_WEB_TOKEN || '')}`]
+  }
   const hostname = normalizedUrl.hostname.toLowerCase()
+  const instagram = ['cdninstagram.com', 'fbcdn.net'].some((host) => hostname === host || hostname.endsWith('.' + host))
+  if (instagram) return ['Referer: https://www.instagram.com/', 'User-Agent: Mozilla/5.0 (compatible; NetPanDownload/1.0)']
+  if (hostname === 'googlevideo.com' || hostname.endsWith('.googlevideo.com')) return ['Referer: https://www.youtube.com/', 'User-Agent: Mozilla/5.0 (compatible; NetPanDownload/1.0)']
   if (!hostname.endsWith('bilivideo.com')) {
     return []
   }
@@ -172,6 +210,13 @@ function normalizeTask(task: Aria2TaskPayload): DownloadTask {
     completedLength,
     downloadSpeed,
     progress,
+    failureReason: task.status === 'error'
+      ? ['9', '16', '17'].includes(task.errorCode || '')
+        ? '服务器存储空间不足或无法写入文件，请清理下载目录后重试'
+        : ['3', '22'].includes(task.errorCode || '')
+          ? '源站拒绝访问或链接已过期（可能为403），请重新解析后下载'
+          : '下载中断或源站访问失败，请检查网络并重新解析后重试'
+      : undefined,
     dir: task.dir
   }
 }
@@ -220,16 +265,21 @@ async function deleteTaskFile(task: Aria2TaskPayload) {
   }
 }
 
-export async function addDownloadTask(input: AddDownloadRequest): Promise<AddDownloadResult> {
+async function submitDownloadTask(input: AddDownloadRequest, direct = false): Promise<AddDownloadResult> {
   if (!getAria2Availability().enabled) {
     throw new AppError('aria2_unavailable', getAria2Availability().message, 503)
   }
 
   const normalizedUrl = normalizeRequestedDownloadUrl(input.url)
-  ensureDownloadUrlAllowed(input.url, normalizedUrl)
+  if (!direct) ensureDownloadUrlAllowed(input.url, normalizedUrl)
 
+  if (process.env.NETPAN_PRIVATE_WEB === 'true' && input.dir) {
+    throw new AppError('download_dir_forbidden', '网页模式只允许使用服务器固定下载目录', 403)
+  }
   const dir = await ensureDownloadDir(input.dir || (await getEffectiveDownloadDir()))
-  const options = getDefaultDownloadOptions(input.fileName, dir)
+  await assertMinimumFreeSpace(dir)
+  const defaults = getDefaultDownloadOptions(validateDownloadFileName(input.fileName), dir)
+  const options = process.env.NETPAN_PRIVATE_WEB === 'true' ? { ...defaults, split: '4', 'max-connection-per-server': '4' } : defaults
   const rpcOptions = options.out ? options : { ...options, out: undefined }
   const headers = getDownloadRequestHeaders(normalizedUrl)
   const optionsWithHeaders = headers.length ? { ...rpcOptions, header: headers } : rpcOptions
@@ -247,6 +297,19 @@ export async function addDownloadTask(input: AddDownloadRequest): Promise<AddDow
 
   const gid = await aria2AddUri(normalizedUrl.toString(), sanitizedOptions)
   return { gid }
+}
+
+export async function addDownloadTask(input: AddDownloadRequest): Promise<AddDownloadResult> {
+  return submitDownloadTask(input)
+}
+
+// Only this separately validated route bypasses Provider URL registration.
+export async function addDirectDownloadTask(input: unknown): Promise<AddDownloadResult> {
+  if (!getAria2Availability().enabled) {
+    throw new AppError('aria2_unavailable', getAria2Availability().message, 503)
+  }
+  const safe = await validateDirectDownloadInput(input)
+  return submitDownloadTask({ url: safe.url, fileName: safe.fileName }, true)
 }
 
 export async function listDownloadTasks(): Promise<DownloadTasksResult> {
@@ -293,6 +356,9 @@ export async function getDownloadSettings(): Promise<DownloadSettingsResult> {
 }
 
 export async function updateDownloadSettings(input: { downloadDir?: string }): Promise<DownloadSettingsResult> {
+  if (process.env.NETPAN_PRIVATE_WEB === 'true') {
+    throw new AppError('download_dir_forbidden', '网页模式不能更改服务器下载目录', 403)
+  }
   return saveDownloadSettings(input, getDefaultDownloadDir())
 }
 
@@ -311,7 +377,8 @@ export async function pauseDownloadTask(gid: string) {
     throw new AppError('aria2_unavailable', availability.message, 503)
   }
 
-  await aria2Pause(gid)
+  const task = await getDownloadTaskStatus(gid)
+  if (requireTaskAction('pause', task.status)) await aria2Pause(gid)
   return { gid }
 }
 
@@ -321,7 +388,8 @@ export async function resumeDownloadTask(gid: string) {
     throw new AppError('aria2_unavailable', availability.message, 503)
   }
 
-  await aria2Unpause(gid)
+  const task = await getDownloadTaskStatus(gid)
+  if (requireTaskAction('resume', task.status)) await aria2Unpause(gid)
   return { gid }
 }
 
@@ -346,10 +414,41 @@ export async function removeDownloadTask(gid: string, input: RemoveDownloadReque
 }
 
 export async function openDownloadDirectory(): Promise<OpenDownloadDirResult> {
+  if (process.env.NETPAN_PRIVATE_WEB === 'true') {
+    throw new AppError('desktop_only', '云端无法打开本机目录，请在任务完成后点击“保存到此设备”', 403)
+  }
   const dir = await getEffectiveDownloadDir()
   spawn('explorer.exe', [dir], {
     detached: true,
     stdio: 'ignore'
   }).unref()
   return { dir }
+}
+
+/** Return only a completed aria2 task's file; never accept arbitrary file paths from HTTP clients. */
+export async function getCompletedDownloadFile(gid: string) {
+  if (!/^[0-9a-f]{16}$/i.test(gid)) throw new AppError('invalid_gid', '任务 ID 格式不正确', 400)
+  if (!getAria2Availability().enabled) throw new AppError('aria2_unavailable', '下载引擎不可用', 503)
+  const task = await aria2TellStatus(gid)
+  if (task.status !== 'complete') throw new AppError('download_not_complete', '任务尚未完成，请稍后重试', 409)
+  const pathname = task.files?.[0]?.path || ''
+  if (!pathname) throw new AppError('download_file_missing', '任务未关联下载文件', 404)
+  return resolveSafeDownloadFile(await getEffectiveDownloadDir(), pathname)
+}
+
+export async function openCompletedDownloadFile(gid: string) {
+  if (!/^[0-9a-f]{16}$/i.test(gid)) throw new AppError('invalid_gid', '任务 ID 格式不正确', 400)
+  if (!getAria2Availability().enabled) throw new AppError('aria2_unavailable', '下载引擎不可用', 503)
+  const task = await aria2TellStatus(gid)
+  if (task.status !== 'complete') throw new AppError('download_not_complete', '任务尚未完成，请稍后重试', 409)
+  const pathname = task.files?.[0]?.path || ''
+  if (!pathname) throw new AppError('download_file_missing', '任务未关联下载文件', 404)
+  const file = await openSafeDownloadFile(await getEffectiveDownloadDir(), pathname)
+  const expected = task.totalLength || ''
+  const completed = task.completedLength || ''
+  if (!/^\d+$/.test(expected) || !/^\d+$/.test(completed) || BigInt(expected) !== BigInt(completed) || BigInt(expected) !== BigInt(file.size) || task.files?.length !== 1) {
+    await file.handle.close()
+    throw new AppError('download_file_incomplete', '任务文件大小与已完成记录不一致，请重新下载', 409)
+  }
+  return file
 }

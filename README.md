@@ -26,6 +26,7 @@ The long-term product direction is a **local desktop download client**. The Elec
   - Optional aria2 delivery for local multithreaded downloads
   - Download task API and UI in the desktop client
   - Configurable download directory
+  - Generic HTTP/HTTPS file downloads from a direct-link form (aria2 required; see [HTTP_DOWNLOAD.md](docs/HTTP_DOWNLOAD.md))
   - Download task removal with optional local file deletion
   - Bilibili public-resource parsing through local `yt-dlp.exe` when available
   - Bilibili mock fallback when `yt-dlp.exe` is missing or parsing fails
@@ -167,3 +168,7 @@ Responses wrap the existing contracts:
 - Provider main entry is available at `/api/providers/resolve`, `/api/providers/list`, and `/api/providers/download`
 - Current download behavior supports both browser delivery and embedded aria2 delivery
 - Electron manages the local desktop shell, backend lifecycle, and aria2 sidecar lifecycle
+
+## Private Debian web deployment (integration branch)
+
+A private HTTPS browser mode is under development. It retains existing HTTP/HTTPS direct downloads, scanned file selection, and desktop Electron popup scans; it adds Instagram post media, YouTube single progressive video support, and a server-completed-file browser download button. See [Debian 13 private deployment instructions](docs/PRIVATE_WEB_DEPLOY.md). All downloaded files live on the server first. Cloud interactive popup scanning is **not** implemented.

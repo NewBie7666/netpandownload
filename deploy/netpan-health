@@ -1,0 +1,35 @@
+#!/usr/bin/python3
+"""Root-owned fixed health probe. Run as netpan; never prints configuration."""
+import json
+from pathlib import Path
+import re
+import sys
+import time
+import urllib.request
+
+if len(sys.argv) != 2 or not re.fullmatch('[0-9a-f]{40}', sys.argv[1]):
+    sys.exit('expected full release SHA')
+sha = sys.argv[1]
+env = {}
+for line in Path('/etc/netpandownload/web.env').read_text().splitlines():
+    if line and not line.startswith('#') and '=' in line:
+        key, value = line.split('=', 1)
+        env[key] = value
+token = env.get('NETPAN_WEB_TOKEN', '')
+if not re.fullmatch('[0-9a-f]{64}', token) or env.get('PORT') != '3300':
+    sys.exit('invalid private health configuration')
+for attempt in range(15):
+    try:
+        headers = {'X-Netpan-Token': token}
+        def get(route):
+            request = urllib.request.Request('http://127.0.0.1:3300' + route, headers=headers)
+            with urllib.request.urlopen(request, timeout=3) as response:
+                return json.load(response)
+        result = get('/api/health')['result']
+        assert result['releaseSha'] == sha and result['privateWeb'] is True and result['mock'] is False
+        assert get('/api/downloads/active')['ok'] is True
+        sys.exit(0)
+    except Exception:
+        if attempt < 14:
+            time.sleep(2)
+sys.exit('web/RPC health failed (configuration withheld)')

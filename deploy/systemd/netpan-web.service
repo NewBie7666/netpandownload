@@ -1,0 +1,32 @@
+[Unit]
+Description=NetPan private web downloader
+After=network-online.target netpan-aria2.service
+Wants=network-online.target
+Requires=netpan-aria2.service
+
+[Service]
+Type=simple
+User=netpan
+Group=netpan
+WorkingDirectory=/opt/netpandownload/current
+EnvironmentFile=/etc/netpandownload/web.env
+ExecStart=/usr/local/libexec/netpan-start
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/netpandownload
+RestrictSUIDSGID=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+MemoryMax=768M
+TasksMax=128
+LimitNOFILE=4096
+
+[Install]
+WantedBy=multi-user.target
