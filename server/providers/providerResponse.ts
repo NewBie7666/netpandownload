@@ -184,6 +184,12 @@ function mapAppErrorCode(
   context: 'resolve' | 'list' | 'download'
 ): ProviderErrorCode {
   if (errorCode === 'unsupported_provider') return 'unsupported_provider'
+  if (providerId === 'douyin' || providerId === 'xiaohongshu') {
+    if (['dependency_missing', 'media_extract_timeout', 'download_url_missing', 'auth_required', 'blocked_by_upstream', 'restricted', 'network_error'].includes(errorCode)) return errorCode as ProviderErrorCode
+    if (errorCode === 'social_redirect_forbidden') return 'restricted'
+    if (errorCode === 'social_session_expired') return 'episode_cache_miss'
+    return 'parse_failed'
+  }
 
   if (providerId === 'youtube') {
     if (errorCode === 'dependency_missing') return 'dependency_missing'

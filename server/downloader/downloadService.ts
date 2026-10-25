@@ -16,6 +16,7 @@ import type {
 import { getRuntimePort } from '../config.js'
 import { openSafeDownloadFile, resolveSafeDownloadFile } from './privateWebFile.js'
 import { validateDirectDownloadInput, validateDownloadFileName } from './directDownload.js'
+import { socialMediaHeaders } from '../providers/social/mediaPolicy.js'
 import { requireTaskAction } from './taskActionPolicy.js'
 import { AppError } from '../http.js'
 import {
@@ -177,6 +178,8 @@ function getDownloadRequestHeaders(normalizedUrl: URL) {
     return [`X-Netpan-Token: ${String(process.env.NETPAN_WEB_TOKEN || '')}`]
   }
   const hostname = normalizedUrl.hostname.toLowerCase()
+  const socialHeaders = socialMediaHeaders(normalizedUrl)
+  if (socialHeaders.length) return socialHeaders
   const instagram = ['cdninstagram.com', 'fbcdn.net'].some((host) => hostname === host || hostname.endsWith('.' + host))
   if (instagram) return ['Referer: https://www.instagram.com/', 'User-Agent: Mozilla/5.0 (compatible; NetPanDownload/1.0)']
   if (hostname === 'googlevideo.com' || hostname.endsWith('.googlevideo.com')) return ['Referer: https://www.youtube.com/', 'User-Agent: Mozilla/5.0 (compatible; NetPanDownload/1.0)']

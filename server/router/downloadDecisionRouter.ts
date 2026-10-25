@@ -69,6 +69,9 @@ function decideTool(inference: PlatformInference): DecisionRecommendedTool {
   if (inference.platform === 'instagram') {
     return { type: 'desktop', name: 'desktop-downloader', capability: 'video-extract' }
   }
+  if (inference.platform === 'douyin' || inference.platform === 'xiaohongshu') {
+    return { type: 'desktop', name: 'desktop-downloader', capability: 'video-extract' }
+  }
   if (inference.platform === 'bilibili') {
     return { type: 'desktop', name: 'desktop-downloader', capability: 'video-extract' }
   }
@@ -79,7 +82,7 @@ function decideTool(inference: PlatformInference): DecisionRecommendedTool {
 }
 
 function decideAction(inference: PlatformInference): DecisionAction {
-  if (inference.platform === 'bilibili' || inference.platform === 'quark' || inference.platform === 'instagram' || inference.platform === 'youtube') return 'use_desktop_downloader'
+  if (inference.baseFeasible && (inference.platform === 'bilibili' || inference.platform === 'quark' || inference.platform === 'instagram' || inference.platform === 'youtube' || inference.platform === 'douyin' || inference.platform === 'xiaohongshu')) return 'use_desktop_downloader'
   return 'unsupported'
 }
 
@@ -104,7 +107,13 @@ function buildExplanation(inference: PlatformInference, parsed?: WebParseLike) {
   if (inference.platform === 'instagram') {
     return `${enriched} 单个 Instagram 帖子可在桌面端通过 gallery-dl 解析图片、视频，并使用 aria2 下载。`
   }
-  if (inference.platform === 'douyin' || inference.platform === 'zhihu') {
+  if (inference.platform === 'douyin') {
+    return `${enriched} 抖音链接会继续交给抖音解析器获取视频媒体；链接过期、作品删除、需要登录或触发风控时，实际解析可能失败。`
+  }
+  if (inference.platform === 'xiaohongshu') {
+    return `${enriched} 小红书图文或视频链接会继续交给小红书解析器获取媒体；链接过期、作品删除、需要登录或触发风控时，实际解析可能失败。`
+  }
+  if (inference.platform === 'zhihu') {
     return `${enriched} 当前版本只识别该平台，不提供下载执行能力。`
   }
   return '当前链接来源无法识别，暂不支持。'

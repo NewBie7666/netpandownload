@@ -35,7 +35,7 @@ export interface DownloadResult {
   cached: boolean
 }
 
-export type ProviderId = 'quark' | 'bilibili' | 'instagram' | 'youtube'
+export type ProviderId = 'quark' | 'bilibili' | 'instagram' | 'youtube' | 'douyin' | 'xiaohongshu'
 
 export interface ProviderShareResult {
   providerId: ProviderId
@@ -57,6 +57,7 @@ export type DecisionPlatform =
   | 'quark'
   | 'youtube'
   | 'douyin'
+  | 'xiaohongshu'
   | 'zhihu'
   | 'instagram'
   | 'unknown'

@@ -35,6 +35,7 @@ import type {
   QuarkAuthStatusResult,
   QuarkFile
 } from '../shared/types'
+import { extractSocialSource, isSocialInput } from '../shared/socialLinks.js'
 
 interface PathItem {
   fid: string
@@ -135,11 +136,21 @@ const bilibiliLoginStatus = ref<BilibiliLoginStatus>({
 let authPollTimer: number | undefined
 let taskPollTimer: number | undefined
 
+const providerNames: Record<ProviderId, string> = {
+  quark: '夸克',
+  bilibili: 'Bilibili',
+  instagram: 'Instagram',
+  youtube: 'YouTube',
+  douyin: '抖音',
+  xiaohongshu: '小红书'
+}
+
 const hasFiles = computed(() => files.value.length > 0)
 const canGoBack = computed(() => pathStack.value.length > 0)
+const supportsMediaFilter = computed(() => ['instagram', 'douyin', 'xiaohongshu'].includes(currentProviderId.value))
 const selectableFiles = computed(() => files.value.filter((file) => !file.isDir))
 const visibleFiles = computed(() => {
-  if (currentProviderId.value !== 'instagram' || mediaFilter.value === 'all') return files.value
+  if (!supportsMediaFilter.value || mediaFilter.value === 'all') return files.value
   return files.value.filter((file) => mediaFilter.value === 'image'
     ? /\.(jpg|jpeg|png|webp|gif)$/i.test(file.name)
     : /\.(mp4|mov|webm)$/i.test(file.name))
@@ -161,6 +172,7 @@ const decisionPlatformText = computed(() => {
     quark: '夸克',
     youtube: 'YouTube',
     douyin: '抖音',
+    xiaohongshu: '小红书',
     zhihu: '知乎',
     instagram: 'Instagram',
     unknown: '未知来源'
@@ -228,7 +240,16 @@ function normalizeResourceUrlInput(value: string) {
   const trimmed = String(value || '').trim().replace(/^["']|["']$/g, '')
   if (!trimmed) return ''
 
+  try {
+    return extractSocialSource(trimmed).url
+  } catch {
+    // Keep the existing normalizers for providers with their own URL rules.
+  }
+
   if (/^pan\.quark\.cn\/s\//i.test(trimmed)) {
+    return `https://${trimmed}`
+  }
+  if (/^(?:v\.douyin\.com|(?:www\.)?(?:m\.)?douyin\.com|iesdouyin\.com|(?:www\.)?xhslink\.com|(?:www\.)?xiaohongshu\.com)\//i.test(trimmed)) {
     return `https://${trimmed}`
   }
   if (/^(www\.)?instagram\.com\//i.test(trimmed)) return `https://${trimmed}`
@@ -238,6 +259,7 @@ function normalizeResourceUrlInput(value: string) {
   }
 
   const matched = trimmed.match(/https?:\/\/pan\.quark\.cn\/s\/[^\s"'<>]+/i)
+    || trimmed.match(/https?:\/\/(?:v\.douyin\.com|(?:www\.)?(?:m\.)?douyin\.com|iesdouyin\.com|(?:www\.)?xhslink\.com|(?:www\.)?xiaohongshu\.com)\/[^\s"'<>]+/i)
     || trimmed.match(/https?:\/\/(?:www\.)?instagram\.com\/[^\s"'<>]+/i)
     || trimmed.match(/https?:\/\/(?:(?:www|m)\.)?(?:youtube\.com|youtu\.be)\/[^\s"'<>]+/i)
     || trimmed.match(/https?:\/\/(?:www\.)?bilibili\.com\/[^\s"'<>]+/i)
@@ -249,6 +271,9 @@ function normalizeResourceUrlInput(value: string) {
 function validateResourceUrl(value: string) {
   const trimmed = normalizeResourceUrlInput(value)
   if (!trimmed) return '请输入资源链接'
+
+  if (isSocialInput(trimmed, 'douyin')) return ''
+  if (isSocialInput(trimmed, 'xiaohongshu')) return ''
 
   try {
     const url = new URL(trimmed)
@@ -281,6 +306,12 @@ function validateResourceUrl(value: string) {
     }
     if (/^b23\.tv$/i.test(url.hostname) && url.pathname.length > 1) {
       return ''
+    }
+    if (/^(?:www\.)?douyin\.com$/i.test(url.hostname) || /^v\.douyin\.com$/i.test(url.hostname) || /^(?:www\.)?m\.douyin\.com$/i.test(url.hostname) || /^(?:www\.)?iesdouyin\.com$/i.test(url.hostname)) {
+      return '未识别到支持的抖音分享链接'
+    }
+    if (/^(?:www\.)?xhslink\.com$/i.test(url.hostname) || /^(?:www\.)?xiaohongshu\.com$/i.test(url.hostname)) {
+      return '未识别到支持的小红书分享链接'
     }
   } catch {
     return '资源链接格式不正确'
@@ -374,7 +405,7 @@ async function loadShare() {
     clearFileSelection()
     mediaFilter.value = 'all'
     pathStack.value = []
-    noticeMessage.value = `已通过 ${result.providerId === 'quark' ? '夸克' : result.providerId === 'instagram' ? 'Instagram' : result.providerId === 'youtube' ? 'YouTube' : 'Bilibili'} 获取 ${result.share.files.length} 个文件`
+    noticeMessage.value = `已通过 ${providerNames[result.providerId]} 获取 ${result.share.files.length} 个文件`
   } catch (error) {
     currentProviderId.value = ''
     shareId.value = ''
@@ -935,7 +966,7 @@ onBeforeUnmount(() => {
       <section class="panel parser-panel">
         <div class="form-row">
           <label for="share-url">资源链接</label>
-          <input id="share-url" v-model="shareUrl" type="text" placeholder="夸克、B站、YouTube 或 Instagram 单帖链接" :disabled="loading" />
+          <input id="share-url" v-model="shareUrl" type="text" placeholder="夸克、B站、YouTube、Instagram、抖音或小红书链接" :disabled="loading" />
         </div>
         <div class="form-row">
           <label for="passcode">提取码</label>
@@ -999,7 +1030,7 @@ onBeforeUnmount(() => {
             <p v-if="batchDownloadProgressText" class="path-text">{{ batchDownloadProgressText }}</p>
           </div>
           <div class="task-header-actions">
-            <label v-if="currentProviderId === 'instagram'" class="path-text">媒体筛选：<select v-model="mediaFilter" aria-label="筛选媒体类型"><option value="all">全部</option><option value="image">图片</option><option value="video">视频</option></select></label>
+            <label v-if="supportsMediaFilter" class="path-text">媒体筛选：<select v-model="mediaFilter" aria-label="筛选媒体类型"><option value="all">全部</option><option value="image">图片</option><option value="video">视频</option></select></label>
             <button class="ghost-button" type="button" :disabled="!visibleSelectableFiles.length || batchDownloadLoading" @click="toggleSelectAllFiles">
               {{ allSelectableSelected ? '取消全选' : '全选' }}
             </button>

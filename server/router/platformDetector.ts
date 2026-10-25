@@ -3,6 +3,7 @@ import type {
   DecisionResourceType,
   DecisionRiskLevel
 } from '../../shared/types.js'
+import { extractSocialSource } from '../providers/social/source.js'
 
 export interface PlatformInference {
   normalizedUrl: string
@@ -36,6 +37,31 @@ function fallbackInference(input: string): PlatformInference {
 
 export function detectPlatform(input: string): PlatformInference {
   const normalizedUrl = normalizeInput(input)
+
+  try {
+    const socialSource = extractSocialSource(normalizedUrl)
+    if (socialSource.platform === 'douyin') {
+      return {
+        normalizedUrl: socialSource.url,
+        platform: 'douyin',
+        resourceType: 'video',
+        baseRisk: 'high',
+        baseFeasible: true,
+        confidence: 0.86
+      }
+    }
+    return {
+      normalizedUrl: socialSource.url,
+      platform: 'xiaohongshu',
+      resourceType: 'file',
+      baseRisk: 'high',
+      baseFeasible: true,
+      confidence: 0.84
+    }
+  } catch {
+    // Continue with the existing platform detectors for non-social URLs.
+  }
+
   try {
     const url = new URL(normalizedUrl)
     const hostname = url.hostname.toLowerCase().replace(/^www\./, '')
@@ -72,17 +98,6 @@ export function detectPlatform(input: string): PlatformInference {
         baseRisk: 'medium',
         baseFeasible: true,
         confidence: 0.78
-      }
-    }
-
-    if (hostname === 'douyin.com' || hostname.endsWith('.douyin.com')) {
-      return {
-        normalizedUrl,
-        platform: 'douyin',
-        resourceType: 'video',
-        baseRisk: 'high',
-        baseFeasible: false,
-        confidence: 0.65
       }
     }
 
