@@ -169,4 +169,3 @@ test('does not execute JavaScript and rejects id mismatch, traversal, and no-med
 test('enforces the HTML size limit', () => {
   assert.throws(() => parseSocialPostHtml('douyin', 'x'.repeat(8 * 1024 * 1024 + 1), 'large'))
 })
-

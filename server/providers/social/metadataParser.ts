@@ -660,4 +660,3 @@ export function parseSocialYtdlpJson(platform: SocialPlatform, json: string, id:
   }
   return toSocialMedia(platform, id, candidates)
 }
-
