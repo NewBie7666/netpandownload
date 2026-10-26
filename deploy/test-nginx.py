@@ -34,14 +34,18 @@ class Backend(BaseHTTPRequestHandler):
 
 with tempfile.TemporaryDirectory(prefix='netpan-nginx-') as directory:
     root = Path(directory)
-    upstream_port, tls_port = port(), port()
+    upstream_port, tls_port, http_port = port(), port(), port()
+    acme_root = root / 'acme'
+    challenge = acme_root / '.well-known' / 'acme-challenge' / 'netpan-fixture'
+    challenge.parent.mkdir(parents=True)
+    challenge.write_bytes(b'fixture-public-acme-token')
     backend = ThreadingHTTPServer(('127.0.0.1', upstream_port), Backend)
     thread = threading.Thread(target=backend.serve_forever, daemon=True)
     thread.start()
     subprocess.run(['openssl', 'req', '-x509', '-nodes', '-newkey', 'rsa:2048', '-days', '1', '-subj', '/CN=localhost', '-addext', 'subjectAltName=DNS:localhost', '-keyout', str(root / 'key'), '-out', str(root / 'cert')], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     subprocess.run(['htpasswd', '-bc', str(root / 'htpasswd'), 'fixture', 'fixture-password'], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     site = Path(__file__).with_name('nginx-netpan.conf.in').read_text()
-    replacements = {'@DOMAIN@': 'localhost', '@CERT@': str(root / 'cert'), '@KEY@': str(root / 'key'), '@TOKEN@': token, 'listen 443 ssl;': f'listen 127.0.0.1:{tls_port} ssl;', '/etc/nginx/netpandownload.htpasswd': str(root / 'htpasswd'), 'proxy_pass http://127.0.0.1:3300;': f'proxy_pass http://127.0.0.1:{upstream_port};'}
+    replacements = {'@DOMAIN@': 'localhost', '@CERT@': str(root / 'cert'), '@KEY@': str(root / 'key'), '@TOKEN@': token, 'listen 443 ssl;': f'listen 127.0.0.1:{tls_port} ssl;', 'listen 80;': f'listen 127.0.0.1:{http_port};', '/var/lib/netpandownload-acme': str(acme_root), '/etc/nginx/netpandownload.htpasswd': str(root / 'htpasswd'), 'proxy_pass http://127.0.0.1:3300;': f'proxy_pass http://127.0.0.1:{upstream_port};'}
     for before, after in replacements.items():
         site = site.replace(before, after)
     config = root / 'nginx.conf'
@@ -66,7 +70,25 @@ with tempfile.TemporaryDirectory(prefix='netpan-nginx-') as directory:
         with urllib.request.urlopen(urllib.request.Request(url, headers={'Authorization': auth, 'X-Netpan-Token': 'attacker-controlled'}), context=context, timeout=3) as resp:
             assert resp.status == 200
             assert resp.read() == b'netpan-private-proxy-stream'
-        print('Nginx HTTPS authentication, token override, upstream credential stripping and stream verified')
+        with urllib.request.urlopen(f'http://localhost:{http_port}/.well-known/acme-challenge/netpan-fixture', timeout=3) as resp:
+            assert resp.status == 200
+            assert resp.read() == b'fixture-public-acme-token'
+        class NoRedirect(urllib.request.HTTPRedirectHandler):
+            def redirect_request(self, req, fp, code, msg, headers, newurl):
+                return None
+        opener = urllib.request.build_opener(NoRedirect())
+        try:
+            opener.open(f'http://localhost:{http_port}/api/private?test=1', timeout=3)
+            raise AssertionError('HTTP app request was not redirected')
+        except urllib.error.HTTPError as error:
+            assert error.code == 301
+            assert error.headers['Location'] == 'https://localhost/api/private?test=1'
+        try:
+            opener.open(f'http://localhost:{http_port}/.well-known/acme-challenge/missing', timeout=3)
+            raise AssertionError('Missing ACME challenge was served')
+        except urllib.error.HTTPError as error:
+            assert error.code == 404
+        print('Nginx private HTTPS, streaming, isolated ACME challenge and HTTP redirect verified')
     finally:
         nginx.terminate()
         nginx.wait(timeout=5)

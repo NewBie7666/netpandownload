@@ -51,6 +51,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 deploy/test-release.py 2>&1 | tee reports/deployment.txt
+          python3 deploy/test-tls-setup.py 2>&1 | tee reports/tls-setup.txt
           python3 deploy/test-nginx.py 2>&1 | tee reports/nginx.txt
           bash -n deploy/bootstrap.sh deploy/audit-server.sh deploy/upload-release.sh
       - name: Verify production dependency audit

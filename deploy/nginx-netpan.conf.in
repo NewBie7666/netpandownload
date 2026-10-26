@@ -1,5 +1,18 @@
 # New, dedicated site only. Never replace nginx.conf or another site's file.
 server {
+    listen 80;
+    server_name @DOMAIN@;
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/lib/netpandownload-acme;
+        default_type text/plain;
+        try_files $uri =404;
+    }
+    location / {
+        return 301 https://@DOMAIN@$request_uri;
+    }
+}
+
+server {
     listen 443 ssl;
     server_name @DOMAIN@;
     ssl_certificate @CERT@;

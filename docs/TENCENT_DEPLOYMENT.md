@@ -9,6 +9,7 @@
 - 数据：容量受限的独立挂载 `/srv/netpandownload`，下载和持久化分别在 `downloads/`、`data/`。默认剩余空间不足 1 GiB 时拒绝新任务；独立文件系统提供下载总量硬上限。下载运行到空间耗尽会失败，不能把失败结果当成完整文件。
 - 配置：`/etc/netpandownload/web.env` 和 `aria2.conf`，root:netpan 0640。不要将完整配置、Cookie 或 Nginx 配置转储到 CI 日志。
 - Express `127.0.0.1:3300`，aria2 RPC `127.0.0.1:16801`，外部只经过独立 Nginx HTTPS 站点和 Basic Auth。
+- HTTP 80 仅公开本应用独立目录的 ACME 验证文件，其余请求跳转 HTTPS；网页和 API 继续经过私人认证。ACME 目录为 root:root 0755 的 `/var/lib/netpandownload-acme`，与下载文件及 Immune Arena 发布目录分开。
 - `netpan-web.service` 依赖 `netpan-aria2.service`。非 root 运行、系统目录只读、限制内存/进程数。
 - 不写 `/var/www/immune-arena`，不修改其用户、Secrets、服务和站点，也不替换 `nginx.conf`。
 
@@ -17,6 +18,8 @@
 2026-10-24 检查：Immune Arena [Actions 40101671001](https://github.com/NewBie7666/immune-arena/actions/runs/40101671001) 真实完成 SSH/SCP 和远端版本切换。其成功说明旧项目当时可发布；GitHub 不允许读取其 Secret 值，也不能据此推定两个仓库共享凭据。
 
 本次本机严格 SSH 探针被主机密钥冲突拒绝。未绕过校验或修改 known_hosts。因此服务器当前 OS/架构、Nginx 完整配置、磁盘及运行依赖仍待审计。历史记录中的 Debian 13 仅是线索，不能代替实时确认。2026-10-25 独立只读 HTTP 检查确认 Immune Arena 首页和 version.json 均为 200，线上 SHA 为 `869c78c6e0877243e53002b3cfe39d836accf011`，与成功部署记录一致。
+
+2026-10-26 控制台补充核验：用户提供的 ED25519 指纹与 `152.136.33.189:22` 实时公钥一致，已保存本项目专用 known_hosts。控制台只读输出确认 Debian 13.7 trixie、x86_64、内存总量约3.6 GiB/可用3.1 GiB、根盘剩余37 GB，Nginx 1.26.3 监听80/443，已启用两个 Immune Arena 配置。Node 和媒体工具未在当前 PATH 找到，专用部署账户认证仍未就绪。用户已新增 `download.aielfhub.com` A 记录，Google/Cloudflare DNS 均返回上述服务器地址。现有 Certbot 4.0.0，原证书仅覆盖 `aielfhub.com`，不能代替下载器的新证书。这些证据仍不代表生产应用已经部署。
 
 ## 一次性管理员初始化
 
@@ -39,6 +42,28 @@ sudo bash deploy/bootstrap.sh downloads.your-domain.example \
 ```
 
 初始化自动生成私有应用 token 和 aria2 RPC token，不打印它们；只新增 netpan 文件和一个新 Nginx site。脚本拒绝覆盖既有账户/目录/unit/config。仅在 `nginx -t` 成功后 reload。失败时检查提示和 NetPan 专属半初始化状态后人工修复，不要盲目重跑或递归删除系统目录。旧 Nginx 配置和 Immune 文件始终不覆盖。
+
+### 独立域名证书准备
+
+域名 DNS 指向本机、Certbot 已安装后，可在 root 控制台运行已审核的助手：
+
+```bash
+python3 deploy/prepare-tls.py download.aielfhub.com
+```
+
+助手先检查域名未被现有 Nginx 站点覆盖，再创建本应用独立的临时 HTTP 验证站点，仅提供 `/var/lib/netpandownload-acme/.well-known/acme-challenge/` 中的 ACME 文件，其余路径返回404。随后调用 Certbot `certonly --webroot`，以 `netpan-download.aielfhub.com` 为独立证书名称。不会选用 Nginx 自动安装插件，也不停止 Nginx。
+
+成功后证书路径为 `/etc/letsencrypt/live/netpan-download.aielfhub.com/fullchain.pem` 和同目录 `privkey.pem`。助手在成功或失败时都检查并移除自己本次创建的临时站点；若文件被第三方改变，则保留并要求人工核查。已有站点文件、旧证书和其续期配置不覆盖。ACME webroot 保留供正式配置复用，bootstrap 只接受其安全的 root:root 0755 目录。
+
+新证书保存固定的续期 deploy hook：先 `nginx -t`，成功后 reload Nginx。正式站点建立后，检查现有 Certbot 调度，并单独验收新证书续期：
+
+```bash
+systemctl is-enabled certbot.timer
+systemctl is-active certbot.timer
+certbot renew --cert-name netpan-download.aielfhub.com --dry-run
+```
+
+临时站点清理后、正式站点尚未建立时，ACME 路由还未启用，因此该阶段不能宣称续期验收完成。若本机既有证书由其他调度机制维护，先核对实际机制，不创建重复续期任务。不要在日志或聊天中粘贴证书私钥。
 
 `sudoers` 只允许新部署账户重启/停止 **netpan-web**，以及以 netpan 运行 root 拥有的固定健康脚本。没有 shell、包管理、任意 systemctl 或修改 Nginx 的 sudo 权限。健康脚本只接收完整 SHA，不输出 token。安装后的三个 `/usr/local/libexec/netpan-*` 文件必须保持 root 拥有；后续修改这些控制脚本需要一次管理员审核安装。
 

@@ -28,6 +28,11 @@ for account in netpan netpan-deploy; do ! getent passwd "$account" >/dev/null ||
 for dest in /opt/netpandownload /etc/netpandownload /etc/nginx/netpandownload.htpasswd /etc/nginx/sites-available/netpandownload.conf /etc/nginx/sites-enabled/netpandownload.conf /etc/systemd/system/netpan-web.service /etc/systemd/system/netpan-aria2.service /etc/sudoers.d/netpan-deploy /usr/local/libexec/netpan-release.py /usr/local/libexec/netpan-start /usr/local/libexec/netpan-health; do
   [[ ! -e "$dest" && ! -L "$dest" ]] || { echo "Refusing to overwrite $dest" >&2; exit 1; }
 done
+for acme_dir in /var/lib/netpandownload-acme /var/lib/netpandownload-acme/.well-known /var/lib/netpandownload-acme/.well-known/acme-challenge; do
+  if [[ -e "$acme_dir" || -L "$acme_dir" ]]; then
+    [[ -d "$acme_dir" && ! -L "$acme_dir" && $(stat -c '%u:%g:%a' "$acme_dir") == 0:0:755 ]] || { echo 'Unsafe NetPan ACME directory; review manually' >&2; exit 1; }
+  fi
+done
 openssl x509 -in "$cert" -noout -checkend 604800 >/dev/null
 openssl x509 -in "$cert" -noout -checkhost "$domain" >/dev/null
 openssl verify -CApath /etc/ssl/certs -untrusted "$cert" -verify_hostname "$domain" "$cert" >/dev/null
@@ -48,6 +53,7 @@ chown root:netpan /srv/netpandownload
 chmod 0750 /srv/netpandownload
 install -d -o netpan -g netpan -m 0700 /srv/netpandownload/{downloads,data}
 install -d -o root -g netpan -m 0750 /etc/netpandownload
+install -d -o root -g root -m 0755 /var/lib/netpandownload-acme /var/lib/netpandownload-acme/.well-known /var/lib/netpandownload-acme/.well-known/acme-challenge
 install -d -o netpan-deploy -g netpan-deploy -m 0700 /var/lib/netpan-deploy/.ssh
 { printf 'restrict '; cat "$pubkey"; printf '\n'; } > /var/lib/netpan-deploy/.ssh/authorized_keys
 chown netpan-deploy:netpan-deploy /var/lib/netpan-deploy/.ssh/authorized_keys
