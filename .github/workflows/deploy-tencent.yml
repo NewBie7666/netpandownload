@@ -47,7 +47,7 @@ jobs:
       - name: Install fixture tools and locked dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y aria2 nginx-core apache2-utils
+          sudo apt-get install -y aria2 nginx-core apache2-utils e2fsprogs util-linux
           npm ci --ignore-scripts
       - name: Build frontend, backend and Electron
         run: |
@@ -65,6 +65,9 @@ jobs:
           npm run test:browser
           python3 deploy/test-release.py 2>&1 | tee reports/deployment.txt
           python3 deploy/test-tls-setup.py 2>&1 | tee reports/tls-setup.txt
+          python3 deploy/test-storage-setup.py 2>&1 | tee reports/storage-setup.txt
+          sudo python3 deploy/test-storage-loop.py 2>&1 | tee reports/storage-loop.txt
+          python3 deploy/test-start.py 2>&1 | tee reports/start.txt
           python3 deploy/test-nginx.py 2>&1 | tee reports/nginx.txt
           bash -n deploy/bootstrap.sh deploy/audit-server.sh deploy/upload-release.sh
       - name: Build Linux package with SHA-256 manifest

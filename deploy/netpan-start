@@ -6,6 +6,13 @@ from pathlib import Path
 import re
 import subprocess
 
+try:
+    mounted = subprocess.run(['/usr/bin/mountpoint', '-q', '/srv/netpandownload'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+except OSError:
+    raise SystemExit('NetPan download mount could not be checked; refusing to start')
+if mounted.returncode != 0:
+    raise SystemExit('NetPan download mount is unavailable; refusing to start')
+
 root = Path('/opt/netpandownload')
 current = (root / 'current').resolve(strict=True)
 assert current.parent == root / 'releases' and re.fullmatch('[0-9a-f]{40}', current.name)

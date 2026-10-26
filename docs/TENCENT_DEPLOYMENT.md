@@ -17,9 +17,11 @@
 
 2026-10-24 检查：Immune Arena [Actions 40101671001](https://github.com/NewBie7666/immune-arena/actions/runs/40101671001) 真实完成 SSH/SCP 和远端版本切换。其成功说明旧项目当时可发布；GitHub 不允许读取其 Secret 值，也不能据此推定两个仓库共享凭据。
 
-本次本机严格 SSH 探针被主机密钥冲突拒绝。未绕过校验或修改 known_hosts。因此服务器当前 OS/架构、Nginx 完整配置、磁盘及运行依赖仍待审计。历史记录中的 Debian 13 仅是线索，不能代替实时确认。2026-10-25 独立只读 HTTP 检查确认 Immune Arena 首页和 version.json 均为 200，线上 SHA 为 `869c78c6e0877243e53002b3cfe39d836accf011`，与成功部署记录一致。
+初次本机 SSH 探针遇到主机密钥冲突时已严格拒绝连接，没有绕过校验。2026-10-25 只读 HTTP 检查确认 Immune Arena 首页和 version.json 均为200，线上 SHA 为 `869c78c6e0877243e53002b3cfe39d836accf011`，与其成功部署记录一致。后续连接使用用户通过控制台核验的主机公钥，并保存到本项目专用 known_hosts，不改写其他项目记录。
 
 2026-10-26 控制台补充核验：用户提供的 ED25519 指纹与 `152.136.33.189:22` 实时公钥一致，已保存本项目专用 known_hosts。控制台只读输出确认 Debian 13.7 trixie、x86_64、内存总量约3.6 GiB/可用3.1 GiB、根盘剩余37 GB，Nginx 1.26.3 监听80/443，已启用两个 Immune Arena 配置。Node 和媒体工具未在当前 PATH 找到，专用部署账户认证仍未就绪。用户已新增 `download.aielfhub.com` A 记录，Google/Cloudflare DNS 均返回上述服务器地址。现有 Certbot 4.0.0，原证书仅覆盖 `aielfhub.com`，不能代替下载器的新证书。这些证据仍不代表生产应用已经部署。
+
+同日后续初始化：已用本项目 TLS 助手为 `download.aielfhub.com` 签发独立证书，证书目录 `/etc/letsencrypt/live/netpan-download.aielfhub.com/`，到期日2027-01-24，临时站点已按助手校验清理。用户完成 aria2 1.37.0、Chromium 156.0.8078.47 和 Node 22.23.4 安装；Node 官方归档 SHA-256 已核验，入口为 `/usr/bin/node`，实际文件在 `/opt/netpan-node-22.23.4/`。yt-dlp 2026.10.21（含默认依赖）与 gallery-dl 1.32.18 位于独立 `/opt/netpan-media-tools/` venv，入口是 `/usr/local/bin/`，pip依赖检查通过。独立容量挂载、账号/服务/私人认证、默认分支发布入口与实际生产发布仍待完成。
 
 ## 一次性管理员初始化
 
@@ -64,6 +66,24 @@ certbot renew --cert-name netpan-download.aielfhub.com --dry-run
 ```
 
 临时站点清理后、正式站点尚未建立时，ACME 路由还未启用，因此该阶段不能宣称续期验收完成。若本机既有证书由其他调度机制维护，先核对实际机制，不创建重复续期任务。不要在日志或聊天中粘贴证书私钥。
+
+### 有容量上限的数据挂载
+
+已确认根盘空间充足时，可在 root 控制台运行已审核的助手，为本应用新建10 GiB数据区：
+
+```bash
+python3 deploy/prepare-storage.py --size-gib 10
+```
+
+助手只创建固定的新普通文件 `/var/lib/netpandownload-data.img`，实际预分配空间后才格式化该文件，并以 `loop,nodev,nosuid,noexec` 挂载到 `/srv/netpandownload`。它拒绝已有镜像、非空/符号链接挂载目录、已有挂载或冲突的 fstab 条目；操作前分别检查镜像所在文件系统和系统配置所在文件系统的可用空间，至少留出额外10 GiB系统余量。不会向现有系统块设备执行格式化。
+
+确认挂载确实来自该镜像的 loop 设备、类型为 ext4 且限制选项齐全后，助手才备份 `/etc/fstab` 并原子追加本应用挂载条目，保留全部原有内容。备份是 `/etc/fstab.netpan-before-storage`，不会覆盖旧备份。失败时保留已创建状态供检查，不自动卸载未知文件系统或删除镜像；不要盲目重跑或删除已有数据。
+
+fstab 使用 `nofail`，使下载镜像故障不阻止其他站点的系统启动。两个 NetPan unit 均要求该挂载，并在启动前检查挂载点；Web launcher 也在读取发布版本前重复检查。挂载不可用时仅本应用拒绝启动，防止回退到无容量限制的系统目录。
+
+完成后用 `df -h /srv/netpandownload` 和 `findmnt --mountpoint /srv/netpandownload` 验收独立容量，再运行 bootstrap。10 GiB是本次依据实际可用空间选择的初始上限，并不保证任意大文件均可容纳；运行时仍保留剩余空间门限和下载失败状态。
+
+本地 Linux 验证包含19项隔离检查、2项启动拒绝测试，以及真实32 MiB临时 ext4 loop镜像的挂载、容量、读写和限制选项测试。真实挂载测试使用临时 fstab 文件，不读写主机 `/etc/fstab`；CI 在无生产凭据的临时 Linux runner 中重复该测试。
 
 `sudoers` 只允许新部署账户重启/停止 **netpan-web**，以及以 netpan 运行 root 拥有的固定健康脚本。没有 shell、包管理、任意 systemctl 或修改 Nginx 的 sudo 权限。健康脚本只接收完整 SHA，不输出 token。安装后的三个 `/usr/local/libexec/netpan-*` 文件必须保持 root 拥有；后续修改这些控制脚本需要一次管理员审核安装。
 

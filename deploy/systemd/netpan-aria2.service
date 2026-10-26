@@ -2,11 +2,13 @@
 Description=NetPan isolated loopback aria2 RPC
 After=network-online.target
 Wants=network-online.target
+RequiresMountsFor=/srv/netpandownload
 
 [Service]
 Type=simple
 User=netpan
 Group=netpan
+ExecStartPre=/usr/bin/mountpoint -q /srv/netpandownload
 ExecStart=/usr/bin/aria2c --conf-path=/etc/netpandownload/aria2.conf
 Restart=on-failure
 RestartSec=5

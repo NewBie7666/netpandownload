@@ -3,6 +3,7 @@ Description=NetPan private web downloader
 After=network-online.target netpan-aria2.service
 Wants=network-online.target
 Requires=netpan-aria2.service
+RequiresMountsFor=/srv/netpandownload
 
 [Service]
 Type=simple
@@ -10,6 +11,7 @@ User=netpan
 Group=netpan
 WorkingDirectory=/opt/netpandownload/current
 EnvironmentFile=/etc/netpandownload/web.env
+ExecStartPre=/usr/bin/mountpoint -q /srv/netpandownload
 ExecStart=/usr/local/libexec/netpan-start
 Restart=on-failure
 RestartSec=5
