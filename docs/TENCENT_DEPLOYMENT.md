@@ -108,11 +108,13 @@ fstab 使用 `nofail`，使下载镜像故障不阻止其他站点的系统启�
 
 `.github/workflows/deploy-tencent.yml` **只支持 workflow_dispatch**。推送分支只跑 CI，不修改服务器。触发必须选择该集成分支，并输入与所选 ref 完全一致的 40 位已审核 `release_sha`。
 
-**GitHub 的 workflow_dispatch 要求工作流先存在于默认分支。当前默认 main 没有该文件。** 未经用户许可不能合并本 Draft PR，因此首次触发前需要用户审核后将发布入口纳入默认分支（或明确授权另一个合适的默认分支安排）。不能通过修改旧项目工作流或不受保护事件绕过这个条件。
+**GitHub 的 workflow_dispatch 要求工作流先存在于默认分支。** 本项目已在用户明确授权后，仅将发布工作流文件加入默认 main；Draft PR 保持未合并。发布仍选择已审核的集成分支完整 SHA，不使用 main 的旧版应用代码。不能通过修改旧项目工作流或不受保护事件绕过保护规则。
 
 无密钥 job 检出精确 SHA，固定 Node，`npm ci --ignore-scripts`，编译 Vue/Express/Electron，运行全部回归、真实 aria2 HTTP TestBot、Nginx TLS 认证与回滚 fixture。运行依赖从锁文件产生、prune devDependencies、生产高危依赖审计通过后封装 Linux 包；发布包包含版本身份和覆盖全部文件的 SHA-256 清单。外部归档 SHA 同时传到独立 deploy job，后者只下载**同一个工作流运行**的确切 artifact。
 
 Environment 审批后，严格校验账号/主机/端口/主机密钥，SSH/SCP 上传固定 staging；root 安装的非特权发布助手检查归档 SHA、路径、完整清单、Linux 架构与提交 SHA，禁止符号链接/硬链接/任意路径，原子切换 current 并重启服务。包内代码不作为 root 执行，服务器无需 npm install。
+
+传输使用四个并行 SCP 连接，将已校验的归档分块上传到本次运行独有的私有暂存目录；所有块成功后按顺序合并并再次校验完整归档 SHA-256，才原子移入发布助手使用的固定路径。拒绝覆盖已有归档和符号链接；失败及正常退出只清理本次固定文件和空目录。生产 job 时限30分钟，以容纳跨境链路波动；上传失败不会切换 current 或启动首发服务。
 
 本地健康检查验证真实 release SHA、私有模式、禁用 mock 和实际 aria2 RPC。外部 smoke 再验证受信 TLS、未认证 `401`、Basic Auth 网页/API、下载固定提交 README、轮询真实完成、浏览器流式下载和 SHA-256。失败自动恢复旧 current 并重启验证；首次无旧版时停止新服务并撤销 current。
 

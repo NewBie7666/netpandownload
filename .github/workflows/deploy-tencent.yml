@@ -64,6 +64,7 @@ jobs:
           npm run test:douyin-browser 2>&1 | tee reports/douyin-browser.txt
           npm run test:browser
           python3 deploy/test-release.py 2>&1 | tee reports/deployment.txt
+          python3 deploy/test-upload.py 2>&1 | tee reports/upload.txt
           python3 deploy/test-tls-setup.py 2>&1 | tee reports/tls-setup.txt
           python3 deploy/test-storage-setup.py 2>&1 | tee reports/storage-setup.txt
           sudo python3 deploy/test-storage-loop.py 2>&1 | tee reports/storage-loop.txt
@@ -105,7 +106,7 @@ jobs:
     name: Protected production upload, health check and automatic rollback
     needs: verify
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 30
     environment: production
     permissions:
       contents: read
