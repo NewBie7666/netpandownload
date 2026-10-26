@@ -36,7 +36,7 @@
     "test:history": "tsx --test tests/downloads/historyPersistence.test.ts",
     "test:social": "tsx --test tests/downloads/socialMetadata.test.ts tests/downloads/socialProvider.test.ts",
     "test:douyin-auth": "tsx --test tests/downloads/douyinSessionStore.test.ts tests/downloads/douyinAuth.test.ts tests/downloads/douyinCredentials.test.ts",
-    "test:douyin-browser": "tsx --test tests/downloads/douyinBrowser.test.ts"
+    "test:douyin-browser": "tsx --test tests/downloads/douyinBrowser.test.ts tests/downloads/douyinAuthenticatedBrowser.test.ts"
   },
   "dependencies": {
     "@types/qrcode": "^1.5.6",

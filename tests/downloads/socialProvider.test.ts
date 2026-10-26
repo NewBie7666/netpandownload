@@ -6,6 +6,7 @@ import { extractSocialPost } from '../../server/providers/social/extractor.js'
 import { createSocialProvider } from '../../server/providers/socialProvider.js'
 import type { SocialPlatform, SocialPost } from '../../server/providers/social/types.js'
 import type { QuarkFile } from '../../shared/types.js'
+import { AppError } from '../../server/http.js'
 
 const douyinId = '1234567890123456789'
 const xhsId = '0123456789abcdef01234567'
@@ -200,6 +201,26 @@ test('uses an injected yt-dlp result only when it matches the requested post', a
     }),
     (error: unknown) => Boolean(errorCode(error))
   )
+})
+
+test('uses authenticated Douyin browser media before the legacy extractor', async () => {
+  let observedId: string | undefined
+  const target = { file: file('browser-fixture', 'douyin.mp4', 1234), url: douyinVideo }
+  const post = await extractSocialPost(douyinCanonical, {
+    requestPage: async () => ({ status: 200, html: '<html></html>' }),
+    requestDouyinBrowser: async source => { observedId = source.id; return [target] },
+    runYtdlp: async () => { throw new Error('legacy extractor must not run') }
+  })
+  assert.equal(observedId, douyinId)
+  assert.deepEqual(post.media, [target])
+})
+
+test('preserves official verification failures from the authenticated browser', async () => {
+  await assert.rejects(() => extractSocialPost(douyinCanonical, {
+    requestPage: async () => ({ status: 200, html: '<html></html>' }),
+    requestDouyinBrowser: async () => { throw new AppError('verification_required', '需要官方验证', 403) },
+    runYtdlp: async () => { throw new Error('must not mask verification') }
+  }), (error: unknown) => errorCode(error) === 'verification_required')
 })
 
 test('caches post media, requires the selected fid, and ignores client URL metadata', async () => {

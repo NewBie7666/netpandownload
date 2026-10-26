@@ -10,7 +10,8 @@ import { lookupPublicAddresses } from '../../downloader/pageLinkScanner.js'
 import { extractSocialSource, normalizeSocialPageUrl } from './source.js'
 import { parseSocialPostHtml, parseSocialYtdlpJson } from './metadataParser.js'
 import { socialPageUserAgent } from './mediaPolicy.js'
-import type { SocialPlatform, SocialPost, SocialSource } from './types.js'
+import type { SocialMedia, SocialPlatform, SocialPost, SocialSource } from './types.js'
+import { extractAuthenticatedDouyin } from './douyinBrowser.js'
 import { socialPageHosts } from '../../../shared/socialLinks.js'
 import { managedDouyinCookieHeader, withDouyinCookieFile } from '../../auth/douyin/credentials.js'
 
@@ -18,6 +19,7 @@ export interface SocialPage { status: number; location?: string; html: string }
 export interface SocialExtractOptions {
   requestPage?: (url: string) => Promise<SocialPage>
   runYtdlp?: (platform: SocialPlatform, source: SocialSource) => Promise<string>
+  requestDouyinBrowser?: (source: SocialSource) => Promise<SocialMedia[] | undefined>
 }
 const MAX_BYTES = 8 * 1024 * 1024
 const run = promisify(execFile)
@@ -174,13 +176,18 @@ export async function extractSocialPost(input: string, options: SocialExtractOpt
     if (page.status === 401) throw new AppError('auth_required', '平台要求有效登录态，请管理员检查平台 Cookie 配置')
     if (page.status === 403) throw new AppError('blocked_by_upstream', '平台拒绝访问，可能需要登录或验证，请重新分享或稍后重试', 403)
     if (page.status !== 200) throw new AppError('network_error', '平台网页请求失败，请稍后重试', 502)
-    let media
+    let media: SocialMedia[] | undefined
     try {
       media = parseSocialPostHtml(source.platform, page.html, source.id)
     } catch (error) {
       if (!(error instanceof AppError) || !['social_parse_failed', 'auth_required', 'blocked_by_upstream', 'restricted'].includes(error.error)) throw error
-      const json = await (options.runYtdlp || runSocialYtdlp)(source.platform, source)
-      media = parseSocialYtdlpJson(source.platform, json, source.id)
+      if (source.platform === 'douyin' && (options.requestDouyinBrowser || (!options.requestPage && !options.runYtdlp))) {
+        media = await (options.requestDouyinBrowser || extractAuthenticatedDouyin)(source)
+      }
+      if (!media?.length) {
+        const json = await (options.runYtdlp || runSocialYtdlp)(source.platform, source)
+        media = parseSocialYtdlpJson(source.platform, json, source.id)
+      }
     }
     if (!media.length) throw new AppError('social_parse_failed', '未获得实际媒体地址，请重新复制分享链接')
     return { platform: source.platform, id: source.id, sourceUrl: source.url, media }
