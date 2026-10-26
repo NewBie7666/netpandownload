@@ -70,6 +70,17 @@ async function openFixture(mode: FixtureMode) {
     const nativeNewContext = browser.newContext.bind(browser)
     browser.newContext = async (contextOptions) => {
       const context = await nativeNewContext(contextOptions)
+      if (mode === 'cookie') {
+        await context.addCookies([{
+          name: '',
+          value: 'anonymous-cookie-must-be-filtered',
+          domain: 'www.douyin.com',
+          path: '/',
+          secure: true,
+          httpOnly: false,
+          sameSite: 'Lax'
+        }])
+      }
       context.on('request', request => {
         if (request.isNavigationRequest() && !request.frame().parentFrame()) navigationUrls.push(request.url())
       })
@@ -176,6 +187,8 @@ test('Douyin browser adapter recognizes a trusted session cookie and abort close
   try {
     const snapshot = await opened.session.snapshot()
     assert.equal(snapshot.state, 'scanned')
+    assert.ok(snapshot.cookies?.every(cookie => cookie.name.length > 0))
+    assert.equal(snapshot.cookies?.some(cookie => cookie.name === ''), false)
     assert.ok(snapshot.cookies?.some(cookie => cookie.name === 'sessionid' && cookie.value === fixtureCookie))
 
     opened.controller.abort()

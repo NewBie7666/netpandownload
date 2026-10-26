@@ -126,7 +126,11 @@ export class PlaywrightDouyinBrowserDriver implements DouyinBrowserDriver {
         close,
         async snapshot(): Promise<DouyinBrowserSnapshot> {
           if (closed || !active || active.isClosed()) return { state: 'error' }
-          const cookies = (await loginContext.cookies()).filter(cookie => cookie.domain.replace(/^\./, '') === 'douyin.com' || cookie.domain.endsWith('.douyin.com') || cookie.domain.replace(/^\./, '') === 'iesdouyin.com' || cookie.domain.endsWith('.iesdouyin.com'))
+          // Chromium can return anonymous cookies (name=""). They cannot be
+          // exported as Netscape credentials and must not reject a valid login.
+          const cookies = (await loginContext.cookies()).filter(cookie =>
+            cookie.name.length > 0 && (cookie.domain.replace(/^\./, '') === 'douyin.com' || cookie.domain.endsWith('.douyin.com') || cookie.domain.replace(/^\./, '') === 'iesdouyin.com' || cookie.domain.endsWith('.iesdouyin.com'))
+          )
           if (cookies.some(cookie => ['sessionid', 'sessionid_ss'].includes(cookie.name) && cookie.value.length >= 16 && (cookie.expires <= 0 || cookie.expires * 1000 > Date.now()))) {
             return { state: 'scanned', cookies }
           }
