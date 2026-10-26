@@ -184,6 +184,27 @@ function mapAppErrorCode(
   context: 'resolve' | 'list' | 'download'
 ): ProviderErrorCode {
   if (errorCode === 'unsupported_provider') return 'unsupported_provider'
+  if (providerId === 'douyin' || providerId === 'xiaohongshu') {
+    if (['dependency_missing', 'media_extract_timeout', 'download_url_missing', 'auth_required', 'blocked_by_upstream', 'restricted', 'network_error'].includes(errorCode)) return errorCode as ProviderErrorCode
+    if (errorCode === 'social_redirect_forbidden') return 'restricted'
+    if (errorCode === 'social_session_expired') return 'episode_cache_miss'
+    return 'parse_failed'
+  }
+
+  if (providerId === 'youtube') {
+    if (errorCode === 'dependency_missing') return 'dependency_missing'
+    if (errorCode === 'media_extract_timeout') return 'media_extract_timeout'
+    if (errorCode === 'download_url_missing') return 'download_url_missing'
+    if (errorCode === 'youtube_no_progressive') return 'restricted'
+    return 'parse_failed'
+  }
+
+  if (providerId === 'instagram') {
+    if (errorCode === 'dependency_missing') return 'dependency_missing'
+    if (errorCode === 'media_extract_timeout') return 'media_extract_timeout'
+    if (errorCode === 'download_url_missing') return 'download_url_missing'
+    return 'parse_failed'
+  }
 
   if (providerId === 'bilibili') {
     if (errorCode === 'bilibili_resolve_failed') return 'bilibili_resolve_failed'

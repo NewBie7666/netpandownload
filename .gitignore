@@ -8,6 +8,11 @@ dist-server/
 npm-debug.log*
 *.log
 .npm-cache/
+.release/
+reports/
+__pycache__/
+test-results/
+playwright-report/
 .dev-*.pid
 .dev-server.pid
 data/settings.json

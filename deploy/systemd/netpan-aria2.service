@@ -1,0 +1,31 @@
+[Unit]
+Description=NetPan isolated loopback aria2 RPC
+After=network-online.target
+Wants=network-online.target
+RequiresMountsFor=/srv/netpandownload
+
+[Service]
+Type=simple
+User=netpan
+Group=netpan
+ExecStartPre=/usr/bin/mountpoint -q /srv/netpandownload
+ExecStart=/usr/bin/aria2c --conf-path=/etc/netpandownload/aria2.conf
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/netpandownload
+RestrictSUIDSGID=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+MemoryMax=512M
+TasksMax=64
+LimitNOFILE=4096
+
+[Install]
+WantedBy=multi-user.target

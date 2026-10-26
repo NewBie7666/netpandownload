@@ -35,7 +35,7 @@ export interface DownloadResult {
   cached: boolean
 }
 
-export type ProviderId = 'quark' | 'bilibili'
+export type ProviderId = 'quark' | 'bilibili' | 'instagram' | 'youtube' | 'douyin' | 'xiaohongshu'
 
 export interface ProviderShareResult {
   providerId: ProviderId
@@ -57,6 +57,7 @@ export type DecisionPlatform =
   | 'quark'
   | 'youtube'
   | 'douyin'
+  | 'xiaohongshu'
   | 'zhihu'
   | 'instagram'
   | 'unknown'
@@ -91,6 +92,7 @@ export type DownloadTaskStatus =
   | 'removed'
 
 export interface DownloadTask {
+  failureReason?: string
   gid: string
   fileName: string
   status: DownloadTaskStatus
@@ -130,6 +132,30 @@ export interface AddDownloadRequest {
   url: string
   fileName?: string
   dir?: string
+}
+
+export interface PageFileLink {
+  url: string
+  fileName: string
+  extension: string
+}
+
+export interface ScanPageRequest {
+  url: string
+  /** Optional scan-time suffix restriction; omit for automatic discovery. */
+  extensions?: string
+}
+
+export interface ScanPageResult {
+  pageUrl: string
+  extensions: string[]
+  items: PageFileLink[]
+  truncated: boolean
+}
+
+export interface AddDirectDownloadRequest {
+  url: string
+  fileName?: string
 }
 
 export interface AddDownloadResult {

@@ -3,6 +3,7 @@ import type {
   DecisionResourceType,
   DecisionRiskLevel
 } from '../../shared/types.js'
+import { extractSocialSource } from '../providers/social/source.js'
 
 export interface PlatformInference {
   normalizedUrl: string
@@ -19,6 +20,7 @@ function normalizeInput(input: string) {
   if (/^(www\.)?bilibili\.com\//i.test(trimmed)) return `https://${trimmed}`
   if (/^space\.bilibili\.com\//i.test(trimmed)) return `https://${trimmed}`
   if (/^b23\.tv\//i.test(trimmed)) return `https://${trimmed}`
+  if (/^(www\.)?instagram\.com\//i.test(trimmed)) return `https://${trimmed}`
   return trimmed
 }
 
@@ -35,6 +37,31 @@ function fallbackInference(input: string): PlatformInference {
 
 export function detectPlatform(input: string): PlatformInference {
   const normalizedUrl = normalizeInput(input)
+
+  try {
+    const socialSource = extractSocialSource(normalizedUrl)
+    if (socialSource.platform === 'douyin') {
+      return {
+        normalizedUrl: socialSource.url,
+        platform: 'douyin',
+        resourceType: 'video',
+        baseRisk: 'high',
+        baseFeasible: true,
+        confidence: 0.86
+      }
+    }
+    return {
+      normalizedUrl: socialSource.url,
+      platform: 'xiaohongshu',
+      resourceType: 'file',
+      baseRisk: 'high',
+      baseFeasible: true,
+      confidence: 0.84
+    }
+  } catch {
+    // Continue with the existing platform detectors for non-social URLs.
+  }
+
   try {
     const url = new URL(normalizedUrl)
     const hostname = url.hostname.toLowerCase().replace(/^www\./, '')
@@ -74,17 +101,6 @@ export function detectPlatform(input: string): PlatformInference {
       }
     }
 
-    if (hostname === 'douyin.com' || hostname.endsWith('.douyin.com')) {
-      return {
-        normalizedUrl,
-        platform: 'douyin',
-        resourceType: 'video',
-        baseRisk: 'high',
-        baseFeasible: false,
-        confidence: 0.65
-      }
-    }
-
     if (hostname === 'zhihu.com' || hostname.endsWith('.zhihu.com')) {
       return {
         normalizedUrl,
@@ -100,9 +116,9 @@ export function detectPlatform(input: string): PlatformInference {
       return {
         normalizedUrl,
         platform: 'instagram',
-        resourceType: 'video',
+        resourceType: /^\/p\//i.test(url.pathname) ? 'file' : 'video',
         baseRisk: 'high',
-        baseFeasible: false,
+        baseFeasible: /^\/(?:p|reel|tv)\/[A-Za-z0-9_-]+\/?$/.test(url.pathname),
         confidence: 0.62
       }
     }

@@ -2,9 +2,12 @@ import { AppError } from '../http.js'
 import { bilibiliProvider } from './bilibiliProvider.js'
 import { getLastExecutionTrace } from './executionTrace.js'
 import { quarkProvider } from './quarkProvider.js'
+import { instagramProvider } from './instagramProvider.js'
+import { youtubeProvider } from './youtubeProvider.js'
+import { douyinProvider, xiaohongshuProvider } from './socialProvider.js'
 import type { Provider, ProviderId } from './types.js'
 
-const providers: Provider[] = [quarkProvider, bilibiliProvider]
+const providers: Provider[] = [quarkProvider, bilibiliProvider, instagramProvider, youtubeProvider, douyinProvider, xiaohongshuProvider]
 let matchedProvider: string | undefined
 
 export function listProviders() {

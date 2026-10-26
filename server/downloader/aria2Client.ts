@@ -18,6 +18,7 @@ interface Aria2TaskFile {
 export interface Aria2TaskPayload {
   gid: string
   status: string
+  errorCode?: string
   totalLength?: string
   completedLength?: string
   downloadSpeed?: string
@@ -25,7 +26,7 @@ export interface Aria2TaskPayload {
   files?: Aria2TaskFile[]
 }
 
-const taskKeys = ['gid', 'status', 'totalLength', 'completedLength', 'downloadSpeed', 'dir', 'files']
+const taskKeys = ['gid', 'status', 'totalLength', 'completedLength', 'downloadSpeed', 'dir', 'files', 'errorCode']
 
 function getAria2Env() {
   return {
@@ -161,6 +162,8 @@ export function getDefaultDownloadOptions(out?: string, dir?: string) {
     split: '16',
     'max-connection-per-server': '16',
     continue: 'true',
+    'follow-torrent': 'false',
+    'follow-metalink': 'false',
     'disable-ipv6': 'true',
     'async-dns': 'false'
   }

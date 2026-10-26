@@ -71,10 +71,15 @@ export async function resolveShare(inputUrl: string, options: ResolveShareOption
     throw new AppError('bilibili_resolve_failed', 'Bilibili space search resolve failed; login or upstream access may be required')
   }
 
-  const heuristic = await heuristicResolver(inputUrl, options)
-  if (consistent(heuristic.result)) return heuristic.result as StableResolvedShare
+  // A cloud/private deployment must never turn a failed upstream parse into an
+  // apparently successful metadata-only task. The desktop client keeps the
+  // historical heuristic for offline/provider smoke tests.
+  if (process.env.NETPAN_PRIVATE_WEB !== 'true') {
+    const heuristic = await heuristicResolver(inputUrl, options)
+    if (consistent(heuristic.result)) return heuristic.result as StableResolvedShare
+  }
 
-  throw new AppError('bilibili_resolve_failed', 'Bilibili resolve failed; fallback to single video mode')
+  throw new AppError('bilibili_resolve_failed', 'Bilibili resolve failed; upstream media metadata is unavailable')
 }
 
 export * from './types.js'

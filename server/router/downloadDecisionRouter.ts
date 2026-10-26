@@ -63,21 +63,26 @@ async function enrichWithWebParser(url: string) {
 }
 
 function decideTool(inference: PlatformInference): DecisionRecommendedTool {
+  if (inference.platform === 'youtube') {
+    return { type: 'desktop', name: 'desktop-downloader', capability: 'video-extract' }
+  }
+  if (inference.platform === 'instagram') {
+    return { type: 'desktop', name: 'desktop-downloader', capability: 'video-extract' }
+  }
+  if (inference.platform === 'douyin' || inference.platform === 'xiaohongshu') {
+    return { type: 'desktop', name: 'desktop-downloader', capability: 'video-extract' }
+  }
   if (inference.platform === 'bilibili') {
     return { type: 'desktop', name: 'desktop-downloader', capability: 'video-extract' }
   }
   if (inference.platform === 'quark') {
     return { type: 'desktop', name: 'desktop-downloader', capability: 'multi-thread-download' }
   }
-  if (inference.platform === 'youtube') {
-    return { type: 'local-tool', name: 'external-downloader', capability: 'video-extract' }
-  }
   return { type: 'none', name: 'not-supported', capability: 'unsupported' }
 }
 
 function decideAction(inference: PlatformInference): DecisionAction {
-  if (inference.platform === 'bilibili' || inference.platform === 'quark') return 'use_desktop_downloader'
-  if (inference.platform === 'youtube') return 'use_local_tool'
+  if (inference.baseFeasible && (inference.platform === 'bilibili' || inference.platform === 'quark' || inference.platform === 'instagram' || inference.platform === 'youtube' || inference.platform === 'douyin' || inference.platform === 'xiaohongshu')) return 'use_desktop_downloader'
   return 'unsupported'
 }
 
@@ -97,9 +102,18 @@ function buildExplanation(inference: PlatformInference, parsed?: WebParseLike) {
     return `${enriched} 夸克资源建议使用桌面端内置下载器或多线程下载能力处理。`
   }
   if (inference.platform === 'youtube') {
-    return `${enriched} 当前桌面端未内置 YouTube Provider，可使用本机外部下载工具处理。`
+    return `${enriched} 支持使用 yt-dlp 解析单个视频；仅支持已包含音频的可用直链，受版权/地区/登录限制的内容可能无法下载。`
   }
-  if (inference.platform === 'douyin' || inference.platform === 'zhihu' || inference.platform === 'instagram') {
+  if (inference.platform === 'instagram') {
+    return `${enriched} 单个 Instagram 帖子可在桌面端通过 gallery-dl 解析图片、视频，并使用 aria2 下载。`
+  }
+  if (inference.platform === 'douyin') {
+    return `${enriched} 抖音链接会继续交给抖音解析器获取视频媒体；链接过期、作品删除、需要登录或触发风控时，实际解析可能失败。`
+  }
+  if (inference.platform === 'xiaohongshu') {
+    return `${enriched} 小红书图文或视频链接会继续交给小红书解析器获取媒体；链接过期、作品删除、需要登录或触发风控时，实际解析可能失败。`
+  }
+  if (inference.platform === 'zhihu') {
     return `${enriched} 当前版本只识别该平台，不提供下载执行能力。`
   }
   return '当前链接来源无法识别，暂不支持。'

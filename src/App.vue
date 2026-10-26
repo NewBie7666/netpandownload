@@ -2,6 +2,8 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import {
   addDownloadTask as addDownloaderTask,
+  addDirectDownloadTask,
+  scanPageForFiles,
   fetchDownloadTasks,
   openDownloadDir,
   pauseDownloadTask,
@@ -20,17 +22,21 @@ import {
   listProviderFiles,
   resolveProviderResource
 } from './api/providers'
+import DouyinLogin from './components/DouyinLogin.vue'
 import DownloadCenter from './views/download-center/DownloadCenter.vue'
+import { chooseVisibleFiles, dropVisibleFiles, filterFileLinks, getFileSelectionState, groupFileExtensions, setFileTypeSelected, submitPageDownloadBatch, PAGE_BATCH_LIMIT } from './api/pageFileSelection'
 import type {
   DownloadResult,
   DownloadDecision,
   DownloadTask,
   DownloadTasksResult,
+  PageFileLink,
   ProviderId,
   QuarkAuthQrcodeResult,
   QuarkAuthStatusResult,
   QuarkFile
 } from '../shared/types'
+import { extractSocialSource, isSocialInput } from '../shared/socialLinks.js'
 
 interface PathItem {
   fid: string
@@ -54,6 +60,8 @@ declare global {
   interface Window {
     desktopApi?: {
       selectDownloadDir: () => Promise<string | null>
+      openPageScanBrowser?: (url: string) => Promise<{ pageUrl: string }>
+      scanInteractivePage?: (extensions: string) => Promise<{ pageUrl: string, extensions: string[], items: PageFileLink[], truncated: boolean, domCandidates?: number, networkCandidates?: number }>
       loginBilibili?: () => Promise<BilibiliLoginResult>
       getBilibiliLoginStatus?: () => Promise<BilibiliLoginStatus>
       logoutBilibili?: () => Promise<BilibiliLoginStatus>
@@ -61,7 +69,35 @@ declare global {
   }
 }
 
+const pageScanUrl = ref('')
+const pageScanExtensions = ref('')
+const pageScanLoading = ref(false)
+const pageBatchLoading = ref(false)
+const pageBatchCompleted = ref(0)
+const pageBatchTotal = ref(0)
+const pageScanLinks = ref<PageFileLink[]>([])
+const pageScanSelected = ref<string[]>([])
+const pageVisibleType = ref('')
+const pageScanTruncated = ref(false)
+const pageScanMessage = ref('')
+const pageScanError = ref('')
+const pageBatchLimit = PAGE_BATCH_LIMIT
+const pageTypeGroups = computed(() => groupFileExtensions(pageScanLinks.value).map(group => ({
+  ...group,
+  ...getFileSelectionState(pageScanSelected.value, filterFileLinks(pageScanLinks.value, [group.extension]))
+})))
+const visiblePageLinks = computed(() => pageVisibleType.value
+  ? filterFileLinks(pageScanLinks.value, [pageVisibleType.value]) : pageScanLinks.value)
+const selectedPageLinks = computed(() => pageScanLinks.value.filter((item) => pageScanSelected.value.includes(item.url)))
+const hiddenPageSelectionCount = computed(() => selectedPageLinks.value.filter((item) => !visiblePageLinks.value.includes(item)).length)
+const nextPageBatchCount = computed(() => Math.min(selectedPageLinks.value.length, pageBatchLimit))
+const visibleSelectedCount = computed(() => visiblePageLinks.value.filter((item) => pageScanSelected.value.includes(item.url)).length)
+const directDownloadUrl = ref('')
+const directDownloadFileName = ref('')
+const directDownloadLoading = ref(false)
 const shareUrl = ref('')
+const privateWeb = ref(false)
+const desktopAvailable = Boolean(window.desktopApi?.selectDownloadDir)
 const passcode = ref('')
 const currentProviderId = ref<ProviderId | ''>('')
 const shareId = ref('')
@@ -87,6 +123,7 @@ const downloaderDefaultDir = ref('')
 const taskActionGid = ref('')
 const deleteTaskDialog = ref<DownloadTask | null>(null)
 const selectedFileIds = ref<string[]>([])
+const mediaFilter = ref<'all' | 'image' | 'video'>('all')
 const batchDownloadLoading = ref(false)
 const batchDownloadDone = ref(0)
 const batchDownloadTotal = ref(0)
@@ -100,12 +137,29 @@ const bilibiliLoginStatus = ref<BilibiliLoginStatus>({
 let authPollTimer: number | undefined
 let taskPollTimer: number | undefined
 
+const providerNames: Record<ProviderId, string> = {
+  quark: '夸克',
+  bilibili: 'Bilibili',
+  instagram: 'Instagram',
+  youtube: 'YouTube',
+  douyin: '抖音',
+  xiaohongshu: '小红书'
+}
+
 const hasFiles = computed(() => files.value.length > 0)
 const canGoBack = computed(() => pathStack.value.length > 0)
+const supportsMediaFilter = computed(() => ['instagram', 'douyin', 'xiaohongshu'].includes(currentProviderId.value))
 const selectableFiles = computed(() => files.value.filter((file) => !file.isDir))
+const visibleFiles = computed(() => {
+  if (!supportsMediaFilter.value || mediaFilter.value === 'all') return files.value
+  return files.value.filter((file) => mediaFilter.value === 'image'
+    ? /\.(jpg|jpeg|png|webp|gif)$/i.test(file.name)
+    : /\.(mp4|mov|webm)$/i.test(file.name))
+})
+const visibleSelectableFiles = computed(() => visibleFiles.value.filter((file) => !file.isDir))
 const selectedFiles = computed(() => selectableFiles.value.filter((file) => selectedFileIds.value.includes(file.fid)))
 const allSelectableSelected = computed(
-  () => selectableFiles.value.length > 0 && selectableFiles.value.every((file) => selectedFileIds.value.includes(file.fid))
+  () => visibleSelectableFiles.value.length > 0 && visibleSelectableFiles.value.every((file) => selectedFileIds.value.includes(file.fid))
 )
 const batchDownloadProgressText = computed(() => {
   if (!batchDownloadLoading.value || !batchDownloadTotal.value) return ''
@@ -119,6 +173,7 @@ const decisionPlatformText = computed(() => {
     quark: '夸克',
     youtube: 'YouTube',
     douyin: '抖音',
+    xiaohongshu: '小红书',
     zhihu: '知乎',
     instagram: 'Instagram',
     unknown: '未知来源'
@@ -174,21 +229,40 @@ function toggleFileSelection(file: QuarkFile) {
 
 function toggleSelectAllFiles() {
   if (batchDownloadLoading.value) return
-  selectedFileIds.value = allSelectableSelected.value ? [] : selectableFiles.value.map((file) => file.fid)
+  const ids = new Set(selectedFileIds.value)
+  for (const file of visibleSelectableFiles.value) {
+    if (allSelectableSelected.value) ids.delete(file.fid)
+    else ids.add(file.fid)
+  }
+  selectedFileIds.value = [...ids]
 }
 
 function normalizeResourceUrlInput(value: string) {
   const trimmed = String(value || '').trim().replace(/^["']|["']$/g, '')
   if (!trimmed) return ''
 
+  try {
+    return extractSocialSource(trimmed).url
+  } catch {
+    // Keep the existing normalizers for providers with their own URL rules.
+  }
+
   if (/^pan\.quark\.cn\/s\//i.test(trimmed)) {
     return `https://${trimmed}`
   }
+  if (/^(?:v\.douyin\.com|(?:www\.)?(?:m\.)?douyin\.com|iesdouyin\.com|(?:www\.)?xhslink\.com|(?:www\.)?xiaohongshu\.com)\//i.test(trimmed)) {
+    return `https://${trimmed}`
+  }
+  if (/^(www\.)?instagram\.com\//i.test(trimmed)) return `https://${trimmed}`
+  if (/^(?:(?:www|m)\.)?(?:youtube\.com|youtu\.be)\//i.test(trimmed)) return `https://${trimmed}`
   if (/^(www\.)?bilibili\.com\//i.test(trimmed) || /^space\.bilibili\.com\//i.test(trimmed) || /^b23\.tv\//i.test(trimmed)) {
     return `https://${trimmed}`
   }
 
   const matched = trimmed.match(/https?:\/\/pan\.quark\.cn\/s\/[^\s"'<>]+/i)
+    || trimmed.match(/https?:\/\/(?:v\.douyin\.com|(?:www\.)?(?:m\.)?douyin\.com|iesdouyin\.com|(?:www\.)?xhslink\.com|(?:www\.)?xiaohongshu\.com)\/[^\s"'<>]+/i)
+    || trimmed.match(/https?:\/\/(?:www\.)?instagram\.com\/[^\s"'<>]+/i)
+    || trimmed.match(/https?:\/\/(?:(?:www|m)\.)?(?:youtube\.com|youtu\.be)\/[^\s"'<>]+/i)
     || trimmed.match(/https?:\/\/(?:www\.)?bilibili\.com\/[^\s"'<>]+/i)
     || trimmed.match(/https?:\/\/space\.bilibili\.com\/[^\s"'<>]+/i)
     || trimmed.match(/https?:\/\/b23\.tv\/[^\s"'<>]+/i)
@@ -199,8 +273,20 @@ function validateResourceUrl(value: string) {
   const trimmed = normalizeResourceUrlInput(value)
   if (!trimmed) return '请输入资源链接'
 
+  if (isSocialInput(trimmed, 'douyin')) return ''
+  if (isSocialInput(trimmed, 'xiaohongshu')) return ''
+
   try {
     const url = new URL(trimmed)
+    if (/^(?:www\.|m\.)?youtube\.com$/i.test(url.hostname)) {
+      return url.pathname === '/watch' && /^[A-Za-z0-9_-]{11}$/.test(url.searchParams.get('v') || '') || /^\/(shorts|live)\/[A-Za-z0-9_-]{11}\/?$/.test(url.pathname)
+        ? '' : '仅支持 YouTube 单个视频'
+    }
+    if (url.hostname.toLowerCase() === 'youtu.be') return /^\/[A-Za-z0-9_-]{11}\/?$/.test(url.pathname) ? '' : '无效的 YouTube 短链接'
+    if (/^(?:www\.|m\.)?instagram\.com$/i.test(url.hostname)) {
+      return /^\/(?:p|reel|tv)\/[A-Za-z0-9_-]+\/?$/.test(url.pathname)
+        ? '' : '只支持 Instagram 单个 /p/、/reel/ 或 /tv/ 帖子'
+    }
     if (/pan\.quark\.cn$/i.test(url.hostname)) {
       if (!/\/s\/[^/?#]+/.test(url.pathname)) {
         return '未识别到夸克分享 ID'
@@ -221,6 +307,12 @@ function validateResourceUrl(value: string) {
     }
     if (/^b23\.tv$/i.test(url.hostname) && url.pathname.length > 1) {
       return ''
+    }
+    if (/^(?:www\.)?douyin\.com$/i.test(url.hostname) || /^v\.douyin\.com$/i.test(url.hostname) || /^(?:www\.)?m\.douyin\.com$/i.test(url.hostname) || /^(?:www\.)?iesdouyin\.com$/i.test(url.hostname)) {
+      return '未识别到支持的抖音分享链接'
+    }
+    if (/^(?:www\.)?xhslink\.com$/i.test(url.hostname) || /^(?:www\.)?xiaohongshu\.com$/i.test(url.hostname)) {
+      return '未识别到支持的小红书分享链接'
     }
   } catch {
     return '资源链接格式不正确'
@@ -312,8 +404,9 @@ async function loadShare() {
     stoken.value = result.share.stoken
     files.value = result.share.files
     clearFileSelection()
+    mediaFilter.value = 'all'
     pathStack.value = []
-    noticeMessage.value = `已通过 ${result.providerId === 'quark' ? '夸克' : 'Bilibili'} 获取 ${result.share.files.length} 个文件`
+    noticeMessage.value = `已通过 ${providerNames[result.providerId]} 获取 ${result.share.files.length} 个文件`
   } catch (error) {
     currentProviderId.value = ''
     shareId.value = ''
@@ -427,6 +520,140 @@ function getDownloadFileName(download: DownloadResult) {
   }
 
   return download.source === 'direct' ? `${baseName}.mp4` : baseName
+}
+
+async function openInteractivePage() {
+  pageScanError.value = ''
+  pageScanMessage.value = ''
+  if (!window.desktopApi?.openPageScanBrowser) {
+    pageScanError.value = '该功能需要 Electron 桌面端'
+    return
+  }
+  try {
+    await window.desktopApi.openPageScanBrowser(pageScanUrl.value.trim())
+    pageScanMessage.value = '已打开网页。请在新窗口点击补丁详情/分享，随后返回主窗口点击“扫描已打开页面”。'
+  } catch (error) {
+    pageScanError.value = error instanceof Error ? error.message : '无法打开交互式网页'
+  }
+}
+
+async function scanInteractiveBrowser() {
+  if (pageScanLoading.value || pageBatchLoading.value) return
+  pageScanLoading.value = true
+  pageScanError.value = ''
+  pageScanMessage.value = ''
+  pageScanLinks.value = []
+  pageScanSelected.value = []
+  pageVisibleType.value = ''
+  pageScanTruncated.value = false
+  try {
+    if (!window.desktopApi?.scanInteractivePage) throw new Error('该功能需要 Electron 桌面端')
+    const result = await window.desktopApi.scanInteractivePage(pageScanExtensions.value.trim())
+    pageScanLinks.value = result.items
+    pageScanTruncated.value = result.truncated
+    pageScanMessage.value = result.items.length > 0
+      ? '交互式扫描：找到 ' + result.items.length + ' 条匹配链接，请核对并勾选。'
+      : '交互式扫描：0 条匹配链接（DOM 候选 ' + (result.domCandidates ?? 0) + '，网页请求候选 ' + (result.networkCandidates ?? 0) + '）。请在交互窗口展开补丁详情、点击真正的 JSON / SC / 下载链接后再扫描。'
+  } catch (error) {
+    pageScanError.value = error instanceof Error ? error.message : '交互式扫描失败'
+  } finally {
+    pageScanLoading.value = false
+  }
+}
+
+async function submitPageScan() {
+  if (pageScanLoading.value || pageBatchLoading.value) return
+  pageScanLoading.value = true
+  pageScanError.value = ''
+  pageScanMessage.value = ''
+  pageScanLinks.value = []
+  pageScanSelected.value = []
+  pageVisibleType.value = ''
+  pageScanTruncated.value = false
+  try {
+    const result = await scanPageForFiles({
+      url: pageScanUrl.value.trim(),
+      extensions: pageScanExtensions.value.trim()
+    })
+    pageScanLinks.value = result.items
+    pageScanTruncated.value = result.truncated
+    pageScanMessage.value = '静态 HTML 扫描：找到 ' + result.items.length + ' 条匹配链接。' + (result.items.length ? '勾选后再下载。' : '如果网页通过弹窗加载文件链接，请改用交互式扫描。')
+  } catch (error) {
+    pageScanError.value = error instanceof Error ? error.message : '网页扫描失败'
+  } finally {
+    pageScanLoading.value = false
+  }
+}
+
+function togglePageType(extension: string, checked: boolean) {
+  if (pageBatchLoading.value) return
+  pageScanSelected.value = setFileTypeSelected(pageScanSelected.value, pageScanLinks.value, extension, checked)
+}
+
+function selectAllPageLinks() {
+  if (pageBatchLoading.value) return
+  const visible = visiblePageLinks.value
+  if (visible.length && visible.every((item) => pageScanSelected.value.includes(item.url))) {
+    pageScanSelected.value = dropVisibleFiles(pageScanSelected.value, visible)
+  } else {
+    pageScanSelected.value = chooseVisibleFiles(pageScanSelected.value, visible)
+  }
+}
+
+function clearPageFileSelection() {
+  if (!pageBatchLoading.value) pageScanSelected.value = []
+}
+
+function togglePageLink(url: string) {
+  if (pageBatchLoading.value) return
+  if (pageScanSelected.value.includes(url)) {
+    pageScanSelected.value = pageScanSelected.value.filter((item) => item !== url)
+  } else {
+    pageScanSelected.value = [...pageScanSelected.value, url]
+  }
+}
+
+async function submitPageDownloads() {
+  if (pageScanLoading.value || pageBatchLoading.value || !selectedPageLinks.value.length || !downloaderEnabled.value) return
+  const items = [...selectedPageLinks.value]
+  pageBatchLoading.value = true
+  pageBatchCompleted.value = 0
+  pageBatchTotal.value = Math.min(items.length, pageBatchLimit)
+  pageScanError.value = ''
+  pageScanMessage.value = ''
+  try {
+    const result = await submitPageDownloadBatch(items, addDirectDownloadTask, count => { pageBatchCompleted.value = count })
+    pageScanSelected.value = result.remaining.map(link => link.url)
+    pageScanMessage.value = '本次提交 ' + result.attemptedCount + ' 个：已加入 aria2 ' + result.completed.length
+      + ' 个，失败 ' + result.failures.length + ' 个，未提交 ' + result.unattemptedCount + ' 个。'
+      + (result.remaining.length ? '剩余 ' + result.remaining.length + ' 个仍勾选，请核对后再次点击下载。' : '')
+    if (result.failures.length) pageScanError.value = result.failures.slice(0, 3)
+      .map(({ link, message }) => link.fileName + '：' + message).join('；')
+      + (result.failures.length > 3 ? '（还有更多失败项）' : '')
+    await refreshDownloadTasks(true)
+  } finally {
+    pageBatchLoading.value = false
+  }
+}
+
+async function submitDirectDownload() {
+  if (directDownloadLoading.value) return
+  clearMessages()
+  directDownloadLoading.value = true
+  try {
+    const { gid } = await addDirectDownloadTask({
+      url: directDownloadUrl.value,
+      fileName: directDownloadFileName.value.trim() || undefined
+    })
+    noticeMessage.value = `已添加 HTTP 下载任务：${gid}`
+    directDownloadUrl.value = ''
+    directDownloadFileName.value = ''
+    await refreshDownloadTasks(true)
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : '添加 HTTP 下载任务失败'
+  } finally {
+    directDownloadLoading.value = false
+  }
 }
 
 async function useBuiltInDownloader() {
@@ -647,6 +874,7 @@ async function toggleDownloadTask(task: DownloadTask) {
     } else {
       await pauseDownloadTask(task.gid)
     }
+    noticeMessage.value = task.status === 'paused' ? '已继续下载任务' : '已暂停下载任务'
     await refreshDownloadTasks(true)
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '更新下载任务失败'
@@ -708,17 +936,18 @@ async function openDownloaderDir() {
 
 function formatTaskStatus(status: DownloadTask['status']) {
   const labels: Record<DownloadTask['status'], string> = {
-    active: 'Downloading',
-    waiting: 'Waiting',
-    paused: 'Paused',
-    error: 'Failed',
-    complete: 'Complete',
-    removed: 'Removed'
+    active: '下载中',
+    waiting: '排队中',
+    paused: '已暂停',
+    error: '失败',
+    complete: '已完成',
+    removed: '已移除'
   }
   return labels[status] || status
 }
 
 onMounted(() => {
+  void fetch('/api/health').then(r => r.json()).then(r => { privateWeb.value = r.result?.privateWeb === true }).catch(() => {})
   void refreshBilibiliLoginStatus()
   void refreshDownloadTasks(true)
   taskPollTimer = window.setInterval(() => {
@@ -736,13 +965,14 @@ onBeforeUnmount(() => {
   <div class="page-shell">
     <main class="container">
       <section class="panel parser-panel">
+        <DouyinLogin />
         <div class="form-row">
           <label for="share-url">资源链接</label>
-          <input id="share-url" v-model="shareUrl" type="text" placeholder="夸克链接、B 站视频或 B 站空间搜索链接" :disabled="loading" />
+          <input id="share-url" v-model="shareUrl" type="text" placeholder="夸克、B站、YouTube、Instagram、抖音或小红书链接" :disabled="loading" />
         </div>
         <div class="form-row">
           <label for="passcode">提取码</label>
-          <input id="passcode" v-model="passcode" type="text" placeholder="夸克链接可填；B 站链接无需填写" :disabled="loading" />
+          <input id="passcode" v-model="passcode" type="text" placeholder="仅夸克需要提取码" :disabled="loading" />
         </div>
         <div class="actions">
           <button class="primary-button" type="button" :disabled="loading" @click="loadShare">
@@ -802,7 +1032,8 @@ onBeforeUnmount(() => {
             <p v-if="batchDownloadProgressText" class="path-text">{{ batchDownloadProgressText }}</p>
           </div>
           <div class="task-header-actions">
-            <button class="ghost-button" type="button" :disabled="!selectableFiles.length || batchDownloadLoading" @click="toggleSelectAllFiles">
+            <label v-if="supportsMediaFilter" class="path-text">媒体筛选：<select v-model="mediaFilter" aria-label="筛选媒体类型"><option value="all">全部</option><option value="image">图片</option><option value="video">视频</option></select></label>
+            <button class="ghost-button" type="button" :disabled="!visibleSelectableFiles.length || batchDownloadLoading" @click="toggleSelectAllFiles">
               {{ allSelectableSelected ? '取消全选' : '全选' }}
             </button>
             <button class="primary-button" type="button" :disabled="!selectedFiles.length || batchDownloadLoading || !downloaderEnabled" @click="downloadSelectedFiles">
@@ -816,7 +1047,7 @@ onBeforeUnmount(() => {
           <table>
             <thead>
               <tr>
-                <th><input type="checkbox" :checked="allSelectableSelected" :disabled="!selectableFiles.length || batchDownloadLoading" aria-label="全选当前列表文件" @change="toggleSelectAllFiles" /></th>
+                <th><input type="checkbox" :checked="allSelectableSelected" :disabled="!visibleSelectableFiles.length || batchDownloadLoading" aria-label="全选当前列表文件" @change="toggleSelectAllFiles" /></th>
                 <th>名称</th>
                 <th>大小</th>
                 <th>类型</th>
@@ -824,7 +1055,7 @@ onBeforeUnmount(() => {
               </tr>
             </thead>
             <tbody>
-              <tr v-for="file in files" :key="file.fid">
+              <tr v-for="file in visibleFiles" :key="file.fid">
                 <td><input type="checkbox" :checked="isFileSelected(file)" :disabled="file.isDir || batchDownloadLoading" :aria-label="`选择 ${file.name}`" @change="toggleFileSelection(file)" /></td>
                 <td><span class="file-name" :title="file.name"><span class="file-icon">{{ file.isDir ? '文件夹' : '文件' }}</span> {{ file.name }}</span></td>
                 <td>{{ formatSize(file.size) }}</td>
@@ -838,7 +1069,7 @@ onBeforeUnmount(() => {
                   </button>
                 </td>
               </tr>
-              <tr v-if="!files.length">
+              <tr v-if="!visibleFiles.length">
                 <td class="empty-cell" colspan="5">暂无文件</td>
               </tr>
             </tbody>
@@ -851,13 +1082,109 @@ onBeforeUnmount(() => {
           <div>
             <h2>下载任务</h2>
             <p class="path-text">内置下载器：{{ downloaderEnabled ? '可用' : '不可用' }}</p>
-            <p class="path-text">默认下载目录：{{ downloaderDefaultDir || '-' }}</p>
+            <p class="path-text">{{ privateWeb ? '服务器临时下载目录' : '默认下载目录' }}：{{ downloaderDefaultDir || '-' }}</p>
+            <p v-if="privateWeb" class="path-text">云端下载完成后，点击“保存到此设备”即可保存到手机或电脑。</p>
             <p v-if="downloaderMessage" class="path-text">{{ downloaderMessage }}</p>
           </div>
           <div class="task-header-actions">
-            <button class="ghost-button" type="button" @click="selectDownloadDirectory">选择下载目录</button>
-            <button class="ghost-button" type="button" @click="openDownloaderDir">打开下载目录</button>
+            <button v-if="desktopAvailable" class="ghost-button" type="button" @click="selectDownloadDirectory">选择下载目录</button>
+            <button v-if="desktopAvailable" class="ghost-button" type="button" @click="openDownloaderDir">打开下载目录</button>
             <button class="ghost-button" type="button" @click="refreshDownloadTasks(false)">刷新</button>
+          </div>
+        </div>
+        <form class="direct-download-form" @submit.prevent="submitDirectDownload">
+          <h3>HTTP/HTTPS 直链下载</h3>
+          <p class="path-text">粘贴公开文件直链，直接交给 aria2 下载；不需要先解析网盘链接。</p>
+          <div class="direct-download-fields">
+            <label for="direct-download-url">文件链接</label>
+            <input id="direct-download-url" v-model="directDownloadUrl" type="url" required
+              placeholder="https://example.com/archive.zip" :disabled="directDownloadLoading || !downloaderEnabled" />
+            <label for="direct-download-filename">保存文件名（可选）</label>
+            <input id="direct-download-filename" v-model="directDownloadFileName" type="text"
+              placeholder="留空则由下载服务器决定" :disabled="directDownloadLoading || !downloaderEnabled" />
+          </div>
+          <button class="primary-button" type="submit" :disabled="directDownloadLoading || !downloaderEnabled || !directDownloadUrl.trim()">
+            {{ directDownloadLoading ? '添加中...' : '添加 HTTP 下载任务' }}
+          </button>
+        </form>
+
+        <div class="page-scan-form">
+          <h3>从网页筛选文件下载</h3>
+          <p class="path-text">扫描后勾选类型可全选该类型文件，也可逐个调整。勾选不会开始下载，点击下载按钮后才提交到 aria2。</p>
+          <form class="page-scan-fields" @submit.prevent="submitPageScan">
+            <label for="page-scan-url">网页地址</label>
+            <input id="page-scan-url" v-model="pageScanUrl" type="url" required placeholder="https://example.com/downloads/"
+              :disabled="pageScanLoading || pageBatchLoading" />
+            <label for="page-scan-ext">高级：扫描前限制后缀（可留空）</label>
+            <input id="page-scan-ext" v-model="pageScanExtensions" type="text"
+              placeholder="留空自动发现全部文件；可选 pkg,json" :disabled="pageScanLoading || pageBatchLoading" />
+            <div class="page-scan-action">
+              <button class="primary-button" type="submit" :disabled="pageScanLoading || pageBatchLoading">
+                {{ pageScanLoading ? '正在扫描...' : '扫描 HTML（静态）' }}
+              </button>
+            </div>
+          </form>
+          <div v-if="desktopAvailable" class="page-scan-interactive-actions">
+            <button class="ghost-button" type="button" :disabled="pageScanLoading || pageBatchLoading" @click="openInteractivePage">
+              打开交互网页
+            </button>
+            <button class="ghost-button" type="button" :disabled="pageScanLoading || pageBatchLoading" @click="scanInteractiveBrowser">
+              扫描已打开页面（交互）
+            </button>
+            <span class="path-text">适用于需要点击“详情/分享”后才显示链接的网站；先在弹出的网页里手动展开，再返回扫描。</span>
+          </div>
+          <p v-if="privateWeb" class="path-text">网页模式保留静态扫描及类型筛选；需要手动点击弹窗后捕获链接时，请使用原 Windows Electron 版。</p>
+          <p v-if="pageScanError" class="page-scan-error" role="alert">{{ pageScanError }}</p>
+          <p v-if="pageScanMessage" class="page-scan-message" role="status">{{ pageScanMessage }}</p>
+          <p v-if="pageScanTruncated" class="path-text">匹配项超过 200 条，仅展示前 200 条。</p>
+          <div v-if="pageScanLinks.length" class="page-scan-results">
+            <div class="page-type-filters" aria-label="按文件后缀选择">
+              <div class="page-type-header">
+                <strong>按类型勾选文件（部分选中显示横线）</strong>
+                <label>显示类型
+                  <select v-model="pageVisibleType" :disabled="pageBatchLoading">
+                    <option value="">全部类型</option>
+                    <option v-for="group in pageTypeGroups" :key="group.extension" :value="group.extension">
+                      {{ group.extension === 'other' ? '其他/未知' : '.' + group.extension }} ({{ group.count }})
+                    </option>
+                  </select>
+                </label>
+              </div>
+              <div class="page-type-options">
+                <label v-for="group in pageTypeGroups" :key="group.extension" class="page-type-option">
+                  <input type="checkbox" :checked="group.checked" :indeterminate="group.indeterminate"
+                    :disabled="pageBatchLoading" @change="togglePageType(group.extension, ($event.target as HTMLInputElement).checked)" />
+                  <span>{{ group.extension === 'other' ? '其他/未知' : '.' + group.extension }} ({{ group.count }})</span>
+                </label>
+              </div>
+            </div>
+            <div class="page-scan-toolbar">
+              <span>显示 {{ visiblePageLinks.length }} / {{ pageScanLinks.length }}；已选 {{ selectedPageLinks.length }} 个（隐藏 {{ hiddenPageSelectionCount }}）；本次提交 {{ nextPageBatchCount }} 个，剩余 {{ selectedPageLinks.length - nextPageBatchCount }} 个需再次点击下载；每批最多 {{ pageBatchLimit }} 个</span>
+              <div class="page-scan-toolbar-actions">
+                <button class="ghost-button" type="button" :disabled="pageBatchLoading" @click="selectAllPageLinks">
+                  {{ visiblePageLinks.length && visibleSelectedCount === visiblePageLinks.length ? '取消选择当前筛选' : '选择当前筛选' }}
+                </button>
+                <button class="ghost-button" type="button" :disabled="pageBatchLoading || !pageScanSelected.length" @click="clearPageFileSelection">清空已选</button>
+                <button class="primary-button" type="button"
+                  :disabled="pageBatchLoading || !downloaderEnabled || !selectedPageLinks.length"
+                  @click="submitPageDownloads">
+                  {{ pageBatchLoading ? '提交中 ' + pageBatchCompleted + '/' + pageBatchTotal : '下载本批 (' + nextPageBatchCount + '/' + selectedPageLinks.length + ')' }}
+                </button>
+              </div>
+            </div>
+            <div class="page-scan-list">
+              <label v-for="link in visiblePageLinks" :key="link.url" class="page-scan-item">
+                <input type="checkbox" :checked="pageScanSelected.includes(link.url)"
+                  :disabled="pageBatchLoading"
+                  @change="togglePageLink(link.url)" />
+                <span class="page-scan-link-text">
+                  <strong>{{ link.fileName }}</strong>
+                  <small :title="link.url">{{ link.url }}</small>
+                </span>
+                <span class="page-scan-extension">{{ link.extension === 'other' ? '其他/未知' : '.' + link.extension }}</span>
+              </label>
+            </div>
+            <p v-if="!visiblePageLinks.length" class="path-text">当前筛选没有显示文件，请调整“显示类型”。</p>
           </div>
         </div>
         <div class="table-wrap">
@@ -868,14 +1195,15 @@ onBeforeUnmount(() => {
             <tbody>
               <tr v-for="task in downloadTasks" :key="task.gid">
                 <td>{{ task.fileName }}</td>
-                <td>{{ formatTaskStatus(task.status) }}</td>
+                <td>{{ formatTaskStatus(task.status) }}<p v-if="task.failureReason" class="page-scan-error">{{ task.failureReason }}</p></td>
                 <td>{{ task.progress }}%</td>
                 <td>{{ formatSpeed(task.downloadSpeed) }}</td>
                 <td>{{ formatSize(task.completedLength) }} / {{ formatSize(task.totalLength) }}</td>
                 <td class="task-actions">
-                  <button class="row-button" type="button" :disabled="taskActionGid === task.gid || !['active', 'paused'].includes(task.status)" @click="toggleDownloadTask(task)">
-                    {{ task.status === 'paused' ? '继续' : '暂停' }}
+                  <button class="row-button" type="button" v-if="['active', 'waiting', 'paused'].includes(task.status)" :disabled="taskActionGid === task.gid" @click="toggleDownloadTask(task)">
+                    {{ taskActionGid === task.gid ? '处理中...' : task.status === 'paused' ? '继续' : '暂停' }}
                   </button>
+                  <a v-if="task.status === 'complete'" class="row-button file-save-link" :href="`/api/downloads/file/${encodeURIComponent(task.gid)}`" :download="task.fileName">保存到此设备</a>
                   <button class="ghost-button" type="button" :disabled="taskActionGid === task.gid" @click="requestDeleteDownloadTask(task)">删除</button>
                 </td>
               </tr>
@@ -900,7 +1228,7 @@ onBeforeUnmount(() => {
         <p class="cache-note">过期时间：{{ new Date(downloadDialog.expiresAt).toLocaleString() }}</p>
         <div class="modal-actions">
           <button class="ghost-button" type="button" @click="downloadDialog = null">关闭</button>
-          <button class="ghost-button" type="button" @click="startBrowserDownload">浏览器下载</button>
+          <button v-if="!privateWeb" class="ghost-button" type="button" @click="startBrowserDownload">浏览器下载</button>
           <button v-if="downloadDialog.downloadUrl" class="ghost-button" type="button" @click="copyDownloadUrl">复制直链</button>
           <button v-if="downloadDialog.proxyUrl" class="ghost-button" type="button" @click="copyProxyDownloadUrl">复制代理地址</button>
           <button class="primary-button" type="button" @click="useBuiltInDownloader">用内置下载器下载</button>
