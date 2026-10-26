@@ -68,6 +68,25 @@ try {
   // Private-web requests fail closed before any aria2 RPC is attempted.
   let resp = await fetch(url)
   assert.equal(resp.status, 401)
+  // QR tickets and login mutation endpoints share the private-web auth boundary.
+  for (const [endpoint, method] of [
+    ['/status', 'GET'], ['/qr', 'POST'], ['/logout', 'POST'],
+    ['/qr/0123456789abcdef0123456789abcdef/image', 'GET']
+  ]) {
+    const denied = await fetch(base + '/api/auth/douyin' + endpoint, { method })
+    assert.equal(denied.status, 401)
+  }
+  resp = await fetch(base + '/api/auth/douyin/status', { headers: authHeaders() })
+  assert.equal(resp.status, 200)
+  assert.equal(resp.headers.get('cache-control'), 'no-store')
+  const loginStatus = await resp.json() as { result: Record<string, unknown> }
+  assert.equal(loginStatus.result.loggedIn, false)
+  assert.equal(typeof loginStatus.result.available, 'boolean')
+  assert.deepEqual(Object.keys(loginStatus.result).sort(), ['available', 'loggedIn', 'message', 'state'])
+  resp = await fetch(base + '/api/auth/douyin/qr', {
+    method: 'POST', headers: authHeaders({ Origin: 'https://evil.example.org' })
+  })
+  assert.equal(resp.status, 403)
   resp = await fetch(url, { headers: { Authorization: `Bearer ${webToken}` } })
   assert.equal(resp.status, 200)
   assert.match(resp.headers.get('content-disposition') || '', /attachment/)

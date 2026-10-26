@@ -22,6 +22,7 @@ import {
   listProviderFiles,
   resolveProviderResource
 } from './api/providers'
+import DouyinLogin from './components/DouyinLogin.vue'
 import DownloadCenter from './views/download-center/DownloadCenter.vue'
 import { chooseVisibleFiles, dropVisibleFiles, filterFileLinks, getFileSelectionState, groupFileExtensions, setFileTypeSelected, submitPageDownloadBatch, PAGE_BATCH_LIMIT } from './api/pageFileSelection'
 import type {
@@ -964,6 +965,7 @@ onBeforeUnmount(() => {
   <div class="page-shell">
     <main class="container">
       <section class="panel parser-panel">
+        <DouyinLogin />
         <div class="form-row">
           <label for="share-url">资源链接</label>
           <input id="share-url" v-model="shareUrl" type="text" placeholder="夸克、B站、YouTube、Instagram、抖音或小红书链接" :disabled="loading" />

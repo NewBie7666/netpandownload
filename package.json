@@ -29,12 +29,14 @@
     "test:instagram": "tsx tests/instagram/instagramParser.test.ts",
     "test:youtube": "tsx tests/downloads/youtubeProvider.test.ts",
     "test:private-web": "tsx tests/downloads/privateWebFile.test.ts",
-    "test:all-preserved": "npm run test:direct && npm run test:page-scan && npm run test:page-selection && npm run test:interactive-page && npm run test:file-request && npm run test:dns && npm run test:pause && npm run test:unified-actions && npm run test:contracts && npm run test:instagram && npm run test:youtube && npm run test:private-web && npm run test:private-web-api && npm run test:history && npm run test:social",
+    "test:all-preserved": "npm run test:direct && npm run test:page-scan && npm run test:page-selection && npm run test:interactive-page && npm run test:file-request && npm run test:dns && npm run test:pause && npm run test:unified-actions && npm run test:contracts && npm run test:instagram && npm run test:youtube && npm run test:private-web && npm run test:private-web-api && npm run test:history && npm run test:social && npm run test:douyin-auth",
     "test:private-web-api": "tsx tests/downloads/privateWebApi.test.ts",
     "test:testbot": "node tests/testbot/run.mjs",
     "test:browser": "playwright test",
     "test:history": "tsx --test tests/downloads/historyPersistence.test.ts",
-    "test:social": "tsx --test tests/downloads/socialMetadata.test.ts tests/downloads/socialProvider.test.ts"
+    "test:social": "tsx --test tests/downloads/socialMetadata.test.ts tests/downloads/socialProvider.test.ts",
+    "test:douyin-auth": "tsx --test tests/downloads/douyinSessionStore.test.ts tests/downloads/douyinAuth.test.ts tests/downloads/douyinCredentials.test.ts",
+    "test:douyin-browser": "tsx --test tests/downloads/douyinBrowser.test.ts"
   },
   "dependencies": {
     "@types/qrcode": "^1.5.6",
@@ -44,6 +46,7 @@
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
+    "playwright-core": "1.64.1",
     "qrcode": "^1.5.4",
     "tsx": "^4.19.2",
     "typescript": "^5.7.3",

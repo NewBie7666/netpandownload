@@ -61,6 +61,7 @@ jobs:
           npm run test:all-preserved 2>&1 | tee reports/regression.txt
           npm run test:testbot 2>&1 | tee reports/testbot.txt
           npx playwright install --with-deps chromium
+          npm run test:douyin-browser 2>&1 | tee reports/douyin-browser.txt
           npm run test:browser
           python3 deploy/test-release.py 2>&1 | tee reports/deployment.txt
           python3 deploy/test-nginx.py 2>&1 | tee reports/nginx.txt

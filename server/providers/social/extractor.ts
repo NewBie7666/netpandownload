@@ -12,6 +12,7 @@ import { parseSocialPostHtml, parseSocialYtdlpJson } from './metadataParser.js'
 import { socialPageUserAgent } from './mediaPolicy.js'
 import type { SocialPlatform, SocialPost, SocialSource } from './types.js'
 import { socialPageHosts } from '../../../shared/socialLinks.js'
+import { managedDouyinCookieHeader, withDouyinCookieFile } from '../../auth/douyin/credentials.js'
 
 export interface SocialPage { status: number; location?: string; html: string }
 export interface SocialExtractOptions {
@@ -28,6 +29,10 @@ function cookieFile(platform: SocialPlatform) {
 }
 
 async function cookiesFor(url: URL, platform: SocialPlatform): Promise<string> {
+  if (platform === 'douyin') {
+    const managed = await managedDouyinCookieHeader(url)
+    if (managed !== undefined) return managed
+  }
   const file = cookieFile(platform)
   if (!file) return ''
   let content: string
@@ -126,23 +131,27 @@ async function ytDlpPath() {
 }
 
 async function runSocialYtdlp(platform: SocialPlatform, source: SocialSource): Promise<string> {
-  const file = cookieFile(platform)
-  const url = platform === 'douyin' ? `https://www.douyin.com/video/${source.id}` : source.url
-  try {
-    const result = await run(await ytDlpPath(), [
-      '--ignore-config', '--no-playlist', '--no-warnings', '--skip-download', '--dump-single-json',
-      '--use-extractors', platform === 'douyin' ? 'Douyin' : 'XiaoHongShu',
-      '--user-agent', socialPageUserAgent(platform),
-      ...(file ? ['--cookies', file] : []), '-f', 'b[ext=mp4]/b', url
-    ], { encoding: 'utf8', windowsHide: true, timeout: 45000, maxBuffer: MAX_BYTES })
-    return result.stdout
-  } catch (error) {
-    const info = error as NodeJS.ErrnoException & { stderr?: string; killed?: boolean }
-    if (info.code === 'ENOENT') throw new AppError('dependency_missing', '网页未返回可用媒体，且未安装 yt-dlp；请管理员检查依赖和平台登录状态')
-    if (info.killed || info.code === 'ETIMEDOUT') throw new AppError('media_extract_timeout', '平台媒体解析超时，请稍后重试')
-    if (/cookie|login|sign.?in|登录|验证/i.test(info.stderr || '')) throw new AppError('auth_required', '平台需要有效登录态或验证，请管理员配置平台 Cookie 文件后重试')
-    throw new AppError('blocked_by_upstream', '平台暂未提供可下载媒体，可能是链接过期、作品受限或平台风控；请重新复制分享链接')
+  const invoke = async (file: string | undefined): Promise<string> => {
+    const url = platform === 'douyin' ? `https://www.douyin.com/video/${source.id}` : source.url
+    try {
+      const result = await run(await ytDlpPath(), [
+        '--ignore-config', '--no-playlist', '--no-warnings', '--skip-download', '--dump-single-json',
+        '--use-extractors', platform === 'douyin' ? 'Douyin' : 'XiaoHongShu',
+        '--user-agent', socialPageUserAgent(platform),
+        ...(file ? ['--cookies', file] : []), '-f', 'b[ext=mp4]/b', url
+      ], { encoding: 'utf8', windowsHide: true, timeout: 45000, maxBuffer: MAX_BYTES })
+      return result.stdout
+    } catch (error) {
+      const info = error as NodeJS.ErrnoException & { stderr?: string; killed?: boolean }
+      if (info.code === 'ENOENT') throw new AppError('dependency_missing', '网页未返回可用媒体，且未安装 yt-dlp；请管理员检查依赖和平台登录状态')
+      if (info.killed || info.code === 'ETIMEDOUT') throw new AppError('media_extract_timeout', '平台媒体解析超时，请稍后重试')
+      if (/cookie|login|sign.?in|登录|验证/i.test(info.stderr || '')) throw new AppError('auth_required', platform === 'douyin' ? '抖音需要有效登录态或验证，请点击“登录抖音”扫码后重试' : '平台需要有效登录态或验证，请管理员检查平台登录配置')
+      throw new AppError('blocked_by_upstream', '平台暂未提供可下载媒体，可能是链接过期、作品受限或平台风控；请重新复制分享链接')
+    }
   }
+  return platform === 'douyin'
+    ? withDouyinCookieFile(cookieFile(platform) || undefined, invoke)
+    : invoke(cookieFile(platform) || undefined)
 }
 
 export async function extractSocialPost(input: string, options: SocialExtractOptions = {}): Promise<SocialPost> {

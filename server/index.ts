@@ -13,6 +13,8 @@ import { downloadEngineRouter } from './routes/downloadEngine.js'
 import { productRouter } from './routes/product.js'
 import { providersRouter } from './routes/providers.js'
 import { quarkRouter } from './routes/quark.js'
+import { createDouyinAuthRouter } from './routes/douyinAuth.js'
+import { getDouyinAuthManager } from './auth/douyin/runtime.js'
 
 export const app = express()
 const __filename = fileURLToPath(import.meta.url)
@@ -99,6 +101,7 @@ app.get('/api/health', (_req, res) => {
 })
 
 app.use('/api/quark', quarkRouter)
+app.use('/api/auth/douyin', createDouyinAuthRouter(getDouyinAuthManager()))
 app.use('/api/downloads', downloadsRouter)
 app.use('/api/download-engine', downloadEngineRouter)
 app.use('/api/providers', providersRouter)
@@ -154,6 +157,7 @@ export function startServer(port = config.port) {
       structuredLogger.info('server', 'Quark parser API listening', { port, url: `http://localhost:${port}` })
       resolve(server)
     })
+    server.once('close', () => { void getDouyinAuthManager().close() })
 
     server.once('error', reject)
   })

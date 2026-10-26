@@ -41,8 +41,10 @@ jobs:
           set -euo pipefail
           npm run test:testbot 2>&1 | tee reports/testbot.txt
       - name: Desktop and mobile Chromium acceptance
+        shell: bash
         run: |
           npx playwright install --with-deps chromium
+          npm run test:douyin-browser 2>&1 | tee reports/douyin-browser.txt
           npm run test:browser
       - name: Deployment rollback and private HTTPS fixtures
         shell: bash

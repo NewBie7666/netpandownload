@@ -7,7 +7,7 @@ import type { SocialPlatform, SocialPost } from './social/types.js'
 import type { DownloadResult } from '../../shared/types.js'
 import type { Provider } from './types.js'
 
-export function createSocialProvider(platform: SocialPlatform, loader: (url: string) => Promise<SocialPost> = extractSocialPost, now: () => number = Date.now): Provider {
+export function createSocialProvider(platform: SocialPlatform, loader: (url: string) => Promise<SocialPost> = extractSocialPost, now: () => number = Date.now): Provider & { clearCache(): void } {
   const cache = new Map<string, { post: SocialPost; storedAt: number }>()
   function entry(id: string) {
     const item = cache.get(id)
@@ -18,6 +18,7 @@ export function createSocialProvider(platform: SocialPlatform, loader: (url: str
     return item
   }
   return {
+    clearCache() { cache.clear() },
     id: platform,
     name: platform === 'douyin' ? '抖音' : '小红书',
     capabilities: { list: true, download: true, login: false, streaming: false },
