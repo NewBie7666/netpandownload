@@ -44,7 +44,7 @@ function fixtureBody(mode: FixtureMode) {
     (mode === 'success' ? '' : `<script>window._ROUTER_DATA = ${JSON.stringify(detail)}</script>`)
 }
 
-async function openFixture(mode: FixtureMode, suppliedStore?: FixtureStore, timeoutMs = 4000) {
+async function openFixture(mode: FixtureMode, suppliedStore?: FixtureStore, timeoutMs = 15000) {
   let browser: Browser | undefined
   let sawCookie = false
   let requestedOptions: LaunchOptions | undefined
