@@ -63,6 +63,9 @@ async function enrichWithWebParser(url: string) {
 }
 
 function decideTool(inference: PlatformInference): DecisionRecommendedTool {
+  if (inference.platform === 'instagram') {
+    return { type: 'desktop', name: 'desktop-downloader', capability: 'video-extract' }
+  }
   if (inference.platform === 'bilibili') {
     return { type: 'desktop', name: 'desktop-downloader', capability: 'video-extract' }
   }
@@ -76,7 +79,7 @@ function decideTool(inference: PlatformInference): DecisionRecommendedTool {
 }
 
 function decideAction(inference: PlatformInference): DecisionAction {
-  if (inference.platform === 'bilibili' || inference.platform === 'quark') return 'use_desktop_downloader'
+  if (inference.platform === 'bilibili' || inference.platform === 'quark' || inference.platform === 'instagram') return 'use_desktop_downloader'
   if (inference.platform === 'youtube') return 'use_local_tool'
   return 'unsupported'
 }
@@ -99,7 +102,10 @@ function buildExplanation(inference: PlatformInference, parsed?: WebParseLike) {
   if (inference.platform === 'youtube') {
     return `${enriched} 当前桌面端未内置 YouTube Provider，可使用本机外部下载工具处理。`
   }
-  if (inference.platform === 'douyin' || inference.platform === 'zhihu' || inference.platform === 'instagram') {
+  if (inference.platform === 'instagram') {
+    return `${enriched} 单个 Instagram 帖子可在桌面端通过 gallery-dl 解析图片、视频，并使用 aria2 下载。`
+  }
+  if (inference.platform === 'douyin' || inference.platform === 'zhihu') {
     return `${enriched} 当前版本只识别该平台，不提供下载执行能力。`
   }
   return '当前链接来源无法识别，暂不支持。'

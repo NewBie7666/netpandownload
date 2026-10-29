@@ -68,6 +68,13 @@
         "filter": [
           "**/*"
         ]
+      },
+      {
+        "from": "resources/gallery-dl",
+        "to": "gallery-dl",
+        "filter": [
+          "**/*"
+        ]
       }
     ],
     "win": {

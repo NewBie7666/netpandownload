@@ -1,0 +1,32 @@
+name: Instagram single-post checks
+
+on:
+  push:
+    branches: [feat/instagram-single-post-download]
+  pull_request:
+    paths:
+      - 'server/providers/instagram/**'
+      - 'server/providers/instagramProvider.ts'
+      - 'tests/instagram/**'
+      - 'src/App.vue'
+      - 'shared/types.ts'
+      - 'server/providers/**'
+      - 'server/downloader/**'
+      - '.github/workflows/instagram.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - run: npm ci --ignore-scripts
+      - run: npm run build
+      - run: npm run build:electron
+      - run: npx tsx tests/instagram/instagramParser.test.ts
