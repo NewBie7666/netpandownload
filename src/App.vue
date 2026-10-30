@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import {
   addDownloadTask as addDownloaderTask,
   addDirectDownloadTask,
+  addMagnetDownloadTask,
   scanPageForFiles,
   fetchDownloadTasks,
   openDownloadDir,
@@ -95,6 +96,8 @@ const visibleSelectedCount = computed(() => visiblePageLinks.value.filter((item)
 const directDownloadUrl = ref('')
 const directDownloadFileName = ref('')
 const directDownloadLoading = ref(false)
+const magnetUrl = ref('')
+const magnetLoading = ref(false)
 const shareUrl = ref('')
 const privateWeb = ref(false)
 const desktopAvailable = Boolean(window.desktopApi?.selectDownloadDir)
@@ -656,6 +659,22 @@ async function submitDirectDownload() {
   }
 }
 
+async function submitMagnetDownload() {
+  if (magnetLoading.value) return
+  clearMessages()
+  magnetLoading.value = true
+  try {
+    const { gid } = await addMagnetDownloadTask({ magnet: magnetUrl.value })
+    noticeMessage.value = `已添加磁力下载任务：${gid}。等待获取种子元数据和连接节点。`
+    magnetUrl.value = ''
+    await refreshDownloadTasks(true)
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : '添加磁力任务失败'
+  } finally {
+    magnetLoading.value = false
+  }
+}
+
 async function useBuiltInDownloader() {
   if (!downloadDialog.value) return
 
@@ -1108,6 +1127,19 @@ onBeforeUnmount(() => {
           </button>
         </form>
 
+        <form class="direct-download-form" @submit.prevent="submitMagnetDownload">
+          <h3>磁力链接下载（BitTorrent）</h3>
+          <p class="path-text">粘贴 magnet:?xt=urn:btih:... 链接，由当前设备或私人服务器上的 aria2 下载。默认不继续做种；云端下载与回传都会消耗服务器流量。</p>
+          <div class="direct-download-fields">
+            <label for="magnet-download-url">磁力链接</label>
+            <input id="magnet-download-url" v-model="magnetUrl" type="text" required
+              placeholder="magnet:?xt=urn:btih:..." :disabled="magnetLoading || !downloaderEnabled" />
+          </div>
+          <button class="primary-button" type="submit" :disabled="magnetLoading || !downloaderEnabled || !magnetUrl.trim()">
+            {{ magnetLoading ? '添加中...' : '添加磁力下载任务' }}
+          </button>
+        </form>
+
         <div class="page-scan-form">
           <h3>从网页筛选文件下载</h3>
           <p class="path-text">扫描后勾选类型可全选该类型文件，也可逐个调整。勾选不会开始下载，点击下载按钮后才提交到 aria2。</p>
@@ -1203,7 +1235,15 @@ onBeforeUnmount(() => {
                   <button class="row-button" type="button" v-if="['active', 'waiting', 'paused'].includes(task.status)" :disabled="taskActionGid === task.gid" @click="toggleDownloadTask(task)">
                     {{ taskActionGid === task.gid ? '处理中...' : task.status === 'paused' ? '继续' : '暂停' }}
                   </button>
-                  <a v-if="task.status === 'complete'" class="row-button file-save-link" :href="`/api/downloads/file/${encodeURIComponent(task.gid)}`" :download="task.fileName">保存到此设备</a>
+                  <a v-if="task.status === 'complete' && (!task.files || task.files.length <= 1)" class="row-button file-save-link" :href="`/api/downloads/file/${encodeURIComponent(task.gid)}`" :download="task.fileName">保存到此设备</a>
+                  <details v-if="task.isTorrent && task.files && task.files.length > 1" class="torrent-file-list">
+                    <summary>文件列表（{{ task.files.length }}）</summary>
+                    <div v-for="file in task.files" :key="file.index" class="torrent-file-row">
+                      <span :title="file.name">{{ file.name }}（{{ formatSize(file.size) }}）</span>
+                      <a v-if="task.status === 'complete' && file.selected" class="row-button file-save-link" :href="`/api/downloads/file/${encodeURIComponent(task.gid)}/${file.index}`" :download="file.name">保存</a>
+                      <span v-else>{{ file.selected ? '待完成' : '未选择' }}</span>
+                    </div>
+                  </details>
                   <button class="ghost-button" type="button" :disabled="taskActionGid === task.gid" @click="requestDeleteDownloadTask(task)">删除</button>
                 </td>
               </tr>
@@ -1243,11 +1283,11 @@ onBeforeUnmount(() => {
           <button class="icon-button" type="button" aria-label="关闭" @click="deleteTaskDialog = null">x</button>
         </div>
         <p class="modal-file">{{ deleteTaskDialog.fileName }}</p>
-        <p class="delete-note">请选择删除方式。本地文件只会在确认后删除。</p>
+        <p class="delete-note">{{ deleteTaskDialog.isTorrent ? 'BT任务暂不支持网页批量删除本地文件。只删除任务记录后，文件仍保留在下载目录。' : '请选择删除方式。本地文件只会在确认后删除。' }}</p>
         <div class="modal-actions">
           <button class="ghost-button" type="button" @click="deleteTaskDialog = null">取消</button>
           <button class="ghost-button" type="button" @click="confirmDeleteDownloadTask(false)">只删除记录</button>
-          <button class="danger-button" type="button" @click="confirmDeleteDownloadTask(true)">删除记录并删除本地文件</button>
+          <button v-if="!deleteTaskDialog.isTorrent && (!deleteTaskDialog.files || deleteTaskDialog.files.length <= 1)" class="danger-button" type="button" @click="confirmDeleteDownloadTask(true)">删除记录并删除本地文件</button>
         </div>
       </div>
     </div>
