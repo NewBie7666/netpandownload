@@ -28,7 +28,7 @@ test('magnet parser rejects malformed, privileged and dangerous tracker inputs',
     'magnet:?xt=urn:btih:' + validHash + '&tr=' + encodeURIComponent('udp://192.168.1.2:6881/announce'),
     'magnet:?xt=urn:btih:' + validHash + '&tr=' + encodeURIComponent('http://host.local/announce'),
     'magnet:?xt=urn:btih:' + validHash + '&tr=' + encodeURIComponent('file:///etc/passwd'),
-    'magnet:?xt=urn:btih:' + validHash + '\n',
+    'magnet:?xt=urn:btih:' + validHash + '&dn=illegal\nname',
     'magnet:?xt=urn:btih:' + validHash + '&dn=' + 'X'.repeat(300)
   ]) assert.throws(() => validateMagnetInput({ magnet: value }))
   assert.throws(() => validateMagnetInput({ magnet: 123 }))
