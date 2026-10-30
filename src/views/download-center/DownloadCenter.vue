@@ -7,6 +7,8 @@ import {
   type ProductHealth,
   type ProductUiTask
 } from '../../api/product'
+import { pauseDownloadTask, resumeDownloadTask } from '../../api/downloads'
+import { getAria2TaskAction } from './components/taskActions'
 import DashboardCard from './components/DashboardCard.vue'
 import HistoryPanel from './components/HistoryPanel.vue'
 import TaskDetailDrawer from './components/TaskDetailDrawer.vue'
@@ -38,6 +40,9 @@ const selectedTask = ref<ProductUiTask | null>(null)
 const filter = ref<TaskFilter>('all')
 const search = ref('')
 const message = ref('')
+const actionMessage = ref('')
+const actionError = ref('')
+const busyGid = ref('')
 const bilibiliCookieStatus = ref<'anonymous' | 'logged_in' | 'expired'>('anonymous')
 
 let pollTimer: number | undefined
@@ -110,6 +115,28 @@ async function refreshDownloadCenter(silent = false) {
   }
 }
 
+async function controlTask(task: ProductUiTask) {
+  const action = getAria2TaskAction(task)
+  if (!action || !task.gid || busyGid.value) return
+
+  busyGid.value = task.gid
+  actionMessage.value = ''
+  actionError.value = ''
+  try {
+    if (action === 'resume') {
+      await resumeDownloadTask(task.gid)
+    } else {
+      await pauseDownloadTask(task.gid)
+    }
+    actionMessage.value = action === 'resume' ? '已发出继续下载指令' : '已发出暂停下载指令'
+    await refreshDownloadCenter(true)
+  } catch (error) {
+    actionError.value = error instanceof Error ? error.message : '无法操作该下载任务'
+  } finally {
+    busyGid.value = ''
+  }
+}
+
 onMounted(() => {
   void refreshDownloadCenter(true)
   pollTimer = window.setInterval(() => {
@@ -146,6 +173,8 @@ onBeforeUnmount(() => {
     <div v-if="message" class="downloader-status">
       <p>{{ message }}</p>
     </div>
+    <p v-if="actionError" class="dc-action-feedback is-error" role="alert">{{ actionError }}</p>
+    <p v-else-if="actionMessage" class="dc-action-feedback" role="status">{{ actionMessage }}</p>
 
     <div class="dc-section">
       <div class="dc-section-header">
@@ -168,7 +197,7 @@ onBeforeUnmount(() => {
           </div>
         </div>
       </div>
-      <TaskList :tasks="filteredTasks" @select="selectedTask = $event" />
+      <TaskList :tasks="filteredTasks" :busy-gid="busyGid" @select="selectedTask = $event" @control="controlTask" />
     </div>
 
     <div class="dc-section">
@@ -186,6 +215,9 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.dc-action-feedback { margin: 8px 38px; color: #047857; font-size: 13px; }
+.dc-action-feedback.is-error { color: #b91c1c; }
+
 .dc-health-badge {
   display: inline-flex;
   align-items: center;

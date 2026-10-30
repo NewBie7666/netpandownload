@@ -24,6 +24,8 @@ export interface ProductDiagnosis {
 export interface ProductUiTask {
   id: string
   title: string
+  gid?: string
+  source: UnifiedTask['source']
   status: ProductUiStatus
   progress: number
   providerId: ProviderId | 'unknown'
@@ -75,6 +77,8 @@ export function normalizeProductTask(task: UnifiedTask): ProductUiTask {
   const normalized: ProductUiTask = {
     id: task.id,
     title: task.title || '未命名任务',
+    gid: task.gid,
+    source: task.source,
     status: mapTaskStatus(task.status),
     progress: clampProgress(task.progress),
     providerId: task.providerId || 'unknown',
