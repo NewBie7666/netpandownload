@@ -4,6 +4,7 @@ import { scanPageForFiles } from '../downloader/pageLinkScanner.js'
 import {
   addDownloadTask,
   addDirectDownloadTask,
+  addMagnetDownloadTask,
   getDownloadHealth,
   getDownloadSettings,
   getDownloadTaskStatus,
@@ -35,6 +36,14 @@ downloadsRouter.post('/direct', async (req, res, next) => {
   }
 })
 
+downloadsRouter.post('/magnet', async (req, res, next) => {
+  try {
+    res.json(ok(await addMagnetDownloadTask(req.body)))
+  } catch (error) {
+    next(error)
+  }
+})
+
 downloadsRouter.post('/scan-page', async (req, res, next) => {
   try {
     res.json(ok(await scanPageForFiles(req.body)))
@@ -44,10 +53,10 @@ downloadsRouter.post('/scan-page', async (req, res, next) => {
 })
 
 /** Browser handoff: download the completed file to the device making this request. */
-downloadsRouter.get('/file/:gid', async (req, res, next) => {
+downloadsRouter.get(['/file/:gid', '/file/:gid/:fileIndex'], async (req, res, next) => {
   let file: Awaited<ReturnType<typeof openCompletedDownloadFile>> | undefined
   try {
-    file = await openCompletedDownloadFile(String(req.params.gid || ''))
+    file = await openCompletedDownloadFile(String(req.params.gid || ''), req.params.fileIndex)
     res.setHeader('Content-Type', 'application/octet-stream')
     res.setHeader('X-Content-Type-Options', 'nosniff')
     const encodedName = encodeURIComponent(file.name).replace(/['()*]/g, (character) => '%' + character.charCodeAt(0).toString(16).toUpperCase())
