@@ -56,7 +56,7 @@ downloadsRouter.post('/scan-page', async (req, res, next) => {
 downloadsRouter.get(['/file/:gid', '/file/:gid/:fileIndex'], async (req, res, next) => {
   let file: Awaited<ReturnType<typeof openCompletedDownloadFile>> | undefined
   try {
-    file = await openCompletedDownloadFile(String(req.params.gid || ''), req.params.fileIndex)
+    file = await openCompletedDownloadFile(String(req.params.gid || ''), typeof req.params.fileIndex === 'string' ? req.params.fileIndex : undefined)
     res.setHeader('Content-Type', 'application/octet-stream')
     res.setHeader('X-Content-Type-Options', 'nosniff')
     const encodedName = encodeURIComponent(file.name).replace(/['()*]/g, (character) => '%' + character.charCodeAt(0).toString(16).toUpperCase())
