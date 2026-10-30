@@ -91,6 +91,10 @@ continue=true
 auto-file-renaming=true
 allow-overwrite=false
 follow-torrent=false
+# Magnet tasks explicitly follow BT metadata and do not keep seeding after completion.
+seed-time=0
+bt-enable-lpd=false
+bt-max-peers=32
 follow-metalink=false
 max-concurrent-downloads=2
 max-connection-per-server=4

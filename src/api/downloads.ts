@@ -1,6 +1,7 @@
 import type {
   AddDownloadResult,
   AddDirectDownloadRequest,
+  AddMagnetDownloadRequest,
   AddDownloadRequest,
   ApiResponse,
   DownloadSettingsResult,
@@ -46,6 +47,10 @@ export function addDownloadTask(payload: AddDownloadRequest) {
 
 export function addDirectDownloadTask(payload: AddDirectDownloadRequest) {
   return postJson<AddDownloadResult>('/api/downloads/direct', payload)
+}
+
+export function addMagnetDownloadTask(payload: AddMagnetDownloadRequest) {
+  return postJson<AddDownloadResult>('/api/downloads/magnet', payload)
 }
 
 export function scanPageForFiles(payload: ScanPageRequest) {

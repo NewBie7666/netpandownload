@@ -91,7 +91,17 @@ export type DownloadTaskStatus =
   | 'complete'
   | 'removed'
 
+export interface DownloadTaskFile {
+  index: number
+  name: string
+  size: number
+  completedLength: number
+  selected: boolean
+}
+
 export interface DownloadTask {
+  isTorrent?: boolean
+  files?: DownloadTaskFile[]
   failureReason?: string
   gid: string
   fileName: string
@@ -156,6 +166,10 @@ export interface ScanPageResult {
 export interface AddDirectDownloadRequest {
   url: string
   fileName?: string
+}
+
+export interface AddMagnetDownloadRequest {
+  magnet: string
 }
 
 export interface AddDownloadResult {

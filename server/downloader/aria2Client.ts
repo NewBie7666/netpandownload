@@ -12,7 +12,11 @@ interface Aria2RpcResponse<T> {
 }
 
 interface Aria2TaskFile {
+  index?: string
   path?: string
+  length?: string
+  completedLength?: string
+  selected?: string
 }
 
 export interface Aria2TaskPayload {
@@ -24,9 +28,12 @@ export interface Aria2TaskPayload {
   downloadSpeed?: string
   dir?: string
   files?: Aria2TaskFile[]
+  infoHash?: string
+  followedBy?: string[]
+  bittorrent?: { info?: { name?: string } }
 }
 
-const taskKeys = ['gid', 'status', 'totalLength', 'completedLength', 'downloadSpeed', 'dir', 'files', 'errorCode']
+const taskKeys = ['gid', 'status', 'totalLength', 'completedLength', 'downloadSpeed', 'dir', 'files', 'errorCode', 'infoHash', 'bittorrent', 'followedBy']
 
 function getAria2Env() {
   return {
