@@ -27,7 +27,7 @@ function validateTracker(value: string): string {
     !url.hostname || url.username || url.password || url.hash) {
     throw new AppError('invalid_magnet', 'Tracker 只允许不含凭据的 HTTP/HTTPS/UDP 地址')
   }
-  const host = url.hostname.toLowerCase()
+  const host = url.hostname.toLowerCase().replace(/\.+$/, '')
   if (isIP(host) === 6 || host.startsWith('[') || (isIP(host) === 4 && privateIpv4(host)) ||
     host === 'localhost' || !host.includes('.') ||
     /\.(?:localhost|local|lan|internal|test|invalid|example)$/.test(host)) {
