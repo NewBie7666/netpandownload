@@ -16,7 +16,7 @@ test('magnet parser accepts BTIH, keeps public trackers and drops arbitrary opti
   assert.equal(new URL(clean).searchParams.get('dn'), 'Sample')
   assert.match(clean, /tracker.opentrackr.org/)
   assert.equal(new URL(clean).searchParams.has('evil'), false)
-  assert.match(validateMagnetInput({ magnet: 'magnet:?xt=urn:btih:' + 'A'.repeat(32) }), /btih:a{32}/)
+  assert.equal(new URL(validateMagnetInput({ magnet: 'magnet:?xt=urn:btih:' + 'A'.repeat(32) })).searchParams.get('xt'), 'urn:btih:' + 'a'.repeat(32))
 })
 
 test('magnet parser rejects malformed, privileged and dangerous tracker inputs', () => {
