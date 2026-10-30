@@ -16,6 +16,7 @@ import type {
 import { getRuntimePort } from '../config.js'
 import { openSafeDownloadFile, resolveSafeDownloadFile } from './privateWebFile.js'
 import { validateDirectDownloadInput, validateDownloadFileName } from './directDownload.js'
+import { validateMagnetInput } from './magnetDownload.js'
 import { socialMediaHeaders } from '../providers/social/mediaPolicy.js'
 import { requireTaskAction } from './taskActionPolicy.js'
 import { AppError } from '../http.js'
@@ -204,10 +205,20 @@ function normalizeTask(task: Aria2TaskPayload): DownloadTask {
   const downloadSpeed = toNumber(task.downloadSpeed)
   const progress = totalLength > 0 ? Math.min(100, Math.round((completedLength / totalLength) * 100)) : 0
   const filePath = task.files?.[0]?.path || ''
+  const torrent = Boolean(task.infoHash || task.bittorrent)
+  const files = (task.files || []).map((file, offset) => ({
+    index: Number(file.index) > 0 ? Number(file.index) : offset + 1,
+    name: path.basename(file.path || '') || `文件 ${offset + 1}`,
+    size: toNumber(file.length),
+    completedLength: toNumber(file.completedLength),
+    selected: file.selected !== 'false'
+  }))
 
   return {
     gid: task.gid,
-    fileName: filePath ? path.basename(filePath) : task.gid,
+    fileName: task.bittorrent?.info?.name || (files.length > 1 && filePath ? path.basename(path.dirname(filePath)) : (filePath ? path.basename(filePath) : task.gid)),
+    isTorrent: torrent,
+    files: torrent ? files : undefined,
     status: (task.status || 'waiting') as DownloadTask['status'],
     totalLength,
     completedLength,
@@ -255,6 +266,9 @@ async function ensureSafeFileDeletePath(filePath: string) {
 }
 
 async function deleteTaskFile(task: Aria2TaskPayload) {
+  if (task.infoHash || task.bittorrent || (task.files?.length || 0) > 1) {
+    throw new AppError('torrent_delete_unsupported', '多文件/BT 任务暂不支持从网页批量删除本地文件，请通过服务器文件管理清理', 409)
+  }
   const filePath = String(task.files?.[0]?.path || '').trim()
   if (!filePath) {
     throw new AppError('download_file_missing', '未找到该任务对应的本地文件路径')
@@ -315,6 +329,24 @@ export async function addDirectDownloadTask(input: unknown): Promise<AddDownload
   return submitDownloadTask({ url: safe.url, fileName: safe.fileName }, true)
 }
 
+/** Uses the same isolated aria2 task engine; no untrusted output directory or RPC options. */
+export async function addMagnetDownloadTask(input: unknown): Promise<AddDownloadResult> {
+  if (!getAria2Availability().enabled) {
+    throw new AppError('aria2_unavailable', getAria2Availability().message, 503)
+  }
+  const magnet = validateMagnetInput(input)
+  const dir = await getEffectiveDownloadDir()
+  await assertMinimumFreeSpace(dir)
+  const gid = await aria2AddUri(magnet, {
+    dir,
+    'follow-torrent': 'true',
+    'seed-time': '0',
+    'seed-ratio': '0.0',
+    'bt-save-metadata': 'false'
+  })
+  return { gid }
+}
+
 export async function listDownloadTasks(): Promise<DownloadTasksResult> {
   const availability = getAria2Availability()
   const defaultDir = await getEffectiveDownloadDir()
@@ -334,7 +366,11 @@ export async function listDownloadTasks(): Promise<DownloadTasksResult> {
     aria2TellStopped(0, downloadTaskHistorySize)
   ])
 
-  const tasks = [...active, ...waiting, ...stopped].map(normalizeTask)
+  // Magnet metadata tasks are followed by the actual torrent GID. Do not show
+  // a completed metadata-only placeholder as a downloadable file.
+  const tasks = [...active, ...waiting, ...stopped]
+    .filter((task) => !task.followedBy?.length)
+    .map(normalizeTask)
 
   return {
     enabled: true,
@@ -439,17 +475,25 @@ export async function getCompletedDownloadFile(gid: string) {
   return resolveSafeDownloadFile(await getEffectiveDownloadDir(), pathname)
 }
 
-export async function openCompletedDownloadFile(gid: string) {
+export async function openCompletedDownloadFile(gid: string, fileIndex?: string) {
   if (!/^[0-9a-f]{16}$/i.test(gid)) throw new AppError('invalid_gid', '任务 ID 格式不正确', 400)
   if (!getAria2Availability().enabled) throw new AppError('aria2_unavailable', '下载引擎不可用', 503)
   const task = await aria2TellStatus(gid)
   if (task.status !== 'complete') throw new AppError('download_not_complete', '任务尚未完成，请稍后重试', 409)
-  const pathname = task.files?.[0]?.path || ''
-  if (!pathname) throw new AppError('download_file_missing', '任务未关联下载文件', 404)
-  const file = await openSafeDownloadFile(await getEffectiveDownloadDir(), pathname)
-  const expected = task.totalLength || ''
-  const completed = task.completedLength || ''
-  if (!/^\d+$/.test(expected) || !/^\d+$/.test(completed) || BigInt(expected) !== BigInt(completed) || BigInt(expected) !== BigInt(file.size) || task.files?.length !== 1) {
+  const files = task.files || []
+  if (!files.length) throw new AppError('download_file_missing', '任务未关联下载文件', 404)
+  if (fileIndex === undefined && files.length !== 1) {
+    throw new AppError('download_multiple_files', '多文件任务请从任务列表选择具体文件', 409)
+  }
+  if (fileIndex !== undefined && !/^[1-9]\d{0,5}$/.test(fileIndex)) {
+    throw new AppError('invalid_file_index', '文件编号格式错误', 400)
+  }
+  const selected = fileIndex === undefined ? files[0] : files.find((item, offset) => (Number(item.index) || offset + 1) === Number(fileIndex))
+  if (!selected || selected.selected === 'false' || !selected.path) throw new AppError('download_file_missing', '未找到可下载的任务文件', 404)
+  const file = await openSafeDownloadFile(await getEffectiveDownloadDir(), selected.path)
+  const expected = selected.length || (files.length === 1 ? task.totalLength : '') || ''
+  const completed = selected.completedLength || (files.length === 1 ? task.completedLength : '') || ''
+  if (!/^\d+$/.test(expected) || !/^\d+$/.test(completed) || BigInt(expected) !== BigInt(completed) || BigInt(expected) !== BigInt(file.size)) {
     await file.handle.close()
     throw new AppError('download_file_incomplete', '任务文件大小与已完成记录不一致，请重新下载', 409)
   }
