@@ -22,7 +22,7 @@ try {
     chunks.push(value)
   }
   const raw = Buffer.concat(chunks).toString('utf8').replace(/^\uFEFF/, '')
-  console.log('HG probe raw prefix (URLs redacted):', JSON.stringify(raw.slice(0, 500).replace(/https?:\\/\\/[^\\s"']+/g, '[URL]')))
+  console.log('HG probe prefix sample:', JSON.stringify(raw.slice(0, 260).replaceAll('https://', '[https]')))
   const json = JSON.parse(raw)
   console.log('HG probe bytes:', bytes, 'top-level type:', typeof json)
   if (!Array.isArray(json?.sites)) {
