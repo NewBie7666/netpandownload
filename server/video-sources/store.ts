@@ -4,7 +4,7 @@ import { homedir } from 'node:os'
 import path from 'node:path'
 import type { VideoSource, VideoSourceImportResult } from '../../shared/videoSources.js'
 import { AppError } from '../http.js'
-import { validateVideoSourceUrl } from './network.js'
+import { fetchVideoSourceJson, validateVideoSourceUrl } from './network.js'
 
 const maxSources = 40
 let mutationQueue: Promise<unknown> = Promise.resolve()
@@ -133,4 +133,16 @@ export function importTvBoxSources(value: unknown): Promise<VideoSourceImportRes
     if (imported) await saveSources(sources)
     return { imported, skipped: skipped + Math.max(0, (config as { sites: unknown[] }).sites.length - sites.length), sources }
   })
+}
+
+// The user may paste a TVBox *configuration URL*, not only a downloaded JSON body.
+// Reuse the pinned-address, redirect-limited, 1.5MB JSON-only network client.
+// Fetch outside the mutation lock, then store through the same atomic importer.
+export async function importTvBoxSourcesFromUrl(
+  input: unknown,
+  fetcher: (url: string) => Promise<unknown> = fetchVideoSourceJson
+): Promise<VideoSourceImportResult> {
+  const url = validateVideoSourceUrl(input).toString()
+  const config = await fetcher(url)
+  return importTvBoxSources(config)
 }

@@ -22,6 +22,7 @@ export const removeVideoSource = (id: string) => request<{ id: string }>('/sourc
 export const setVideoSourceEnabled = (id: string, enabled: boolean) =>
   request<VideoSource>('/sources/' + encodeURIComponent(id), 'PATCH', { enabled })
 export const importTvBoxConfig = (config: string) => request<VideoSourceImportResult>('/import-tvbox', 'POST', { config })
+export const importTvBoxUrl = (url: string) => request<VideoSourceImportResult>('/import-tvbox-url', 'POST', { url })
 export const testVideoSource = (sourceId: string) => request<{ sourceId: string, ok: boolean, sampleCount: number }>('/test' + query({ sourceId }))
 export const searchVideoSource = (sourceId: string, keyword: string, page = 1) =>
   request<VideoSearchResult>('/search' + query({ sourceId, keyword, page }))

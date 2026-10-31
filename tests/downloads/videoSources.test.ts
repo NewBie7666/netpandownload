@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { parsePlayLines, parseMacCmsResponse } from '../../server/video-sources/parser.js'
 import { validateVideoSourceUrl } from '../../server/video-sources/network.js'
-import { addVideoSource, importTvBoxSources, listVideoSources, removeVideoSource, updateVideoSource } from '../../server/video-sources/store.js'
+import { addVideoSource, importTvBoxSources, importTvBoxSourcesFromUrl, listVideoSources, removeVideoSource, updateVideoSource } from '../../server/video-sources/store.js'
 
 test('MacCMS JSON extracts multiple lines and distinguishes MP4/HLS/scripts', () => {
   const payload = { page: 2, pagecount: 4, list: [{
@@ -49,6 +49,33 @@ test('TVBox imports only supported MacCMS sources with persistent controls', asy
     assert.equal(imported.skipped, 3)
     assert.equal((await listVideoSources()).length, 2)
     await removeVideoSource(created.id)
+    assert.equal((await listVideoSources()).length, 1)
+  } finally {
+    if (previous === undefined) delete process.env.NETPAN_VIDEO_SOURCE_FILE
+    else process.env.NETPAN_VIDEO_SOURCE_FILE = previous
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('TVBox URL importer validates remote URL and imports only JSON type=1 (offline fake fetcher)', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'video-sources-url-test-'))
+  const previous = process.env.NETPAN_VIDEO_SOURCE_FILE
+  process.env.NETPAN_VIDEO_SOURCE_FILE = path.join(dir, 'catalog.json')
+  try {
+    let called = ''
+    const fakeFetch = async (url: string) => {
+      called = url
+      return { sites: [
+        { name: 'Fixture MacCMS', type: 1, api: 'https://valid.example.com/api.php/provide/vod/' },
+        { name: 'Fixture Spider', type: 3, api: 'csp_Fixture' }
+      ] }
+    }
+    const result = await importTvBoxSourcesFromUrl('https://api.hgyx.vip/hgyx.json', fakeFetch)
+    assert.equal(called, 'https://api.hgyx.vip/hgyx.json')
+    assert.equal(result.imported, 1)
+    assert.equal(result.skipped, 1)
+    await assert.rejects(() => importTvBoxSourcesFromUrl('http://127.0.0.1/private', fakeFetch))
+    await assert.rejects(() => importTvBoxSourcesFromUrl('file:///tmp/private', fakeFetch))
     assert.equal((await listVideoSources()).length, 1)
   } finally {
     if (previous === undefined) delete process.env.NETPAN_VIDEO_SOURCE_FILE

@@ -2,7 +2,7 @@
 import { onMounted, ref } from 'vue'
 import type { VideoItem, VideoSource } from '../../shared/videoSources'
 import {
-  addVideoSource, detailVideoSource, downloadVideoEpisode, importTvBoxConfig,
+  addVideoSource, detailVideoSource, downloadVideoEpisode, importTvBoxConfig, importTvBoxUrl,
   listVideoSources, removeVideoSource, searchVideoSource,
   setVideoSourceEnabled, testVideoSource
 } from '../api/videoSources'
@@ -13,6 +13,7 @@ const selectedId = ref('')
 const sourceName = ref('')
 const sourceUrl = ref('')
 const tvboxText = ref('')
+const tvboxUrl = ref('')
 const keyword = ref('')
 const results = ref<VideoItem[]>([])
 const detail = ref<VideoItem | null>(null)
@@ -55,6 +56,14 @@ function importConfig() {
     const result = await importTvBoxConfig(tvboxText.value)
     tvboxText.value = ''
     message.value = '导入 ' + result.imported + ' 个 MacCMS 源，跳过 ' + result.skipped + ' 个不兼容或重复源。'
+  })
+}
+function importUrl() {
+  void change(async () => {
+    const result = await importTvBoxUrl(tvboxUrl.value.trim())
+    message.value = result.imported > 0
+      ? '通过配置 URL 新增 ' + result.imported + ' 个兼容 MacCMS 源；跳过 ' + result.skipped + ' 个不兼容或重复源。'
+      : '配置已读取，但未找到可导入的 MacCMS type=1 源；跳过 ' + result.skipped + ' 项。此配置可能依赖 TVBox Spider/JAR，暂不支持。'
   })
 }
 function toggle(source: VideoSource) {
@@ -124,6 +133,13 @@ onMounted(() => { void refresh().catch(e => { error.value = e instanceof Error ?
       <input id="vs-url" v-model="sourceUrl" type="url" placeholder="https://example.com/api.php/provide/vod/" required />
       <button type="submit" class="primary-button" :disabled="changing">添加影视源</button>
     </form>
+    <form class="video-import-url" @submit.prevent="importUrl">
+      <label for="vs-config-url">TVBox 配置 URL</label>
+      <input id="vs-config-url" v-model="tvboxUrl" type="url" required
+        placeholder="https://api.hgyx.vip/hgyx.json" :disabled="changing" />
+      <button type="submit" class="ghost-button" :disabled="changing || !tvboxUrl.trim()">从 URL 导入兼容影视源</button>
+    </form>
+    <p class="video-hint">配置 URL 不等于影片接口。仅识别并保存其中 type=1 MacCMS API；type=3 Spider/JAR/脚本源会显示为跳过，不会执行不可信代码。</p>
     <details class="video-import">
       <summary>导入 TVBox JSON 配置（仅 MacCMS type=1）</summary>
       <textarea v-model="tvboxText" rows="4" placeholder='{"sites":[{"type":1,"name":"示例","api":"https://example.com/api.php/provide/vod/"}]}' />
@@ -189,6 +205,9 @@ onMounted(() => { void refresh().catch(e => { error.value = e instanceof Error ?
 .video-grid { display: grid; grid-template-columns: 125px 1fr; gap: 10px; align-items: center; }
 .video-grid input, .video-search input, .video-search select, .video-import textarea { width: 100%; min-width: 0; padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; }
 .video-grid button { grid-column: 2; justify-self: start; }
+.video-import-url { display: flex; gap: 10px; align-items: center; margin-top: 16px; flex-wrap: wrap; }
+.video-import-url input { flex: 1 1 280px; min-width: 0; padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; }
+.video-import-url label { font-size: 13px; font-weight: 600; }
 .video-import { margin: 18px 0; }
 .video-import summary { cursor: pointer; margin-bottom: 8px; }
 .video-import textarea { display: block; margin: 10px 0; }
