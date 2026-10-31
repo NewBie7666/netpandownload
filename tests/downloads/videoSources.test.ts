@@ -1,3 +1,4 @@
+import { parseCommentedJson } from '../../server/video-sources/jsonCompat.js'
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { mkdtemp, rm } from 'node:fs/promises'
@@ -82,4 +83,18 @@ test('TVBox URL importer validates remote URL and imports only JSON type=1 (offl
     else process.env.NETPAN_VIDEO_SOURCE_FILE = previous
     await rm(dir, { recursive: true, force: true })
   }
+})
+
+test('TVBox JSON with line/block comments and trailing commas parses safely without executing code', () => {
+  const config = parseCommentedJson(String.raw`{
+    // not a valid JSON comment, but common in TVBox configs
+    "sites": [
+      {"name": "Example", "type": 3, "api": "https://example.org/js/?a=1,b]"}, /* block */
+    ],
+    "raw": "// keep https://domain.example/file,} in quoted text",
+  }`) as { sites: Array<{api: string}>, raw: string }
+  assert.equal(config.sites[0].api, 'https://example.org/js/?a=1,b]')
+  assert.equal(config.raw, '// keep https://domain.example/file,} in quoted text')
+  assert.throws(() => parseCommentedJson('{ "sites": eval("process.exit(1)") }'))
+  assert.throws(() => parseCommentedJson('{ "sites": [] /* unfinished'))
 })

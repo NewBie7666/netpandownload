@@ -23,7 +23,28 @@ try {
   }
   const raw = Buffer.concat(chunks).toString('utf8').replace(/^\uFEFF/, '')
   console.log('HG probe prefix sample:', JSON.stringify(raw.slice(0, 260).replaceAll('https://', '[https]')))
-  const json = JSON.parse(raw)
+  function stripComments(text) {
+    let out = '', quoted = false, escape = false
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i], next = text[i + 1]
+      if (quoted) {
+        out += ch
+        if (escape) escape = false
+        else if (ch === '\\') escape = true
+        else if (ch === '"') quoted = false
+      } else if (ch === '"') { quoted = true; out += ch }
+      else if (ch === '/' && next === '/') {
+        while (i < text.length && !'\\r\\n'.includes(text[i])) i++
+        i--
+      } else if (ch === '/' && next === '*') {
+        i += 2
+        while (i < text.length && !(text[i] === '*' && text[i + 1] === '/')) i++
+        i++
+      } else out += ch
+    }
+    return out
+  }
+  const json = JSON.parse(stripComments(raw).replace(/,\\s*([}\\]])/g, '$1'))
   console.log('HG probe bytes:', bytes, 'top-level type:', typeof json)
   if (!Array.isArray(json?.sites)) {
     console.log('HG probe: NO sites array; top-level keys:', Object.keys(json || {}).slice(0, 15))

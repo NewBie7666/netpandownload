@@ -1,3 +1,4 @@
+import { parseCommentedJson } from './jsonCompat.js'
 import { lookup } from 'node:dns/promises'
 import { request as httpRequest } from 'node:http'
 import { request as httpsRequest } from 'node:https'
@@ -94,7 +95,7 @@ export async function fetchVideoSourceJson(initial: string): Promise<unknown> {
       url = validateVideoSourceUrl(new URL(response.location, url).toString())
       continue
     }
-    try { return JSON.parse(response.text) as unknown }
+    try { return parseCommentedJson(response.text) }
     catch { throw new AppError('video_source_bad_response', '影视源未返回有效 JSON', 502) }
   }
   throw new AppError('video_source_redirect', '影视源跳转错误', 502)
