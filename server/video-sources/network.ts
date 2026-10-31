@@ -28,7 +28,7 @@ export function validateVideoSourceUrl(value: unknown): URL {
 
 async function oneRequest(url: URL): Promise<{ status: number, text: string, location: string }> {
   const hostname = url.hostname.replace(/^\[|\]$/g, '')
-  let addresses: Awaited<ReturnType<typeof lookup>>
+  let addresses: Array<{ address: string, family: number }>
   try { addresses = await lookup(hostname, { all: true, verbatim: true }) }
   catch { throw new AppError('video_source_dns_failed', '无法解析影视源域名', 502) }
   if (!addresses.length || addresses.some(address => !isPublicIp(address.address))) {
