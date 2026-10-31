@@ -7,6 +7,10 @@ Current versions of this project run as a local Quark MVP with both:
 
 The long-term product direction is a **local desktop download client**. The Electron shell, local backend lifecycle, Provider registry, unified Provider API, Quark Provider wrapper, Bilibili Provider with `yt-dlp` sidecar support, aria2 RPC control path, download task APIs, and download task UI are now implemented. **Bilibili DASH merge, member/paid/region/DRM handling, ffmpeg integration, auto-update, and installer distribution are still not implemented**.
 
+## Independent video-source catalog (development branch)
+
+The new `VideoSourceProvider` is independent from the existing Provider registry. MacCMS JSON API source management, limited TVBox JSON type=1 import, video searching, episode lists and direct MP4 download submission are implemented in the `feat/video-source-provider-20261101` branch. HLS/m3u8 playlist merging and Spider/jar/JS source execution are deliberately not supported. See [Video Sources](docs/VIDEO_SOURCES.md). These changes are **not merged or deployed**.
+
 ## Current State
 
 - Frontend: `Vite + Vue + TypeScript`

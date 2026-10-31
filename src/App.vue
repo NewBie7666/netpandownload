@@ -24,6 +24,7 @@ import {
   resolveProviderResource
 } from './api/providers'
 import DouyinLogin from './components/DouyinLogin.vue'
+import VideoSourcePanel from './components/VideoSourcePanel.vue'
 import DownloadCenter from './views/download-center/DownloadCenter.vue'
 import { chooseVisibleFiles, dropVisibleFiles, filterFileLinks, getFileSelectionState, groupFileExtensions, setFileTypeSelected, submitPageDownloadBatch, PAGE_BATCH_LIMIT } from './api/pageFileSelection'
 import type {
@@ -983,6 +984,7 @@ onBeforeUnmount(() => {
 <template>
   <div class="page-shell">
     <main class="container">
+      <VideoSourcePanel @task-added="refreshDownloadTasks(true)" />
       <section class="panel parser-panel">
         <DouyinLogin />
         <div class="form-row">
