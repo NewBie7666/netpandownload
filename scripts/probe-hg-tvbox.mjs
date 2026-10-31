@@ -33,7 +33,7 @@ try {
         else if (ch === '\\') escape = true
         else if (ch === '"') quoted = false
       } else if (ch === '"') { quoted = true; out += ch }
-      else if (ch === '/' && next === '/') {
+      else if ((ch === '/' && next === '/') || ch === '#') {
         while (i < text.length && text[i] !== '\r' && text[i] !== '\n') i++
         i--
       } else if (ch === '/' && next === '*') {

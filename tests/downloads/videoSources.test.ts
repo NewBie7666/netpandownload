@@ -88,6 +88,7 @@ test('TVBox URL importer validates remote URL and imports only JSON type=1 (offl
 test('TVBox JSON with line/block comments and trailing commas parses safely without executing code', () => {
   const config = parseCommentedJson(String.raw`{
     // not a valid JSON comment, but common in TVBox configs
+    # also a TVBox line comment
     "sites": [
       {"name": "Example", "type": 3, "api": "https://example.org/js/?a=1,b]"}, /* block */
     ],

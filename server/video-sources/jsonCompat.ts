@@ -16,7 +16,7 @@ export function parseCommentedJson(raw: string): unknown {
       continue
     }
     if (c === '"') { inside = true; out += c; continue }
-    if (c === '/' && next === '/') {
+    if ((c === '/' && next === '/') || c === '#') {
       while (i < raw.length && raw[i] !== '\n' && raw[i] !== '\r') { out += ' '; i++ }
       i--
       continue
