@@ -21,7 +21,9 @@ try {
     if (bytes > 1_500_000) throw Error('config exceeds 1.5MB bound')
     chunks.push(value)
   }
-  const json = JSON.parse(Buffer.concat(chunks).toString('utf8').replace(/^\uFEFF/, ''))
+  const raw = Buffer.concat(chunks).toString('utf8').replace(/^\uFEFF/, '')
+  console.log('HG probe raw prefix (URLs redacted):', JSON.stringify(raw.slice(0, 500).replace(/https?:\\/\\/[^\\s"']+/g, '[URL]')))
+  const json = JSON.parse(raw)
   console.log('HG probe bytes:', bytes, 'top-level type:', typeof json)
   if (!Array.isArray(json?.sites)) {
     console.log('HG probe: NO sites array; top-level keys:', Object.keys(json || {}).slice(0, 15))
