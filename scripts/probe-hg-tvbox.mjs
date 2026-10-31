@@ -34,7 +34,7 @@ try {
         else if (ch === '"') quoted = false
       } else if (ch === '"') { quoted = true; out += ch }
       else if (ch === '/' && next === '/') {
-        while (i < text.length && !'\\r\\n'.includes(text[i])) i++
+        while (i < text.length && text[i] !== '\r' && text[i] !== '\n') i++
         i--
       } else if (ch === '/' && next === '*') {
         i += 2
@@ -44,7 +44,7 @@ try {
     }
     return out
   }
-  const json = JSON.parse(stripComments(raw).replace(/,\\s*([}\\]])/g, '$1'))
+  const json = JSON.parse(stripComments(raw).replace(/,\s*([}\]])/g, '$1'))
   console.log('HG probe bytes:', bytes, 'top-level type:', typeof json)
   if (!Array.isArray(json?.sites)) {
     console.log('HG probe: NO sites array; top-level keys:', Object.keys(json || {}).slice(0, 15))
