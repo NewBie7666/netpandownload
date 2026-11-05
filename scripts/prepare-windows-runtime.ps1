@@ -8,7 +8,20 @@ New-Item -ItemType Directory -Path $tmp | Out-Null
 
 function Download-Pinned([string]$Name, [string]$Url, [string]$Sha256, [string]$Destination) {
   Write-Host "Fetching $Name from pinned upstream release"
-  Invoke-WebRequest -Uri $Url -OutFile $Destination -UseBasicParsing
+  $downloaded = $false
+  for ($attempt = 1; $attempt -le 5; $attempt++) {
+    try {
+      Invoke-WebRequest -Uri $Url -OutFile $Destination -UseBasicParsing -TimeoutSec 300
+      $downloaded = $true
+      break
+    } catch {
+      if (Test-Path -LiteralPath $Destination) { Remove-Item -LiteralPath $Destination -Force }
+      Write-Warning "$Name download attempt $attempt/5 failed: $($_.Exception.Message)"
+      if ($attempt -eq 5) { throw }
+      Start-Sleep -Seconds (5 * $attempt)
+    }
+  }
+  if (-not $downloaded) { throw "Could not download $Name" }
   $actual = (Get-FileHash -LiteralPath $Destination -Algorithm SHA256).Hash.ToLowerInvariant()
   if ($actual -ne $Sha256.ToLowerInvariant()) {
     Remove-Item -LiteralPath $Destination -Force
