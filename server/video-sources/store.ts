@@ -125,7 +125,7 @@ export function importTvBoxSources(value: unknown): Promise<VideoSourceImportRes
       if (!site || typeof site !== 'object' || Array.isArray(site)) { invalid++; continue }
       const entry = site as Record<string, unknown>
       const name = typeof entry.name === 'string'
-        ? entry.name.replace(/[\\u0000-\\u001f\\u007f]/g, '').slice(0, 80)
+        ? entry.name.replace(/[\u0000-\u001f\u007f]/g, '').slice(0, 80)
         : '未命名站点'
       const type = String(entry.type ?? 'unknown').slice(0, 16)
       if (entry.type !== 1 && entry.type !== '1') {

@@ -5,9 +5,11 @@ async function request<T>(path: string, method = 'GET', body?: unknown): Promise
     method,
     ...(body === undefined ? {} : { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
   })
-  const data = await response.json() as { ok: boolean, result?: T, message?: string, error?: string }
+  let data: { ok: boolean, result?: T, message?: string, error?: string }
+  try { data = await response.json() as typeof data }
+  catch { throw new Error('影视源 API 没有返回 JSON（HTTP ' + response.status + '），请检查本地服务版本和网络') }
   if (!response.ok || !data.ok || data.result === undefined) {
-    throw new Error(data.message || data.error || '影视源操作失败')
+    throw new Error(data.message || ('影视源 API 错误 ' + (data.error || response.status)))
   }
   return data.result
 }

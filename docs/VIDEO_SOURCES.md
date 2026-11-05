@@ -5,15 +5,15 @@
 ## 首版能力
 
 - 在网页/桌面端添加、启停、删除 MacCMS JSON API 源；目录保存在本地配置文件。
-- 粘贴 TVBox JSON 或输入 TVBox 配置 URL，通过服务端安全读取 sites；**只**导入 type=1 的 HTTP/HTTPS MacCMS API，不执行 Spider/jar/JS。非兼容项会计数并跳过。
+- 默认只需输入 **TVBox JSON 配置 URL 或粘贴完整 JSON**，通过服务端安全读取 sites，自动识别、保存并选中兼容站点；单独 MacCMS API 添加放在折叠的高级设置中。**只**将 type=1 的公网 HTTP/HTTPS MacCMS API 添加为可搜索源，type=3/0 显示源名称、类型及不兼容原因，不执行 Spider/jar/JS。远程网络失败会返回明确错误而非通用的 500。
 - 按所选源搜索影视名称、分页，查看详情、播放线路及剧集。
 - MP4 直链交给原 aria2；HLS/m3u8 点播 MPEG-TS 由独立 HLS 任务引擎抓取分片、可选 AES-128 解密，FFmpeg 本地无网络封装 MP4；任务出现在原下载列表，并支持云端“保存到此设备”。
 - 源数据包含外部网址，请只添加信任、拥有相应使用授权的来源。
 
 ## 使用
 
-1. 添加 JSON API，例如自建 MacCMS 的 /api.php/provide/vod/；或直接在“TVBox 配置 URL”输入 `https://api.hgyx.vip/hgyx.json` 试导入（不保证其中存在 type=1 源）。
-2. 点击“测试源”，再搜索影片名称。
+1. 在首页的**影视源配置 URL / JSON** 输入框直接粘贴 `https://api.hgyx.vip/hgyx.json`，点击 **一键导入影视源**；也可以粘贴含注释的完整 TVBox JSON。无须填写源名称或 MacCMS API。单独的 MacCMS API 添加入口已移至“高级设置”。
+2. 导入后自动选择新加的可用类型站点。看导入报告的“已存在/暂不支持/无效”数量；type=3、type=0 仅显示不兼容原因，不会伪装为可搜索站点。选择兼容站点后点击“测试源”，再搜索影片名称。
 3. 点击“查看剧集”，选择标记为“下载 MP4”的剧集；进下载中心查看任务。
 4. HLS/m3u8 剧集点击“下载 HLS”进入 HLS 任务；还可以手动粘贴 `.m3u8` 地址。暂停后重新下载而不是从部分分片续传。
 
