@@ -61,6 +61,7 @@ export async function readHlsResource(
           fail(new AppError('hls_http_error', 'HLS 源站返回 HTTP ' + status, 502))
           return
         }
+        res.on('error', fail)
         if (Number(res.headers['content-length'] || 0) > maxBytes) {
           res.destroy(new AppError('hls_resource_too_large', 'HLS 分片超过单个资源上限', 413))
           return
@@ -73,7 +74,6 @@ export async function readHlsResource(
           chunks.push(chunk)
         })
         res.on('end', () => done({ bytes: Buffer.concat(chunks), location: '' }))
-        res.on('error', fail)
       })
       req.on('timeout', () => req.destroy(new AppError('hls_timeout', 'HLS 请求超时', 504)))
       req.on('error', fail)

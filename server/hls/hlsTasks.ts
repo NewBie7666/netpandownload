@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto'
 import { createDecipheriv } from 'node:crypto'
 import { spawn } from 'node:child_process'
-import { appendFile, mkdir, mkdtemp, open, readFile, rename, rm, stat, statfs, writeFile } from 'node:fs/promises'
+import { appendFile, mkdir, mkdtemp, readFile, rename, rm, stat, statfs, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import path from 'node:path'
 import type { DownloadTask } from '../../shared/types.js'
@@ -117,7 +117,7 @@ export async function enqueueHls(input: unknown): Promise<{ gid: string, fileNam
   return { gid, fileName }
 }
 
-async function runFfmpeg(input: string, output: string, signal: AbortSignal): Promise<void> {
+export async function runFfmpeg(input: string, output: string, signal: AbortSignal): Promise<void> {
   const binary = String(process.env.NETPAN_FFMPEG_PATH || 'ffmpeg')
   await new Promise<void>((resolve, reject) => {
     const child = spawn(binary, [
@@ -145,7 +145,7 @@ async function execute(job: HlsJob, signal: AbortSignal): Promise<void> {
     let url = job.url
     let playlistText = ''
     for (let depth = 0; depth <= 3; depth++) {
-      const response = await readHlsResource(url, 1_000_000, signal, job.url)
+      const response = await readHlsResource(url, 1_000_000, signal, new URL(job.url).origin + '/')
       playlistText = response.data.toString('utf8')
       const variant = selectHlsVariant(playlistText, response.url)
       if (!variant) { url = response.url; break }
@@ -160,12 +160,12 @@ async function execute(job: HlsJob, signal: AbortSignal): Promise<void> {
     const startedAt = Date.now()
     for (const segment of manifest.segments) {
       if (signal.aborted) fail('hls_aborted', '任务已暂停或取消', 409)
-      const response = await readHlsResource(segment.url, 32 * 1024 * 1024, signal, url)
+      const response = await readHlsResource(segment.url, 32 * 1024 * 1024, signal, new URL(url).origin + '/')
       let buffer = response.data
       if (segment.keyUrl) {
         let key = keys.get(segment.keyUrl)
         if (!key) {
-          key = (await readHlsResource(segment.keyUrl, 16, signal, url)).data
+          key = (await readHlsResource(segment.keyUrl, 16, signal, new URL(url).origin + '/')).data
           if (key.length !== 16) fail('hls_invalid_key', 'HLS AES-128 密钥长度必须为 16 字节', 422)
           keys.set(segment.keyUrl, key)
         }

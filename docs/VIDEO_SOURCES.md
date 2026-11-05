@@ -40,6 +40,6 @@
 - **不支持** MacCMS XML、动态 Spider/JS/jar、站点加密/签名、VIP/DRM/会员绕过、第三方播放器嗅探。
 - 输入 TVBox 配置 URL 并成功获取 JSON，只能证明**配置下载/筛选**成功，不能代表 HG/饭太硬中的 Spider 项能搜索或播放。下载器不执行配置中的 jar、ext、parser、script。若返回 HTTP 403/HTML/地区限制或 DNS 失败，报告明确错误，不制造假成功。
 - **HLS 首版仅支持** 完整 VOD MPEG-TS 主/子清单、16 字节 AES-128 identity 密钥及本地 FFmpeg copy remux；禁止直播、DRM、fMP4、BYTERANGE、DISCONTINUITY、LL-HLS、外置音轨和 DASH。队列最多 4 个，串行处理；2000 个分片、4GiB 总量、单分片 32MiB、最长 8 小时。暂停/进程重启后须重新下载，不提供伪断点续传。
-- HLS 媒体 URL、分片、密钥和跳转都做公网地址/DNS pinning；FFmpeg 只读取本地 `.ts` 文件，禁止网络协议。必须在部署主机安装 FFmpeg；缺失会导致任务失败并显示错误。
+- HLS 媒体 URL、分片、密钥和跳转都做公网地址/DNS pinning；FFmpeg 只读取本地 `.ts` 文件，禁止网络协议。必须在部署主机安装 FFmpeg（Linux: `apt install ffmpeg`；Windows 桌面需自行提供 `ffmpeg.exe` 在 PATH 中，或设置 `NETPAN_FFMPEG_PATH`）。云端引导脚本要求 FFmpeg 已安装。缺失会导致任务失败并显示错误。
 - 对片源服务器的 MP4 可下载性无法通过搜索结果推断；需要真实的合法源做集成验收。
 - 不会自动部署到腾讯云。现有生产 PR #3 和磁力 PR #4 不受影响。
