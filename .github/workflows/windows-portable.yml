@@ -1,0 +1,62 @@
+name: Windows self-contained portable EXE
+
+on:
+  push:
+    branches:
+      - feat/windows-portable-bundled-runtime-20261105
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package-win-x64:
+    runs-on: windows-2022
+    timeout-minutes: 45
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    steps:
+      - name: Checkout pinned source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Setup Node runtime for build only
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22.23.4'
+          cache: npm
+      - name: Install locked build dependencies
+        run: npm ci
+      - name: Download and verify packaged runtime
+        shell: pwsh
+        run: ./scripts/prepare-windows-runtime.ps1
+      - name: Put packaged FFmpeg on build test PATH
+        shell: pwsh
+        run: |
+          $bin = (Resolve-Path './resources/ffmpeg/win').Path
+          Add-Content -Path $env:GITHUB_PATH -Value $bin
+      - name: Validate HLS and real MP4 remux
+        run: npm run test:hls
+      - name: Build all application layers and run release gate
+        run: npm run pre-release-check
+      - name: Build Electron main
+        run: npm run build:electron
+      - name: Package portable Windows x64 EXE
+        run: npx electron-builder --win portable --x64 --publish never
+      - name: Verify EXE and sidecar contents
+        run: node scripts/release/artifactIntegrityCheck.mjs
+      - name: Windows SHA-256 and resource evidence
+        shell: pwsh
+        run: |
+          $files = @(Get-ChildItem -LiteralPath release -Filter *.exe -File)
+          if ($files.Count -ne 1) { throw "Expected exactly one EXE, got $($files.Count)" }
+          Get-FileHash -LiteralPath $files[0].FullName -Algorithm SHA256 | Format-List
+          Get-ChildItem release/win-unpacked/resources -Recurse -File | Where-Object { $_.Name -in @('aria2c.exe','yt-dlp.exe','ffmpeg.exe','ffprobe.exe') } | Select-Object FullName,Length
+      - name: Upload portable Windows EXE
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: NetPanDownload-Windows-x64-Portable-${{ github.sha }}
+          path: release/*.exe
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
