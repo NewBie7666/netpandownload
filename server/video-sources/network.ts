@@ -55,7 +55,7 @@ async function publicDns(url: URL): Promise<Array<{ address: string, family: num
   return preferIpv4(addresses).slice(0, 8)
 }
 
-async function routesFor(url: URL): Promise<SourceRoute[]> {
+export async function routesFor(url: URL): Promise<SourceRoute[]> {
   if (!systemProxyResolver) return [{ kind: 'direct' }]
   try {
     return parseSourceProxyRoutes(await systemProxyResolver(url.toString()))
@@ -64,7 +64,7 @@ async function routesFor(url: URL): Promise<SourceRoute[]> {
   }
 }
 
-async function tunnel(proxy: Extract<SourceRoute, { kind: 'proxy' }>, address: string, port: number): Promise<Socket> {
+export async function tunnel(proxy: Extract<SourceRoute, { kind: 'proxy' }>, address: string, port: number): Promise<Socket> {
   return new Promise((resolve, reject) => {
     const endpoint = address.includes(':') ? '[' + address + ']:' + port : address + ':' + port
     const req = httpRequest({
