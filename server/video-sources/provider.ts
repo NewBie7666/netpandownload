@@ -2,6 +2,7 @@ import type { VideoItem, VideoSearchResult, VideoSource } from '../../shared/vid
 import { AppError } from '../http.js'
 import { addDirectDownloadTask } from '../downloader/downloadService.js'
 import { validateDirectDownloadInput } from '../downloader/directDownload.js'
+import { enqueueHls } from '../hls/hlsTasks.js'
 import { fetchVideoSourceJson } from './network.js'
 import { listVideoSources } from './store.js'
 import { parseMacCmsResponse } from './parser.js'
@@ -77,7 +78,9 @@ export class VideoSourceProvider {
     const episode = video.lines[lineIndex]?.episodes[episodeIndex]
     if (!episode) throw new AppError('video_episode_missing', '未找到指定剧集', 404)
     if (episode.kind === 'hls') {
-      throw new AppError('video_hls_not_ready', '这是 HLS/m3u8 分片流，当前版本未实现安全合并；不会将 m3u8 当 MP4 下载', 422)
+      const name = (video.title + '-' + episode.label).replace(/[\x00-\x1f\x7f<>:"/\\|?*]/g, '_').replace(/[. ]+$/g, '').slice(0, 130) || 'video'
+      const task = await enqueueHls({ url: episode.url, fileName: name + '.mp4' })
+      return { ...task, sourceId: request.sourceId, videoId: request.videoId }
     }
     if (episode.kind !== 'mp4') {
       throw new AppError('video_media_unsupported', '此线路不是可确认的 MP4 直链（不支持第三方播放器脚本解析）', 422)

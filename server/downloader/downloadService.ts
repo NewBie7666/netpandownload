@@ -20,6 +20,7 @@ import { validateMagnetInput } from './magnetDownload.js'
 import { socialMediaHeaders } from '../providers/social/mediaPolicy.js'
 import { requireTaskAction } from './taskActionPolicy.js'
 import { AppError } from '../http.js'
+import { isHlsGid, listHlsTasks, getHlsTask, pauseHls, resumeHls, removeHls, openHlsCompletedFile } from '../hls/hlsTasks.js'
 import {
   getConfiguredDownloadDir,
   getDownloadSettings as readDownloadSettings,
@@ -356,7 +357,7 @@ export async function listDownloadTasks(): Promise<DownloadTasksResult> {
       enabled: false,
       message: availability.message,
       defaultDir,
-      tasks: []
+      tasks: await listHlsTasks()
     }
   }
 
@@ -368,9 +369,12 @@ export async function listDownloadTasks(): Promise<DownloadTasksResult> {
 
   // Magnet metadata tasks are followed by the actual torrent GID. Do not show
   // a completed metadata-only placeholder as a downloadable file.
-  const tasks = [...active, ...waiting, ...stopped]
-    .filter((task) => !task.followedBy?.length)
-    .map(normalizeTask)
+  const tasks = [
+    ...[...active, ...waiting, ...stopped]
+      .filter((task) => !task.followedBy?.length)
+      .map(normalizeTask),
+    ...await listHlsTasks()
+  ]
 
   return {
     enabled: true,
@@ -402,6 +406,7 @@ export async function updateDownloadSettings(input: { downloadDir?: string }): P
 }
 
 export async function getDownloadTaskStatus(gid: string) {
+  if (isHlsGid(gid)) return getHlsTask(gid)
   const availability = getAria2Availability()
   if (!availability.enabled) {
     throw new AppError('aria2_unavailable', availability.message, 503)
@@ -411,6 +416,7 @@ export async function getDownloadTaskStatus(gid: string) {
 }
 
 export async function pauseDownloadTask(gid: string) {
+  if (isHlsGid(gid)) return pauseHls(gid)
   const availability = getAria2Availability()
   if (!availability.enabled) {
     throw new AppError('aria2_unavailable', availability.message, 503)
@@ -422,6 +428,7 @@ export async function pauseDownloadTask(gid: string) {
 }
 
 export async function resumeDownloadTask(gid: string) {
+  if (isHlsGid(gid)) return resumeHls(gid)
   const availability = getAria2Availability()
   if (!availability.enabled) {
     throw new AppError('aria2_unavailable', availability.message, 503)
@@ -433,6 +440,7 @@ export async function resumeDownloadTask(gid: string) {
 }
 
 export async function removeDownloadTask(gid: string, input: RemoveDownloadRequest = {}) {
+  if (isHlsGid(gid)) return removeHls(gid, input)
   const availability = getAria2Availability()
   if (!availability.enabled) {
     throw new AppError('aria2_unavailable', availability.message, 503)
@@ -476,6 +484,10 @@ export async function getCompletedDownloadFile(gid: string) {
 }
 
 export async function openCompletedDownloadFile(gid: string, fileIndex?: string) {
+  if (isHlsGid(gid)) {
+    if (fileIndex !== undefined && fileIndex !== '1') throw new AppError('invalid_file_index', 'HLS 仅包含一个输出文件', 400)
+    return openHlsCompletedFile(gid)
+  }
   if (!/^[0-9a-f]{16}$/i.test(gid)) throw new AppError('invalid_gid', '任务 ID 格式不正确', 400)
   if (!getAria2Availability().enabled) throw new AppError('aria2_unavailable', '下载引擎不可用', 503)
   const task = await aria2TellStatus(gid)

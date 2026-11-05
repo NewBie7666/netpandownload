@@ -125,7 +125,7 @@ onMounted(() => { void refresh().catch(e => { error.value = e instanceof Error ?
 <template>
   <section class="panel video-source-panel">
     <h2>影视源解析下载</h2>
-    <p class="video-hint">独立影视源模块：添加 MacCMS JSON API 或导入兼容 TVBox JSON，搜索影片、选择剧集后下载公开 MP4 直链。仅处理有权下载的内容。</p>
+    <p class="video-hint">独立影视源模块：添加 MacCMS JSON API 或导入兼容 TVBox JSON，搜索影片、选择剧集后下载公开 MP4 直链。仅处理有权下载的内容。HLS 点播节目下载后由 FFmpeg 本地封装 MP4。</p>
     <form class="video-grid" @submit.prevent="add">
       <label for="vs-name">源名称</label>
       <input id="vs-name" v-model="sourceName" maxlength="80" placeholder="我的影视源" required />
@@ -186,10 +186,10 @@ onMounted(() => { void refresh().catch(e => { error.value = e instanceof Error ?
         <div class="video-episodes">
           <button v-for="(episode, episodeIndex) in line.episodes" :key="episodeIndex"
             type="button" class="ghost-button"
-            :disabled="episode.kind !== 'mp4' || !!downloading"
-            :title="episode.kind === 'hls' ? 'HLS/m3u8 尚未实现安全分片合并' : episode.kind === 'unsupported' ? '未知解析脚本/非 MP4 直链' : '添加 MP4 到下载任务'"
+            :disabled="episode.kind === 'unsupported' || !!downloading"
+            :title="episode.kind === 'hls' ? '下载并封装 HLS 视频到 MP4' : episode.kind === 'unsupported' ? '未知解析脚本/非 MP4 直链' : '添加 MP4 到下载任务'"
             @click="download(lineIndex, episodeIndex)">
-            {{ episode.label }} · {{ episode.kind === 'mp4' ? '下载 MP4' : episode.kind === 'hls' ? 'HLS 待支持' : '不支持' }}
+            {{ episode.label }} · {{ episode.kind === 'mp4' ? '下载 MP4' : episode.kind === 'hls' ? '下载 HLS' : '不支持' }}
           </button>
         </div>
       </div>
