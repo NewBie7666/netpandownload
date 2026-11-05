@@ -114,7 +114,7 @@ async function requestPinned(
     const transport = url.protocol === 'https:' ? httpsRequest : httpRequest
     const req = transport(url, {
       agent: false,
-      autoSelectFamily: false,
+      ...({ autoSelectFamily: false } as Record<string, unknown>),
       lookup: (_hostname: string, options: { all?: boolean }, callback: any) => {
         if (options?.all) callback(null, [{ address: pin.address, family: pin.family }])
         else callback(null, pin.address, pin.family)
