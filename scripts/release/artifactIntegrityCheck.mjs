@@ -42,7 +42,7 @@ for (const exe of exeFiles) {
 
 const unpackedResources = join(releaseDir, 'win-unpacked', 'resources')
 if (existsSync(unpackedResources)) {
-  for (const resourceName of ['aria2', 'yt-dlp', 'ffmpeg']) {
+  for (const resourceName of ['aria2', 'yt-dlp', 'gallery-dl', 'ffmpeg']) {
     const source = join(root, 'resources', resourceName)
     const target = join(unpackedResources, resourceName)
     if (existsSync(source) && walk(source).length && !existsSync(target)) {
@@ -55,6 +55,7 @@ if (process.platform === 'win32') {
   const mustExist = [
     'aria2/win/aria2c.exe',
     'yt-dlp/win/yt-dlp.exe',
+    'gallery-dl/win/gallery-dl.exe',
     'ffmpeg/win/ffmpeg.exe',
     'ffmpeg/win/ffprobe.exe'
   ]

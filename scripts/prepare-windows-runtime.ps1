@@ -55,6 +55,12 @@ try {
   Download-Pinned 'yt-dlp 2026.10.26 Win64' 'https://github.com/yt-dlp/yt-dlp/releases/download/2026.10.26/yt-dlp.exe' 'f5389d3698ecde4ef06f4e6b1ce0294fe9ac1396228c8990b8d3416d6d177a7d' $ytExe
   Require-ExitZero $ytExe '--version'
 
+  $galleryTarget = Join-Path $root 'resources\gallery-dl\win'
+  New-Item -ItemType Directory -Path $galleryTarget -Force | Out-Null
+  $galleryExe = Join-Path $galleryTarget 'gallery-dl.exe'
+  Download-Pinned 'gallery-dl Windows 2026.11.05' 'https://github.com/gdl-org/builds/releases/download/2026.11.05/gallery-dl_windows.exe' 'dcfc5b0d5e6059b21a72765cfd77d0691754aa0294dee62813ae2e1ca553560d' $galleryExe
+  Require-ExitZero $galleryExe '--version'
+
   $ffmpegZip = Join-Path $tmp 'ffmpeg-lgpl.zip'
   Download-Pinned 'FFmpeg LGPL Win64 autobuild 2026-11-05' 'https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-11-05-12-48/ffmpeg-N-128433-gdb8537d8cc-win64-lgpl.zip' '0c813ecf72481a5ee39480423551e4bea230d8249b7d1d2130c7c8b2d61c4c44' $ffmpegZip
   $ffmpegExtract = Join-Path $tmp 'ffmpeg-extract'

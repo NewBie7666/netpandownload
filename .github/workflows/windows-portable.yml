@@ -37,10 +37,23 @@ jobs:
           Add-Content -Path $env:GITHUB_PATH -Value $bin
       - name: Validate HLS and real MP4 remux
         run: npm run test:hls
-      - name: Build all application layers and run release gate
-        run: npm run pre-release-check
+      - name: Build Windows application layers
+        run: npm run build
       - name: Build Electron main
         run: npm run build:electron
+      - name: Windows-safe download and release integrity regressions
+        shell: pwsh
+        run: |
+          npm run test:direct
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run test:magnet
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run test:video-sources
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node scripts/release/buildDeterminismCheck.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node scripts/release/freeze-check.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Package portable Windows x64 EXE
         run: npx electron-builder --win portable --x64 --publish never
       - name: Verify EXE and sidecar contents
@@ -51,7 +64,7 @@ jobs:
           $files = @(Get-ChildItem -LiteralPath release -Filter *.exe -File)
           if ($files.Count -ne 1) { throw "Expected exactly one EXE, got $($files.Count)" }
           Get-FileHash -LiteralPath $files[0].FullName -Algorithm SHA256 | Format-List
-          Get-ChildItem release/win-unpacked/resources -Recurse -File | Where-Object { $_.Name -in @('aria2c.exe','yt-dlp.exe','ffmpeg.exe','ffprobe.exe') } | Select-Object FullName,Length
+          Get-ChildItem release/win-unpacked/resources -Recurse -File | Where-Object { $_.Name -in @('aria2c.exe','yt-dlp.exe','gallery-dl.exe','ffmpeg.exe','ffprobe.exe') } | Select-Object FullName,Length
       - name: Upload portable Windows EXE
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
