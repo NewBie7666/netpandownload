@@ -20,8 +20,10 @@ jobs:
         with:
           node-version: '22.23.4'
           cache: npm
-      - name: Verify FFmpeg toolchain
+      - name: Provision FFmpeg toolchain
         run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg
           command -v ffmpeg
           command -v ffprobe
           ffmpeg -version | head -n 1
