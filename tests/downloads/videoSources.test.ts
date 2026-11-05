@@ -1,4 +1,5 @@
 import { parseCommentedJson } from '../../server/video-sources/jsonCompat.js'
+import { parseSourceProxyRoutes, preferIpv4 } from '../../server/video-sources/proxyRoute.js'
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { mkdtemp, rm } from 'node:fs/promises'
@@ -48,6 +49,11 @@ test('TVBox imports only supported MacCMS sources with persistent controls', asy
     ] }))
     assert.equal(imported.imported, 1)
     assert.equal(imported.skipped, 3)
+    assert.equal(imported.total, 4)
+    assert.equal(imported.alreadyPresent, 1)
+    assert.equal(imported.unsupported, 1)
+    assert.equal(imported.invalid, 1)
+    assert.equal(imported.unsupportedSites[0].type, '3')
     assert.equal((await listVideoSources()).length, 2)
     await removeVideoSource(created.id)
     assert.equal((await listVideoSources()).length, 1)
@@ -75,6 +81,8 @@ test('TVBox URL importer validates remote URL and imports only JSON type=1 (offl
     assert.equal(called, 'https://api.hgyx.vip/hgyx.json')
     assert.equal(result.imported, 1)
     assert.equal(result.skipped, 1)
+    assert.equal(result.total, 2)
+    assert.equal(result.unsupported, 1)
     await assert.rejects(() => importTvBoxSourcesFromUrl('http://127.0.0.1/private', fakeFetch))
     await assert.rejects(() => importTvBoxSourcesFromUrl('file:///tmp/private', fakeFetch))
     assert.equal((await listVideoSources()).length, 1)
@@ -98,4 +106,61 @@ test('TVBox JSON with line/block comments and trailing commas parses safely with
   assert.equal(config.raw, '// keep https://domain.example/file,} in quoted text')
   assert.throws(() => parseCommentedJson('{ "sites": eval("process.exit(1)") }'))
   assert.throws(() => parseCommentedJson('{ "sites": [] /* unfinished'))
+})
+
+test('pasted commented TVBox JSON reports unsupported Spider instead of silently losing it', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'video-sources-report-test-'))
+  const old = process.env.NETPAN_VIDEO_SOURCE_FILE
+  process.env.NETPAN_VIDEO_SOURCE_FILE = path.join(dir, 'sources.json')
+  try {
+    const config = `{
+      # comments are common in TVBox
+      "sites": [
+        { "name":"源A", "type":1, "api":"https://api.example.org/vod/" },
+        { "name":"DRPY", "type":3, "api":"csp_Drpy" },
+        { "name":"其他站", "type":0, "api":"https://example.org/other" },
+      ]
+    }`
+    const first = await importTvBoxSources(config)
+    assert.equal(first.total, 3)
+    assert.equal(first.imported, 1)
+    assert.equal(first.unsupported, 2)
+    assert.equal(first.unsupportedSites.length, 2)
+    const second = await importTvBoxSources(config)
+    assert.equal(second.imported, 0)
+    assert.equal(second.alreadyPresent, 1)
+    assert.equal(second.unsupported, 2)
+    assert.equal(second.skipped, 3)
+    assert.equal((await listVideoSources()).length, 1)
+  } finally {
+    if (old === undefined) delete process.env.NETPAN_VIDEO_SOURCE_FILE
+    else process.env.NETPAN_VIDEO_SOURCE_FILE = old
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('safe system-proxy parser accepts only loopback HTTP CONNECT and explicit DIRECT', () => {
+  assert.deepEqual(parseSourceProxyRoutes('DIRECT'), [{ kind: 'direct' }])
+  assert.deepEqual(parseSourceProxyRoutes('PROXY 127.0.0.1:7890; DIRECT'), [
+    { kind: 'proxy', host: '127.0.0.1', port: 7890 },
+    { kind: 'direct' }
+  ])
+  assert.deepEqual(parseSourceProxyRoutes('PROXY [::1]:8888'), [
+    { kind: 'proxy', host: '::1', port: 8888 }
+  ])
+  assert.throws(() => parseSourceProxyRoutes('PROXY external.example.com:8080'))
+  assert.throws(() => parseSourceProxyRoutes('SOCKS5 127.0.0.1:1080'))
+  assert.throws(() => parseSourceProxyRoutes('PROXY 127.0.0.1:0'))
+  assert.throws(() => parseSourceProxyRoutes('PROXY 127.0.0.1:65536'))
+})
+test('DNS fallback prioritizes IPv4 without losing validated IPv6 candidates', () => {
+  const input = [
+    { family: 6, address: '2001:4860:4860::8888' },
+    { family: 4, address: '8.8.8.8' },
+    { family: 6, address: '2606:4700:4700::1111' }
+  ]
+  const sorted = preferIpv4(input)
+  assert.equal(sorted[0].address, '8.8.8.8')
+  assert.equal(sorted.length, 3)
+  assert.equal(input[0].family, 6)
 })

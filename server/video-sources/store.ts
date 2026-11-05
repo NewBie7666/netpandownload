@@ -5,6 +5,7 @@ import path from 'node:path'
 import type { VideoSource, VideoSourceImportResult } from '../../shared/videoSources.js'
 import { AppError } from '../http.js'
 import { fetchVideoSourceJson, validateVideoSourceUrl } from './network.js'
+import { parseCommentedJson } from './jsonCompat.js'
 
 const maxSources = 40
 let mutationQueue: Promise<unknown> = Promise.resolve()
@@ -104,34 +105,56 @@ export function importTvBoxSources(value: unknown): Promise<VideoSourceImportRes
     let config: unknown = value
     if (typeof config === 'string') {
       if (config.length > 250_000) throw new AppError('video_source_import_large', 'TVBox 配置过大', 413)
-      try { config = JSON.parse(config) as unknown }
+      try { config = parseCommentedJson(config) }
       catch { throw new AppError('video_source_import_invalid', 'TVBox 内容不是合法 JSON') }
     }
     if (!config || typeof config !== 'object' || Array.isArray(config) ||
         !Array.isArray((config as { sites?: unknown }).sites)) {
       throw new AppError('video_source_import_invalid', 'TVBox JSON 缺少 sites 数组')
     }
-    const sites = (config as { sites: unknown[] }).sites.slice(0, 200)
+    const allSites = (config as { sites: unknown[] }).sites
+    const sites = allSites.slice(0, 200)
     const sources = await readSources()
     let imported = 0
-    let skipped = 0
+    let alreadyPresent = 0
+    let unsupported = 0
+    let invalid = Math.max(0, allSites.length - sites.length)
+    const unsupportedSites: VideoSourceImportResult['unsupportedSites'] = []
+
     for (const site of sites) {
-      if (!site || typeof site !== 'object' || Array.isArray(site)) { skipped++; continue }
+      if (!site || typeof site !== 'object' || Array.isArray(site)) { invalid++; continue }
       const entry = site as Record<string, unknown>
-      // TVBox Spider, jar, ext scripts and non-MacCMS parsers are intentionally excluded.
-      if (entry.type !== 1 && entry.type !== '1') { skipped++; continue }
+      const name = typeof entry.name === 'string'
+        ? entry.name.replace(/[\u0000-\u001f\u007f]/g, '').slice(0, 80)
+        : '未命名站点'
+      const type = String(entry.type ?? 'unknown').slice(0, 16)
+      if (entry.type !== 1 && entry.type !== '1') {
+        unsupported++
+        if (unsupportedSites.length < 40) unsupportedSites.push({
+          name, type,
+          reason: type === '3' ? '需要 Spider / DRPY / JavaScript 解析器' : '当前没有此类型的解析适配器'
+        })
+        continue
+      }
       try {
-        const { name, apiUrl } = normalized(entry.name, entry.api)
-        if (sources.some(item => item.apiUrl === apiUrl) || sources.length >= maxSources) {
-          skipped++
-          continue
-        }
-        sources.push({ id: randomUUID(), name, apiUrl, enabled: true, type: 'maccms' })
+        const values = normalized(entry.name, entry.api)
+        if (sources.some(item => item.apiUrl === values.apiUrl)) { alreadyPresent++; continue }
+        if (sources.length >= maxSources) { invalid++; continue }
+        sources.push({ id: randomUUID(), ...values, enabled: true, type: 'maccms' })
         imported++
-      } catch { skipped++ }
+      } catch { invalid++ }
     }
     if (imported) await saveSources(sources)
-    return { imported, skipped: skipped + Math.max(0, (config as { sites: unknown[] }).sites.length - sites.length), sources }
+    return {
+      total: allSites.length,
+      imported,
+      alreadyPresent,
+      unsupported,
+      invalid,
+      skipped: alreadyPresent + unsupported + invalid,
+      unsupportedSites,
+      sources
+    }
   })
 }
 

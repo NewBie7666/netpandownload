@@ -33,5 +33,10 @@ export interface VideoSearchResult {
 export interface VideoSourceImportResult {
   imported: number
   skipped: number
+  total: number
+  alreadyPresent: number
+  unsupported: number
+  invalid: number
+  unsupportedSites: Array<{ name: string, type: string, reason: string }>
   sources: VideoSource[]
 }

@@ -5,11 +5,11 @@ Current versions of this project run as a local Quark MVP with both:
 - `Web + Local Express` development mode
 - `Electron + Local Express` desktop-shell mode
 
-The long-term product direction is a **local desktop download client**. The Electron shell, local backend lifecycle, Provider registry, unified Provider API, Quark Provider wrapper, Bilibili Provider with `yt-dlp` sidecar support, aria2 RPC control path, download task APIs, and download task UI are now implemented. **Bilibili DASH merge, member/paid/region/DRM handling, ffmpeg integration, auto-update, and installer distribution are still not implemented**.
+The long-term product direction is a **local desktop download client**. The Electron shell, local backend lifecycle, Provider registry, unified Provider API, Quark Provider wrapper, Bilibili Provider with `yt-dlp` sidecar support, aria2 RPC control path, download task APIs, and download task UI are now implemented. **Bilibili member/paid/region/DRM handling, auto-update, and installer distribution are not implemented**. The HLS branch supports restricted VOD MPEG-TS remux with FFmpeg; a self-contained Windows portable build is provided in the dependent Windows branch.
 
 ## Independent video-source catalog (development branch)
 
-The new `VideoSourceProvider` is independent from the existing Provider registry. MacCMS JSON API source management, limited TVBox JSON type=1 import, video searching, episode lists and direct MP4 download submission are implemented in the `feat/video-source-provider-20261101` branch. HLS/m3u8 playlist merging and Spider/jar/JS source execution are deliberately not supported. See [Video Sources](docs/VIDEO_SOURCES.md). These changes are **not merged or deployed**.
+The new `VideoSourceProvider` is independent from the existing Provider registry. MacCMS JSON API source management, limited TVBox JSON type=1 import, video searching, episode lists and direct MP4 download submission are implemented in the `feat/video-source-provider-20261101` branch. HLS/m3u8 VOD MPEG-TS remux and AES-128 identity HLS downloads are implemented; Spider/jar/JS source execution is deliberately not supported. See [Video Sources](docs/VIDEO_SOURCES.md). These changes are **not merged or deployed**.
 
 ## Current State
 
@@ -152,7 +152,7 @@ Responses wrap the existing contracts:
 
 ## Current Boundaries
 
-- This does **not** include ffmpeg merging
+- HLS VOD FFmpeg remux is supported in the VideoSourceProvider development branch
 - This does **not** include a complex Provider UI selector; source detection is automatic from the resource link
 - This does **not** include auto-update
 - This does **not** include installer distribution
@@ -176,3 +176,7 @@ Responses wrap the existing contracts:
 ## Private Debian web deployment (integration branch)
 
 A private HTTPS browser mode is under development. It retains existing HTTP/HTTPS direct downloads, scanned file selection, and desktop Electron popup scans; it adds Instagram post media, YouTube single progressive video support, and a server-completed-file browser download button. See [Debian 13 private deployment instructions](docs/PRIVATE_WEB_DEPLOY.md). All downloaded files live on the server first. Cloud interactive popup scanning is **not** implemented.
+
+## Self-contained Windows x64 EXE
+
+The dependent Windows portable development branch builds a standalone Windows x64 executable with Electron, aria2, yt-dlp, and FFmpeg included. End users do not need Node.js, Python, FFmpeg or administrator rights. Build evidence and verification instructions: [Windows portable build](docs/WINDOWS_PORTABLE.md).
