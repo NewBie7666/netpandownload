@@ -48,6 +48,11 @@ test('TVBox imports only supported MacCMS sources with persistent controls', asy
     ] }))
     assert.equal(imported.imported, 1)
     assert.equal(imported.skipped, 3)
+    assert.equal(imported.total, 4)
+    assert.equal(imported.alreadyPresent, 1)
+    assert.equal(imported.unsupported, 1)
+    assert.equal(imported.invalid, 1)
+    assert.equal(imported.unsupportedSites[0].type, '3')
     assert.equal((await listVideoSources()).length, 2)
     await removeVideoSource(created.id)
     assert.equal((await listVideoSources()).length, 1)
@@ -75,6 +80,8 @@ test('TVBox URL importer validates remote URL and imports only JSON type=1 (offl
     assert.equal(called, 'https://api.hgyx.vip/hgyx.json')
     assert.equal(result.imported, 1)
     assert.equal(result.skipped, 1)
+    assert.equal(result.total, 2)
+    assert.equal(result.unsupported, 1)
     await assert.rejects(() => importTvBoxSourcesFromUrl('http://127.0.0.1/private', fakeFetch))
     await assert.rejects(() => importTvBoxSourcesFromUrl('file:///tmp/private', fakeFetch))
     assert.equal((await listVideoSources()).length, 1)
@@ -98,4 +105,35 @@ test('TVBox JSON with line/block comments and trailing commas parses safely with
   assert.equal(config.raw, '// keep https://domain.example/file,} in quoted text')
   assert.throws(() => parseCommentedJson('{ "sites": eval("process.exit(1)") }'))
   assert.throws(() => parseCommentedJson('{ "sites": [] /* unfinished'))
+})
+
+test('pasted commented TVBox JSON reports unsupported Spider instead of silently losing it', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'video-sources-report-test-'))
+  const old = process.env.NETPAN_VIDEO_SOURCE_FILE
+  process.env.NETPAN_VIDEO_SOURCE_FILE = path.join(dir, 'sources.json')
+  try {
+    const config = `{
+      # comments are common in TVBox
+      "sites": [
+        { "name":"源A", "type":1, "api":"https://api.example.org/vod/" },
+        { "name":"DRPY", "type":3, "api":"csp_Drpy" },
+        { "name":"其他站", "type":0, "api":"https://example.org/other" },
+      ]
+    }`
+    const first = await importTvBoxSources(config)
+    assert.equal(first.total, 3)
+    assert.equal(first.imported, 1)
+    assert.equal(first.unsupported, 2)
+    assert.equal(first.unsupportedSites.length, 2)
+    const second = await importTvBoxSources(config)
+    assert.equal(second.imported, 0)
+    assert.equal(second.alreadyPresent, 1)
+    assert.equal(second.unsupported, 2)
+    assert.equal(second.skipped, 3)
+    assert.equal((await listVideoSources()).length, 1)
+  } finally {
+    if (old === undefined) delete process.env.NETPAN_VIDEO_SOURCE_FILE
+    else process.env.NETPAN_VIDEO_SOURCE_FILE = old
+    await rm(dir, { recursive: true, force: true })
+  }
 })

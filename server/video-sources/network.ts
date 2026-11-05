@@ -64,7 +64,7 @@ async function oneRequest(url: URL): Promise<{ status: number, text: string, loc
       const type = String(res.headers['content-type'] || '')
       if (/text\/html/i.test(type)) {
         res.resume()
-        reject(new AppError('video_source_bad_response', '影视源返回 HTML，不是 MacCMS JSON', 502))
+        reject(new AppError('video_source_bad_response', '影视源返回 HTML 页面而非可导入的 JSON 配置/API', 502))
         return
       }
       let size = 0
@@ -89,7 +89,12 @@ async function oneRequest(url: URL): Promise<{ status: number, text: string, loc
 export async function fetchVideoSourceJson(initial: string): Promise<unknown> {
   let url = validateVideoSourceUrl(initial)
   for (let redirect = 0; redirect <= 2; redirect++) {
-    const response = await oneRequest(url)
+    let response: Awaited<ReturnType<typeof oneRequest>>
+    try { response = await oneRequest(url) }
+    catch (error) {
+      if (error instanceof AppError) throw error
+      throw new AppError('video_source_network_failed', '无法连接影视源，请检查网络、源站可访问性或更换源', 502)
+    }
     if (response.location) {
       if (redirect === 2) throw new AppError('video_source_redirect', '影视源跳转超过 2 次', 502)
       url = validateVideoSourceUrl(new URL(response.location, url).toString())
