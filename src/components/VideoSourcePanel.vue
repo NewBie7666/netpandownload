@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import type { VideoItem, VideoSource } from '../../shared/videoSources'
+import type { VideoItem, VideoSource, VideoSourceImportResult } from '../../shared/videoSources'
 import {
   addVideoSource, detailVideoSource, downloadVideoEpisode, importTvBoxConfig, importTvBoxUrl,
   listVideoSources, removeVideoSource, searchVideoSource,
@@ -12,8 +12,8 @@ const sources = ref<VideoSource[]>([])
 const selectedId = ref('')
 const sourceName = ref('')
 const sourceUrl = ref('')
-const tvboxText = ref('')
-const tvboxUrl = ref('')
+const configInput = ref('')
+const importReport = ref<VideoSourceImportResult | null>(null)
 const keyword = ref('')
 const results = ref<VideoItem[]>([])
 const detail = ref<VideoItem | null>(null)
@@ -51,19 +51,24 @@ function add() {
     message.value = '影视源已添加。建议先点击“测试源”验证接口。'
   })
 }
-function importConfig() {
+function importSource() {
   void change(async () => {
-    const result = await importTvBoxConfig(tvboxText.value)
-    tvboxText.value = ''
-    message.value = '导入 ' + result.imported + ' 个 MacCMS 源，跳过 ' + result.skipped + ' 个不兼容或重复源。'
-  })
-}
-function importUrl() {
-  void change(async () => {
-    const result = await importTvBoxUrl(tvboxUrl.value.trim())
+    const input = configInput.value.trim()
+    if (!input) throw new Error('请输入 TVBox 配置 URL 或粘贴完整 JSON')
+    const previousIds = new Set(sources.value.map(source => source.id))
+    const result = input.startsWith('{') ? await importTvBoxConfig(input) : await importTvBoxUrl(input)
+    importReport.value = result
+    // Automatically select the first newly imported usable source, like a TVBox catalog.
+    selectedId.value = result.sources.find(source => source.enabled && !previousIds.has(source.id))?.id
+      || result.sources.find(source => source.enabled)?.id || ''
+    results.value = []
+    detail.value = null
+    page.value = 1
     message.value = result.imported > 0
-      ? '通过配置 URL 新增 ' + result.imported + ' 个兼容 MacCMS 源；跳过 ' + result.skipped + ' 个不兼容或重复源。'
-      : '配置已读取，但未找到可导入的 MacCMS type=1 源；跳过 ' + result.skipped + ' 项。此配置可能依赖 TVBox Spider/JAR，暂不支持。'
+      ? '已导入 ' + result.imported + ' 个可选择的 MacCMS 站点。现在可搜索影片。'
+      : result.alreadyPresent > 0
+        ? '配置已读取，' + result.alreadyPresent + ' 个可兼容站点已存在，可直接选择搜索。'
+        : '配置已读取，但暂时没有可由本程序直接搜索的站点。查看下方兼容性说明。'
   })
 }
 function toggle(source: VideoSource) {
@@ -125,40 +130,56 @@ onMounted(() => { void refresh().catch(e => { error.value = e instanceof Error ?
 <template>
   <section class="panel video-source-panel">
     <h2>影视源解析下载</h2>
-    <p class="video-hint">独立影视源模块：添加 MacCMS JSON API 或导入兼容 TVBox JSON，搜索影片、选择剧集后下载公开 MP4 直链。仅处理有权下载的内容。HLS 点播节目下载后由 FFmpeg 本地封装 MP4。</p>
-    <form class="video-grid" @submit.prevent="add">
-      <label for="vs-name">源名称</label>
-      <input id="vs-name" v-model="sourceName" maxlength="80" placeholder="我的影视源" required />
-      <label for="vs-url">MacCMS JSON API</label>
-      <input id="vs-url" v-model="sourceUrl" type="url" placeholder="https://example.com/api.php/provide/vod/" required />
-      <button type="submit" class="primary-button" :disabled="changing">添加影视源</button>
+    <p class="video-hint">像影视仓/TVBox 一样导入源配置：只需粘贴一个配置网址，或直接粘贴完整 JSON 内容。无需另填“源名称”和“MacCMS API”。</p>
+    <form class="video-config-form" @submit.prevent="importSource">
+      <label for="vs-config-input"><strong>影视源配置 URL / JSON</strong></label>
+      <textarea id="vs-config-input" v-model="configInput" rows="2" required
+        :disabled="changing" placeholder="https://api.hgyx.vip/hgyx.json&#10;或直接粘贴 { &quot;sites&quot;: [...] }" />
+      <div class="video-config-actions">
+        <button type="submit" class="primary-button" :disabled="changing || !configInput.trim()">
+          {{ changing ? '正在解析...' : '一键导入影视源' }}
+        </button>
+        <span class="video-hint">支持含 //、# 注释的 TVBox JSON。只读取配置，不执行未知脚本。</span>
+      </div>
     </form>
-    <form class="video-import-url" @submit.prevent="importUrl">
-      <label for="vs-config-url">TVBox 配置 URL</label>
-      <input id="vs-config-url" v-model="tvboxUrl" type="url" required
-        placeholder="https://api.hgyx.vip/hgyx.json" :disabled="changing" />
-      <button type="submit" class="ghost-button" :disabled="changing || !tvboxUrl.trim()">从 URL 导入兼容影视源</button>
-    </form>
-    <p class="video-hint">配置 URL 不等于影片接口。仅识别并保存其中 type=1 MacCMS API；type=3 Spider/JAR/脚本源会显示为跳过，不会执行不可信代码。</p>
-    <details class="video-import">
-      <summary>导入 TVBox JSON 配置（仅 MacCMS type=1）</summary>
-      <textarea v-model="tvboxText" rows="4" placeholder='{"sites":[{"type":1,"name":"示例","api":"https://example.com/api.php/provide/vod/"}]}' />
-      <button type="button" class="ghost-button" :disabled="changing || !tvboxText.trim()" @click="importConfig">导入兼容源</button>
-      <p class="video-hint">不执行 jar、JavaScript Spider、脚本解析，也不会下载配置中的扩展组件。</p>
+    <div v-if="importReport" class="video-import-report" role="status">
+      <strong>配置识别结果：{{ importReport.total }} 个站点</strong>
+      <p>新增可搜索站点 {{ importReport.imported }} 个；已存在 {{ importReport.alreadyPresent }} 个；暂不支持 {{ importReport.unsupported }} 个；无效/超限 {{ importReport.invalid }} 个。</p>
+      <details v-if="importReport.unsupportedSites.length">
+        <summary>查看尚不兼容的站点（{{ importReport.unsupported }}）</summary>
+        <ul>
+          <li v-for="(site, i) in importReport.unsupportedSites" :key="i">
+            {{ site.name }}（type={{ site.type }}）：{{ site.reason }}
+          </li>
+        </ul>
+      </details>
+      <p v-if="importReport.unsupported > 0" class="video-hint">TVBox 可以使用的 Spider/DRPY/JAR 站点，并不代表这个下载器已经支持。它们不会被偷偷执行或伪装成可下载站点。</p>
+    </div>
+    <details class="video-import video-advanced">
+      <summary>高级设置：手动添加单个 MacCMS API</summary>
+      <p class="video-hint">仅在你有独立的 MacCMS JSON API 地址时使用，不适用于普通 TVBox 源配置 URL。</p>
+      <form class="video-grid" @submit.prevent="add">
+        <label for="vs-name">源名称</label>
+        <input id="vs-name" v-model="sourceName" maxlength="80" placeholder="例如：我的 MacCMS API" required />
+        <label for="vs-url">MacCMS JSON API</label>
+        <input id="vs-url" v-model="sourceUrl" type="url" placeholder="https://example.com/api.php/provide/vod/" required />
+        <button type="submit" class="ghost-button" :disabled="changing">添加单个 MacCMS API</button>
+      </form>
     </details>
     <div v-if="sources.length" class="video-sources">
-      <strong>已添加的源</strong>
+      <strong>已导入的可搜索站点（{{ sources.length }}）</strong>
       <div v-for="source in sources" :key="source.id" class="video-source-row">
-        <span>{{ source.name }} <small>{{ source.enabled ? '启用' : '停用' }}</small></span>
+        <span>{{ source.name }} <small>MacCMS · {{ source.enabled ? '启用' : '停用' }}</small></span>
         <div>
           <button class="ghost-button" type="button" :disabled="changing" @click="toggle(source)">{{ source.enabled ? '停用' : '启用' }}</button>
           <button class="ghost-button" type="button" :disabled="changing" @click="remove(source)">删除</button>
         </div>
       </div>
     </div>
+    <p v-if="!sources.length" class="video-hint">尚无可搜索的兼容站点，请先在上方粘贴 TVBox JSON 地址并导入。</p>
     <form class="video-search" @submit.prevent="search(1)">
       <select v-model="selectedId" aria-label="选择影视源" @change="onSourceChanged">
-        <option value="">选择已启用的影视源</option>
+        <option value="">选择已启用的兼容影视源</option>
         <option v-for="source in sources.filter(item => item.enabled)" :key="source.id" :value="source.id">{{ source.name }}</option>
       </select>
       <input v-model="keyword" aria-label="影视名称" placeholder="输入影片、电视剧名称" maxlength="80" />
@@ -203,11 +224,17 @@ onMounted(() => { void refresh().catch(e => { error.value = e instanceof Error ?
 .video-source-panel h4 { margin: 12px 0; }
 .video-hint { color: #64748b; font-size: 13px; line-height: 1.6; margin-bottom: 16px; }
 .video-grid { display: grid; grid-template-columns: 125px 1fr; gap: 10px; align-items: center; }
+.video-config-form { display: grid; gap: 10px; }
+.video-config-form textarea { resize: vertical; width: 100%; min-height: 74px; padding: 12px; border: 1px solid #cbd5e1; border-radius: 6px; font: inherit; }
+.video-config-actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.video-config-actions .video-hint { margin: 0; }
+.video-import-report { border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; margin-top: 16px; }
+.video-import-report p { margin: 10px 0; }
+.video-import-report ul { padding-left: 25px; margin-top: 10px; }
+.video-import-report li { margin-bottom: 6px; overflow-wrap: anywhere; }
+.video-advanced { margin-top: 18px; }
 .video-grid input, .video-search input, .video-search select, .video-import textarea { width: 100%; min-width: 0; padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; }
 .video-grid button { grid-column: 2; justify-self: start; }
-.video-import-url { display: flex; gap: 10px; align-items: center; margin-top: 16px; flex-wrap: wrap; }
-.video-import-url input { flex: 1 1 280px; min-width: 0; padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; }
-.video-import-url label { font-size: 13px; font-weight: 600; }
 .video-import { margin: 18px 0; }
 .video-import summary { cursor: pointer; margin-bottom: 8px; }
 .video-import textarea { display: block; margin: 10px 0; }
