@@ -534,6 +534,14 @@ async function waitForBackendReady() {
   throw new Error(backendLogs.trim() || `Timed out waiting for backend readiness at ${getHealthUrl()}`)
 }
 
+async function attachSourceSystemProxy() {
+  // Windows Chromium/Electron honours the user's system proxy/PAC. The
+  // embedded Node HTTP client otherwise ignores that proxy entirely.
+  const modulePath = path.resolve(appRoot, 'dist-server', 'server', 'video-sources', 'network.js')
+  const sources = await import(pathToFileURL(modulePath).href)
+  sources.configureVideoSourceProxyResolver?.((url: string) => session.defaultSession.resolveProxy(url))
+}
+
 async function bootstrapDesktop() {
   await ensureServerBuildExists()
   const runtime = configureDesktopRuntime(process.resourcesPath, appRoot)
@@ -551,6 +559,7 @@ async function bootstrapDesktop() {
   }
   await loadStoredBilibiliCookieIntoRuntime()
   await startBackend()
+  await attachSourceSystemProxy()
   const health = await runStartupHealthCheck()
   if (health?.status === 'FAILED') {
     await showStartupHealthFailure(health.message || 'Runtime health check failed')
