@@ -9,6 +9,7 @@ import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { aria2SessionArgs, aria2SessionPath, ensureAria2SessionFile } from './aria2Session.js'
 import { openPageScanBrowser, scanInteractivePage } from './pageScanBrowser.js'
+import { configureDesktopRuntime, desktopRuntimeWarnings } from './release/runtimeDependencies.js'
 import { openBilibiliLoginWindow } from './auth/BilibiliLoginWindow.js'
 import {
   clearBilibiliCookieStore,
@@ -535,6 +536,19 @@ async function waitForBackendReady() {
 
 async function bootstrapDesktop() {
   await ensureServerBuildExists()
+  const runtime = configureDesktopRuntime(process.resourcesPath, appRoot)
+  const warnings = desktopRuntimeWarnings(runtime)
+  if (app.isPackaged && warnings.length) {
+    dialog.showMessageBoxSync({
+      type: 'warning',
+      title: 'NetPanDownload 运行依赖检测',
+      message: '内置运行组件检测未通过，部分下载功能不可用',
+      detail: warnings.join('\n') + '\n\n此便携版正常无需安装依赖。请重新下载经过 SHA-256 校验的完整 EXE；不会静默修改您的系统。',
+      buttons: ['继续打开（功能受限）'],
+      defaultId: 0,
+      noLink: true
+    })
+  }
   await loadStoredBilibiliCookieIntoRuntime()
   await startBackend()
   const health = await runStartupHealthCheck()

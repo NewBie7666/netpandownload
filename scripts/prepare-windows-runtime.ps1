@@ -17,7 +17,7 @@ function Download-Pinned([string]$Name, [string]$Url, [string]$Sha256, [string]$
   Write-Host "$Name SHA-256 verified: $actual"
 }
 function Require-ExitZero([string]$Exe, [string]$Arg) {
-  & $Exe $Arg | Select-Object -First 2
+  & $Exe $Arg | Out-Null
   if ($LASTEXITCODE -ne 0) { throw "$Exe failed version check" }
 }
 try {

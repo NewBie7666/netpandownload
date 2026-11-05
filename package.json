@@ -100,13 +100,21 @@
         "filter": [
           "**/*"
         ]
+      },
+      {
+        "from": "resources/ffmpeg",
+        "to": "ffmpeg",
+        "filter": [
+          "**/*"
+        ]
       }
     ],
     "win": {
       "signAndEditExecutable": false,
       "target": [
         "portable"
-      ]
+      ],
+      "artifactName": "NetPanDownload-${version}-windows-${arch}.${ext}"
     }
   }
 }

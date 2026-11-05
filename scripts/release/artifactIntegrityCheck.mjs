@@ -42,12 +42,26 @@ for (const exe of exeFiles) {
 
 const unpackedResources = join(releaseDir, 'win-unpacked', 'resources')
 if (existsSync(unpackedResources)) {
-  for (const resourceName of ['aria2', 'yt-dlp']) {
+  for (const resourceName of ['aria2', 'yt-dlp', 'ffmpeg']) {
     const source = join(root, 'resources', resourceName)
     const target = join(unpackedResources, resourceName)
     if (existsSync(source) && walk(source).length && !existsSync(target)) {
       fail(`resource exists in source but is missing from artifact: ${resourceName}`)
     }
+  }
+}
+
+if (process.platform === 'win32') {
+  const mustExist = [
+    'aria2/win/aria2c.exe',
+    'yt-dlp/win/yt-dlp.exe',
+    'ffmpeg/win/ffmpeg.exe',
+    'ffmpeg/win/ffprobe.exe'
+  ]
+  if (!existsSync(unpackedResources)) fail('electron-builder win-unpacked resources missing')
+  for (const file of mustExist) {
+    const full = join(unpackedResources, ...file.split('/'))
+    if (!existsSync(full) || statSync(full).size < 100000) fail('missing or truncated bundled Windows runtime: ' + file)
   }
 }
 
