@@ -33,6 +33,8 @@ export async function readHlsResource(
         clearTimeout(timeout)
         signal?.removeEventListener('abort', onAbort)
       }
+      const done = (value: { bytes: Buffer, location: string }) => { finish(); resolve(value) }
+      const fail = (error: Error) => { finish(); reject(error) }
       const transport = url.protocol === 'https:' ? httpsRequest : httpRequest
       const req = transport(url, {
         signal: controller.signal,
@@ -50,13 +52,13 @@ export async function readHlsResource(
         if ([301, 302, 303, 307, 308].includes(status)) {
           const location = Array.isArray(res.headers.location) ? '' : String(res.headers.location || '')
           res.resume()
-          if (!location) { reject(new AppError('hls_redirect', 'HLS 跳转缺少 Location', 502)); return }
-          resolve({ bytes: Buffer.alloc(0), location })
+          if (!location) { fail(new AppError('hls_redirect', 'HLS 跳转缺少 Location', 502)); return }
+          done({ bytes: Buffer.alloc(0), location })
           return
         }
         if (status < 200 || status >= 300) {
           res.resume()
-          reject(new AppError('hls_http_error', 'HLS 源站返回 HTTP ' + status, 502))
+          fail(new AppError('hls_http_error', 'HLS 源站返回 HTTP ' + status, 502))
           return
         }
         if (Number(res.headers['content-length'] || 0) > maxBytes) {
@@ -70,18 +72,13 @@ export async function readHlsResource(
           if (length > maxBytes) { res.destroy(new AppError('hls_resource_too_large', 'HLS 分片超过单个资源上限', 413)); return }
           chunks.push(chunk)
         })
-        res.on('end', () => resolve({ bytes: Buffer.concat(chunks), location: '' }))
-        res.on('error', reject)
+        res.on('end', () => done({ bytes: Buffer.concat(chunks), location: '' }))
+        res.on('error', fail)
       })
       req.on('timeout', () => req.destroy(new AppError('hls_timeout', 'HLS 请求超时', 504)))
-      req.on('error', reject)
+      req.on('error', fail)
       req.end()
-      void Promise.resolve().then(() => {}).finally(() => {}) // Never swallow response errors.
-      // Ensure the timer/listener are removed even for network failures.
-      const origResolve = resolve
-      const origReject = reject
-      // handled by wrapping promise below instead of shadowing callbacks
-      void origResolve; void origReject; void finish
+
     })
     if (response.location) {
       if (hop === 3) throw new AppError('hls_redirect', 'HLS 重定向超过 3 次', 502)
