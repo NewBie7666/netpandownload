@@ -216,7 +216,7 @@ async function pump() {
       await persist()
       try { await execute(job, controller.signal) }
       catch (e) {
-        if (job.status !== 'removed' && job.status !== 'paused') {
+        if (!['removed', 'paused'].includes(job.status)) {
           job.status = 'error'
           job.error = e instanceof Error ? e.message.slice(0, 280) : 'HLS 下载失败'
         }
