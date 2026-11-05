@@ -114,7 +114,11 @@ async function requestPinned(
     const transport = url.protocol === 'https:' ? httpsRequest : httpRequest
     const req = transport(url, {
       agent: false,
-      lookup: (_hostname: string, _options: unknown, callback: any) => callback(null, pin.address, pin.family),
+      autoSelectFamily: false,
+      lookup: (_hostname: string, options: { all?: boolean }, callback: any) => {
+        if (options?.all) callback(null, [{ address: pin.address, family: pin.family }])
+        else callback(null, pin.address, pin.family)
+      },
       ...(proxySocket ? {
         createConnection: () => url.protocol === 'https:'
           ? connectTls({ socket: proxySocket, servername: host, rejectUnauthorized: true })
