@@ -1,4 +1,5 @@
 import { parseCommentedJson } from '../../server/video-sources/jsonCompat.js'
+import { parseSourceProxyRoutes, preferIpv4 } from '../../server/video-sources/proxyRoute.js'
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { mkdtemp, rm } from 'node:fs/promises'
@@ -136,4 +137,30 @@ test('pasted commented TVBox JSON reports unsupported Spider instead of silently
     else process.env.NETPAN_VIDEO_SOURCE_FILE = old
     await rm(dir, { recursive: true, force: true })
   }
+})
+
+test('safe system-proxy parser accepts only loopback HTTP CONNECT and explicit DIRECT', () => {
+  assert.deepEqual(parseSourceProxyRoutes('DIRECT'), [{ kind: 'direct' }])
+  assert.deepEqual(parseSourceProxyRoutes('PROXY 127.0.0.1:7890; DIRECT'), [
+    { kind: 'proxy', host: '127.0.0.1', port: 7890 },
+    { kind: 'direct' }
+  ])
+  assert.deepEqual(parseSourceProxyRoutes('PROXY [::1]:8888'), [
+    { kind: 'proxy', host: '::1', port: 8888 }
+  ])
+  assert.throws(() => parseSourceProxyRoutes('PROXY external.example.com:8080'))
+  assert.throws(() => parseSourceProxyRoutes('SOCKS5 127.0.0.1:1080'))
+  assert.throws(() => parseSourceProxyRoutes('PROXY 127.0.0.1:0'))
+  assert.throws(() => parseSourceProxyRoutes('PROXY 127.0.0.1:65536'))
+})
+test('DNS fallback prioritizes IPv4 without losing validated IPv6 candidates', () => {
+  const input = [
+    { family: 6, address: '2001:4860:4860::8888' },
+    { family: 4, address: '8.8.8.8' },
+    { family: 6, address: '2606:4700:4700::1111' }
+  ]
+  const sorted = preferIpv4(input)
+  assert.equal(sorted[0].address, '8.8.8.8')
+  assert.equal(sorted.length, 3)
+  assert.equal(input[0].family, 6)
 })
