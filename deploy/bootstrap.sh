@@ -18,7 +18,7 @@ for port in 3300 16801; do
   [[ -z $(ss -H -ltn "sport = :$port") ]] || { echo "Port $port is already occupied" >&2; exit 1; }
 done
 [[ -x /usr/bin/node && $(/usr/bin/node --version) == v22.23.4 ]] || { echo 'Install reviewed Node 22.23.4 at /usr/bin/node first' >&2; exit 1; }
-for cmd in aria2c nginx openssl python3 htpasswd visudo systemctl; do command -v "$cmd" >/dev/null; done
+for cmd in aria2c ffmpeg nginx openssl python3 htpasswd visudo systemctl; do command -v "$cmd" >/dev/null; done
 [[ -x /usr/local/bin/yt-dlp && -x /usr/local/bin/gallery-dl ]]
 nginx -t
 script_dir=$(cd -- "$(dirname -- "$0")" && pwd)

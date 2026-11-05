@@ -4,6 +4,7 @@ import {
   addDownloadTask as addDownloaderTask,
   addDirectDownloadTask,
   addMagnetDownloadTask,
+  addHlsDownloadTask,
   scanPageForFiles,
   fetchDownloadTasks,
   openDownloadDir,
@@ -24,6 +25,7 @@ import {
   resolveProviderResource
 } from './api/providers'
 import DouyinLogin from './components/DouyinLogin.vue'
+import VideoSourcePanel from './components/VideoSourcePanel.vue'
 import DownloadCenter from './views/download-center/DownloadCenter.vue'
 import { chooseVisibleFiles, dropVisibleFiles, filterFileLinks, getFileSelectionState, groupFileExtensions, setFileTypeSelected, submitPageDownloadBatch, PAGE_BATCH_LIMIT } from './api/pageFileSelection'
 import type {
@@ -96,6 +98,9 @@ const visibleSelectedCount = computed(() => visiblePageLinks.value.filter((item)
 const directDownloadUrl = ref('')
 const directDownloadFileName = ref('')
 const directDownloadLoading = ref(false)
+const hlsUrl = ref('')
+const hlsFileName = ref('')
+const hlsLoading = ref(false)
 const magnetUrl = ref('')
 const magnetLoading = ref(false)
 const shareUrl = ref('')
@@ -659,6 +664,21 @@ async function submitDirectDownload() {
   }
 }
 
+async function submitHlsDownload() {
+  if (hlsLoading.value) return
+  clearMessages()
+  hlsLoading.value = true
+  try {
+    const task = await addHlsDownloadTask({ url: hlsUrl.value.trim(), fileName: hlsFileName.value.trim() || undefined })
+    noticeMessage.value = '已添加 HLS 任务：' + task.gid + '。正在抓取分片并封装 MP4。'
+    hlsUrl.value = ''
+    hlsFileName.value = ''
+    await refreshDownloadTasks(true)
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : '添加 HLS 任务失败'
+  } finally { hlsLoading.value = false }
+}
+
 async function submitMagnetDownload() {
   if (magnetLoading.value) return
   clearMessages()
@@ -983,6 +1003,7 @@ onBeforeUnmount(() => {
 <template>
   <div class="page-shell">
     <main class="container">
+      <VideoSourcePanel @task-added="refreshDownloadTasks(true)" />
       <section class="panel parser-panel">
         <DouyinLogin />
         <div class="form-row">
@@ -1124,6 +1145,22 @@ onBeforeUnmount(() => {
           </div>
           <button class="primary-button" type="submit" :disabled="directDownloadLoading || !downloaderEnabled || !directDownloadUrl.trim()">
             {{ directDownloadLoading ? '添加中...' : '添加 HTTP 下载任务' }}
+          </button>
+        </form>
+
+        <form class="direct-download-form" @submit.prevent="submitHlsDownload">
+          <h3>HLS/m3u8 视频下载并合并 MP4</h3>
+          <p class="path-text">粘贴影视仓/播放器得到的最终 .m3u8 地址。支持已结束的 MPEG-TS VOD 和普通 AES-128；暂不支持直播、DRM、fMP4、外置音轨。暂停后恢复从头下载。</p>
+          <div class="direct-download-fields">
+            <label for="hls-url">m3u8 视频地址</label>
+            <input id="hls-url" v-model="hlsUrl" type="url" required placeholder="https://example.com/movie/index.m3u8"
+              :disabled="hlsLoading" />
+            <label for="hls-filename">MP4 文件名（可选）</label>
+            <input id="hls-filename" v-model="hlsFileName" type="text" placeholder="电影名-国语中字.mp4"
+              :disabled="hlsLoading" />
+          </div>
+          <button class="primary-button" type="submit" :disabled="hlsLoading || !hlsUrl.trim()">
+            {{ hlsLoading ? '提交中...' : '添加 HLS 下载任务' }}
           </button>
         </form>
 

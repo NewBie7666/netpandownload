@@ -24,6 +24,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y aria2 nginx-core apache2-utils e2fsprogs util-linux
+          command -v ffmpeg >/dev/null || sudo apt-get install -y --no-install-recommends ffmpeg
           npm ci --ignore-scripts
       - name: Client, server and preserved Electron build
         run: |

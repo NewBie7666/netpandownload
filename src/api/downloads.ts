@@ -49,6 +49,10 @@ export function addDirectDownloadTask(payload: AddDirectDownloadRequest) {
   return postJson<AddDownloadResult>('/api/downloads/direct', payload)
 }
 
+export function addHlsDownloadTask(payload: { url: string, fileName?: string }) {
+  return postJson<AddDownloadResult>('/api/downloads/hls', payload)
+}
+
 export function addMagnetDownloadTask(payload: AddMagnetDownloadRequest) {
   return postJson<AddDownloadResult>('/api/downloads/magnet', payload)
 }
