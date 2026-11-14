@@ -43,6 +43,10 @@ public final class UrlTools {
         try {
             URI uri = new URI(url);
             String host = uri.getHost().toLowerCase();
+            if (host.contains("x.com.") || host.contains("twitter.com.") ||
+                    host.contains("youtube.com.") || host.contains("bilibili.com.")) {
+                return "可疑域名";
+            }
             if (host.equals("x.com") || host.endsWith(".x.com") ||
                     host.equals("twitter.com") || host.endsWith(".twitter.com")) {
                 return X_POST.matcher(uri.getPath()).matches() ? "X / Twitter" : "不支持的 X 链接";
@@ -64,6 +68,7 @@ public final class UrlTools {
         String category = category(rawUrl);
         return !category.equals("无效链接") &&
                !category.equals("不支持的 X 链接") &&
+               !category.equals("可疑域名") &&
                !category.equals("夸克网盘暂未移植到 Android");
     }
 }
