@@ -1,13 +1,17 @@
 package com.newbie7666.netpandownload.mobile;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.ContentUris;
+import android.content.ClipData;
+import android.content.UriPermission;
 import android.content.Intent;
 import android.database.Cursor;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
 import android.provider.MediaStore;
+import android.provider.DocumentsContract;
 import android.view.Gravity;
 import android.widget.Button;
 import android.widget.LinearLayout;
@@ -16,16 +20,20 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * Shows the exact folder where the app saves completed downloads.
- * Uses MediaStore (Android 10+) so it does not need broad storage permissions.
+ * Shows the exact folder where downloads are stored.
+ * For historical files no longer owned by this installation, uses one-time
+ * Android Storage Access Framework folder consent instead of broad storage permissions.
  */
 public final class DownloadFolderActivity extends Activity {
+    private static final int REQUEST_FOLDER_TREE = 8601;
+    private static final String FOLDER_PREF = "selected_download_folder_tree";
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private LinearLayout fileList;
     private TextView stateLabel;
@@ -61,6 +69,11 @@ public final class DownloadFolderActivity extends Activity {
     protected void onCreate(Bundle state) {
         super.onCreate(state);
         buildScreen();
+        // Android restricts reading Downloads from an older installation. Explain
+        // the initial, one-time folder consent instead of incorrectly saying empty.
+        if (state == null && getGrantedFolderUri() == null) {
+            fileList.post(this::explainFirstTimeAccess);
+        }
     }
 
     @Override
@@ -107,6 +120,13 @@ public final class DownloadFolderActivity extends Activity {
         refreshParams.topMargin = dp(8);
         root.addView(refreshButton, refreshParams);
 
+        Button grantButton = new Button(this);
+        grantButton.setText("选择下载文件夹（授权读取旧文件）");
+        grantButton.setOnClickListener(v -> requestFolderAccess());
+        LinearLayout.LayoutParams grantParams = new LinearLayout.LayoutParams(-1, -2);
+        grantParams.topMargin = dp(6);
+        root.addView(grantButton, grantParams);
+
         fileList = new LinearLayout(this);
         fileList.setOrientation(LinearLayout.VERTICAL);
         LinearLayout.LayoutParams listParams = new LinearLayout.LayoutParams(-1, -2);
@@ -114,13 +134,131 @@ public final class DownloadFolderActivity extends Activity {
         root.addView(fileList, listParams);
 
         TextView hint = label(
-                "仅展示 NetPanDownload 保存的文件。点击文件可以调用手机的视频播放器或其他支持该格式的应用。",
+                "文件位于 Download/NetPanDownload。首次请授权这个子文件夹（不要选择 Download 根目录）。授权后可读取之前安装版本保存的视频；点击文件即可打开。",
                 13, Color.rgb(96, 109, 128));
         LinearLayout.LayoutParams hintParams = new LinearLayout.LayoutParams(-1, -2);
         hintParams.topMargin = dp(18);
         root.addView(hint, hintParams);
 
         setContentView(scroll);
+    }
+
+
+    private Uri getGrantedFolderUri() {
+        String saved = getPreferences(MODE_PRIVATE).getString(FOLDER_PREF, null);
+        if (saved == null || saved.isEmpty()) return null;
+        for (UriPermission grant : getContentResolver().getPersistedUriPermissions()) {
+            if (grant.isReadPermission() && saved.equals(grant.getUri().toString())) {
+                return grant.getUri();
+            }
+        }
+        return null;
+    }
+
+    private void explainFirstTimeAccess() {
+        if (isFinishing() || isDestroyed() || getGrantedFolderUri() != null) return;
+        new AlertDialog.Builder(this)
+                .setTitle("读取已有下载文件")
+                .setMessage("Android 可能不允许新安装版本直接读取旧版保存的文件。"
+                        + "请在系统文件选择器中进入 内部存储 / Download / NetPanDownload，"
+                        + "选择 NetPanDownload 文件夹并确认授权。只需授权一次，之后直接打开文件列表。")
+                .setPositiveButton("选择文件夹", (dialog, which) -> requestFolderAccess())
+                .setNegativeButton("暂不授权", null)
+                .show();
+    }
+
+    private void requestFolderAccess() {
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION |
+                Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+        // This points to a *subfolder*, not the Android 11+ restricted Download root.
+        // A provider may ignore the initial URI, so the user can still navigate manually.
+        try {
+            Uri initial = DocumentsContract.buildDocumentUri(
+                    "com.android.externalstorage.documents", "primary:Download/NetPanDownload");
+            intent.putExtra(DocumentsContract.EXTRA_INITIAL_URI, initial);
+        } catch (IllegalArgumentException ignored) {
+            // The picker can still be opened without an initial folder.
+        }
+        try {
+            startActivityForResult(intent, REQUEST_FOLDER_TREE);
+        } catch (Exception error) {
+            stateLabel.setText("系统文件夹选择器不可用。请在文件管理器中查看 Download/NetPanDownload。");
+        }
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode != REQUEST_FOLDER_TREE || resultCode != RESULT_OK || data == null) return;
+        Uri selected = data.getData();
+        if (selected == null) return;
+        String directoryId;
+        try {
+            directoryId = DocumentsContract.getTreeDocumentId(selected);
+        } catch (IllegalArgumentException error) {
+            stateLabel.setText("文件夹无效，请选择 Download/NetPanDownload。");
+            return;
+        }
+        if (!DownloadFolder.isExpectedTreeDocumentId(directoryId)) {
+            stateLabel.setText("选错文件夹了：请进入 Download，再选 NetPanDownload 子文件夹。");
+            return;
+        }
+        try {
+            getContentResolver().takePersistableUriPermission(selected, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            getPreferences(MODE_PRIVATE).edit().putString(FOLDER_PREF, selected.toString()).apply();
+            stateLabel.setText("文件夹访问已授权，正在读取全部文件……");
+            refresh();
+        } catch (SecurityException error) {
+            stateLabel.setText("系统未授予读取权限，请重新选择 NetPanDownload 文件夹。");
+        }
+    }
+
+    private List<DownloadFile> listFilesFromTree(Uri tree) {
+        List<DownloadFile> files = new ArrayList<>();
+        String folderId = DocumentsContract.getTreeDocumentId(tree);
+        Uri childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(tree, folderId);
+        String[] projection = {
+                DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+                DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+                DocumentsContract.Document.COLUMN_MIME_TYPE,
+                DocumentsContract.Document.COLUMN_SIZE,
+                DocumentsContract.Document.COLUMN_LAST_MODIFIED
+        };
+        class DatedFile {
+            final DownloadFile file;
+            final long modified;
+            DatedFile(DownloadFile file, long modified) {
+                this.file = file;
+                this.modified = modified;
+            }
+        }
+        List<DatedFile> dated = new ArrayList<>();
+        try (Cursor cursor = getContentResolver().query(childrenUri, projection, null, null, null)) {
+            if (cursor == null) {
+                throw new IllegalStateException("系统未返回文件夹内容，请重新授权");
+            }
+            int idColumn = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DOCUMENT_ID);
+            int nameColumn = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DISPLAY_NAME);
+            int mimeColumn = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_MIME_TYPE);
+            int sizeColumn = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_SIZE);
+            int modifiedColumn = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_LAST_MODIFIED);
+            while (cursor.moveToNext()) {
+                String mime = cursor.getString(mimeColumn);
+                if (DocumentsContract.Document.MIME_TYPE_DIR.equals(mime)) continue;
+                String id = cursor.getString(idColumn);
+                if (id == null) continue;
+                Uri fileUri = DocumentsContract.buildDocumentUriUsingTree(tree, id);
+                String name = cursor.getString(nameColumn);
+                long size = cursor.isNull(sizeColumn) ? 0 : cursor.getLong(sizeColumn);
+                long modified = cursor.isNull(modifiedColumn) ? 0 : cursor.getLong(modifiedColumn);
+                dated.add(new DatedFile(new DownloadFile(fileUri, name == null ? "(未命名文件)" : name,
+                        mime == null || mime.isEmpty() ? "*/*" : mime, size), modified));
+            }
+        }
+        dated.sort((left, right) -> Long.compare(right.modified, left.modified));
+        for (DatedFile entry : dated) files.add(entry.file);
+        return files;
     }
 
     private List<DownloadFile> listFiles() {
@@ -161,27 +299,32 @@ public final class DownloadFolderActivity extends Activity {
         final int version = ++requestVersion;
         stateLabel.setText("正在读取 Download/NetPanDownload……");
         executor.execute(() -> {
+            Uri folderGrant = getGrantedFolderUri();
             List<DownloadFile> files = null;
             String error = null;
             try {
-                files = listFiles();
+                files = folderGrant == null ? listFiles() : listFilesFromTree(folderGrant);
             } catch (Exception exception) {
                 error = exception.getMessage();
             }
             final List<DownloadFile> finalFiles = files;
             final String finalError = error;
+            final boolean hasFolderAccess = folderGrant != null;
             runOnUiThread(() -> {
                 if (isFinishing() || isDestroyed() || version != requestVersion) return;
                 fileList.removeAllViews();
                 if (finalError != null) {
-                    stateLabel.setText("无法读取下载文件夹：" + finalError);
+                    stateLabel.setText("读取失败：" + finalError + "。请重新选择下载文件夹授权。");
                     return;
                 }
                 if (finalFiles == null || finalFiles.isEmpty()) {
-                    stateLabel.setText("文件夹中暂无可读取的下载文件。");
+                    stateLabel.setText(hasFolderAccess
+                            ? "已获文件夹授权，但该目录暂未发现文件。"
+                            : "尚未获得历史文件的读取权限。请点击「选择下载文件夹」，选择 Download/NetPanDownload；不能据此认定文件不存在。");
                     return;
                 }
-                stateLabel.setText("共有 " + finalFiles.size() + " 个文件");
+                stateLabel.setText("共有 " + finalFiles.size() + " 个文件" +
+                        (hasFolderAccess ? "（来自实际下载文件夹）" : "（仅当前安装可见，请授权以查看旧文件）"));
                 for (DownloadFile file : finalFiles) addFileRow(file);
             });
         });
@@ -233,6 +376,7 @@ public final class DownloadFolderActivity extends Activity {
     private void openFile(DownloadFile file) {
         Intent intent = new Intent(Intent.ACTION_VIEW);
         intent.setDataAndType(file.uri, file.mime);
+        intent.setClipData(ClipData.newRawUri("NetPanDownload file", file.uri));
         intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
         try {
             startActivity(intent);
