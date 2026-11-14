@@ -142,6 +142,12 @@ function ensureDownloadUrlAllowed(rawUrl: string, normalizedUrl: URL) {
 
 function getDownloadRequestHeaders(normalizedUrl: URL) {
   const hostname = normalizedUrl.hostname.toLowerCase()
+  if (hostname === 'video.twimg.com') {
+    return [
+      'Referer: https://x.com/',
+      'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36'
+    ]
+  }
   if (!hostname.endsWith('bilivideo.com')) {
     return []
   }
