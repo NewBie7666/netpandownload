@@ -24,8 +24,8 @@ import android.widget.TextView;
 import android.widget.Toast;
 import android.content.Context;
 
-import com.yausername.youtubedl_android.FFmpeg;
-import com.yausername.youtubedl_android.VideoInfo;
+import com.yausername.ffmpeg.FFmpeg;
+import com.yausername.youtubedl_android.mapper.VideoInfo;
 import com.yausername.youtubedl_android.YoutubeDL;
 import com.yausername.youtubedl_android.YoutubeDLRequest;
 
