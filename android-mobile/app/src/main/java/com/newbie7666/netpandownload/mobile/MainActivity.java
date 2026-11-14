@@ -1,7 +1,6 @@
 package com.newbie7666.netpandownload.mobile;
 
 import android.app.Activity;
-import android.app.DownloadManager;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.ContentResolver;
@@ -187,14 +186,9 @@ public final class MainActivity extends Activity {
         content.addView(detailsText, detailParams);
 
         Button openDownloads = new Button(this);
-        openDownloads.setText("打开系统下载列表");
-        openDownloads.setOnClickListener(v -> {
-            try {
-                startActivity(new Intent(DownloadManager.ACTION_VIEW_DOWNLOADS));
-            } catch (Exception error) {
-                Toast.makeText(this, "请在文件管理器中打开 Download/NetPanDownload", Toast.LENGTH_LONG).show();
-            }
-        });
+        openDownloads.setText("打开下载文件夹");
+        openDownloads.setOnClickListener(v ->
+                startActivity(new Intent(this, DownloadFolderActivity.class)));
         LinearLayout.LayoutParams openParams = new LinearLayout.LayoutParams(-1, -2);
         openParams.topMargin = dp(18);
         content.addView(openDownloads, openParams);
@@ -342,7 +336,7 @@ public final class MainActivity extends Activity {
             final int total = saved;
             runOnUiThread(() -> progressBar.setProgress(100));
             updateStatus("下载完成，已保存 " + total + " 个文件到 Download/NetPanDownload");
-            updateDetails("下载成功。请在手机文件管理器的 Download/NetPanDownload 目录中查看。");
+            updateDetails("下载成功。点击「打开下载文件夹」即可查看并打开保存的视频。");
         } catch (Exception error) {
             if (cancelled.get()) updateStatus("下载已取消。");
             else updateStatus("下载失败：" + friendlyError(error));
@@ -379,7 +373,7 @@ public final class MainActivity extends Activity {
         ContentValues metadata = new ContentValues();
         metadata.put(MediaStore.MediaColumns.DISPLAY_NAME, name);
         metadata.put(MediaStore.MediaColumns.MIME_TYPE, mime);
-        metadata.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/NetPanDownload");
+        metadata.put(MediaStore.MediaColumns.RELATIVE_PATH, DownloadFolder.RELATIVE_PATH);
         metadata.put(MediaStore.MediaColumns.IS_PENDING, 1);
         ContentResolver resolver = getContentResolver();
         Uri uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, metadata);
