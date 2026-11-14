@@ -47,6 +47,16 @@ Electron shell
 
 This direction is not fully implemented in the current version. The current project should still be treated as a local MVP for validating the Quark workflow.
 
+
+## X / Twitter public video support
+
+- Paste a public post URL such as `https://x.com/example/status/1234567890123456789` (also accepts `twitter.com`, `www` and `mobile` hosts).
+- The X Provider uses the bundled `yt-dlp.exe` (or `YTDLP_PATH`) to extract the tweet's video formats. Each available progressive MP4 is exposed as a file and sent to the existing aria2 download queue.
+- Public posts with multiple videos are supported; the highest-quality progressive MP4 with audio is preferred.
+- The current implementation does **not** download HLS-only streams, images, private/login-required posts, or DRM content. A video that cannot be resolved to a direct MP4 is rejected explicitly instead of sending an HLS playlist to aria2.
+- Set up `yt-dlp` with `scripts/prepare-ytdlp.ps1` before building the Windows desktop package. Keep `yt-dlp` updated if X changes its extraction logic.
+- This is a desktop/local backend feature: it does not add server-side media storage, browser-based MP4 proxying, or X account login.
+
 ## Development Scripts
 
 ```bash

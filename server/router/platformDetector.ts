@@ -19,6 +19,7 @@ function normalizeInput(input: string) {
   if (/^(www\.)?bilibili\.com\//i.test(trimmed)) return `https://${trimmed}`
   if (/^space\.bilibili\.com\//i.test(trimmed)) return `https://${trimmed}`
   if (/^b23\.tv\//i.test(trimmed)) return `https://${trimmed}`
+  if (/^(?:(?:www|mobile)\.)?(?:x\.com|twitter\.com)\//i.test(trimmed)) return `https://${trimmed}`
   return trimmed
 }
 
@@ -71,6 +72,18 @@ export function detectPlatform(input: string): PlatformInference {
         baseRisk: 'medium',
         baseFeasible: true,
         confidence: 0.78
+      }
+    }
+
+    if (['x.com', 'twitter.com', 'mobile.x.com', 'mobile.twitter.com'].includes(hostname) &&
+      /^\/(?:(?:[a-z0-9_]{1,15}|i)\/status|i\/web\/status)\/\d+(?:\/(?:video|photo)\/\d+)?\/?$/i.test(url.pathname)) {
+      return {
+        normalizedUrl,
+        platform: 'x',
+        resourceType: 'video',
+        baseRisk: 'medium',
+        baseFeasible: true,
+        confidence: 0.86
       }
     }
 

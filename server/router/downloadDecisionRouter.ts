@@ -63,7 +63,7 @@ async function enrichWithWebParser(url: string) {
 }
 
 function decideTool(inference: PlatformInference): DecisionRecommendedTool {
-  if (inference.platform === 'bilibili') {
+  if (inference.platform === 'bilibili' || inference.platform === 'x') {
     return { type: 'desktop', name: 'desktop-downloader', capability: 'video-extract' }
   }
   if (inference.platform === 'quark') {
@@ -76,7 +76,7 @@ function decideTool(inference: PlatformInference): DecisionRecommendedTool {
 }
 
 function decideAction(inference: PlatformInference): DecisionAction {
-  if (inference.platform === 'bilibili' || inference.platform === 'quark') return 'use_desktop_downloader'
+  if (inference.platform === 'bilibili' || inference.platform === 'quark' || inference.platform === 'x') return 'use_desktop_downloader'
   if (inference.platform === 'youtube') return 'use_local_tool'
   return 'unsupported'
 }
@@ -98,6 +98,9 @@ function buildExplanation(inference: PlatformInference, parsed?: WebParseLike) {
   }
   if (inference.platform === 'youtube') {
     return `${enriched} 当前桌面端未内置 YouTube Provider，可使用本机外部下载工具处理。`
+  }
+  if (inference.platform === 'x') {
+    return `${enriched} 公开 X 帖子可通过 yt-dlp 获取 MP4 直链并下载；需要登录、仅提供 HLS 或不可访问的帖子暂不支持。`
   }
   if (inference.platform === 'douyin' || inference.platform === 'zhihu' || inference.platform === 'instagram') {
     return `${enriched} 当前版本只识别该平台，不提供下载执行能力。`

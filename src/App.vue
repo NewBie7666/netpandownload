@@ -121,6 +121,7 @@ const decisionPlatformText = computed(() => {
     douyin: '抖音',
     zhihu: '知乎',
     instagram: 'Instagram',
+    x: 'X / Twitter',
     unknown: '未知来源'
   }
   return platform ? labels[platform] : ''
@@ -188,10 +189,15 @@ function normalizeResourceUrlInput(value: string) {
     return `https://${trimmed}`
   }
 
+  if (/^(?:(?:www|mobile)\.)?(?:x\.com|twitter\.com)\//i.test(trimmed)) {
+    return `https://${trimmed}`
+  }
+
   const matched = trimmed.match(/https?:\/\/pan\.quark\.cn\/s\/[^\s"'<>]+/i)
     || trimmed.match(/https?:\/\/(?:www\.)?bilibili\.com\/[^\s"'<>]+/i)
     || trimmed.match(/https?:\/\/space\.bilibili\.com\/[^\s"'<>]+/i)
     || trimmed.match(/https?:\/\/b23\.tv\/[^\s"'<>]+/i)
+    || trimmed.match(/https?:\/\/(?:(?:www|mobile)\.)?(?:x\.com|twitter\.com)\/[^\s"'<>]+/i)
   return matched ? matched[0] : trimmed
 }
 
@@ -221,6 +227,11 @@ function validateResourceUrl(value: string) {
     }
     if (/^b23\.tv$/i.test(url.hostname) && url.pathname.length > 1) {
       return ''
+    }
+    if (/^(?:(?:www|mobile)\.)?(?:x\.com|twitter\.com)$/i.test(url.hostname)) {
+      return /^\/(?:(?:[a-z0-9_]{1,15}|i)\/status|i\/web\/status)\/\d+(?:\/(?:video|photo)\/\d+)?\/?$/i.test(url.pathname)
+        ? ''
+        : '请输入有效的 X/Twitter 帖子链接'
     }
   } catch {
     return '资源链接格式不正确'
@@ -313,7 +324,7 @@ async function loadShare() {
     files.value = result.share.files
     clearFileSelection()
     pathStack.value = []
-    noticeMessage.value = `已通过 ${result.providerId === 'quark' ? '夸克' : 'Bilibili'} 获取 ${result.share.files.length} 个文件`
+    noticeMessage.value = `已通过 ${result.providerId === 'quark' ? '夸克' : result.providerId === 'x' ? 'X / Twitter' : 'Bilibili'} 获取 ${result.share.files.length} 个文件`
   } catch (error) {
     currentProviderId.value = ''
     shareId.value = ''
@@ -738,11 +749,11 @@ onBeforeUnmount(() => {
       <section class="panel parser-panel">
         <div class="form-row">
           <label for="share-url">资源链接</label>
-          <input id="share-url" v-model="shareUrl" type="text" placeholder="夸克链接、B 站视频或 B 站空间搜索链接" :disabled="loading" />
+          <input id="share-url" v-model="shareUrl" type="text" placeholder="夸克、B站、X/Twitter 帖子链接" :disabled="loading" />
         </div>
         <div class="form-row">
           <label for="passcode">提取码</label>
-          <input id="passcode" v-model="passcode" type="text" placeholder="夸克链接可填；B 站链接无需填写" :disabled="loading" />
+          <input id="passcode" v-model="passcode" type="text" placeholder="仅夸克链接需要填写" :disabled="loading" />
         </div>
         <div class="actions">
           <button class="primary-button" type="button" :disabled="loading" @click="loadShare">
