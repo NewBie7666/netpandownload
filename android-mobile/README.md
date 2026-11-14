@@ -12,6 +12,7 @@ The existing Windows Electron / Express implementation is unchanged.
 - Downloads currently execute while the activity is alive; closing the app ends the download
 - Private/login-protected media may fail; yt-dlp can be updated in a future version
 - **Quark**: QR login, token retrieval, directory listing and transfer/download are not ported. Links are explicitly rejected, not silently routed to a server
+- A **Open Download Folder** button directly lists files stored in `Download/NetPanDownload` and opens selected files using Android installed viewers. It works locally using MediaStore, without broad storage permissions.
 - File names are sanitized and saved with Android MediaStore; no broad storage permissions required
 - APK is a debug build, for personal installation and validation only
 
