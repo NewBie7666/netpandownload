@@ -32,7 +32,7 @@ export interface StableResolvedShare {
   files: QuarkFile[]
   normalizedUrl: string
   cacheKey: string
-  source: 'bangumi' | 'yt-dlp' | 'html' | 'space-search' | 'heuristic'
+  source: 'bangumi' | 'yt-dlp' | 'html' | 'space-search' | 'page-list' | 'heuristic'
 }
 
 export interface ResolverAttempt {
