@@ -49,6 +49,35 @@ jobs:
       - name: BT metadata, deduplication and RPC regression
         run: npx tsx tests/release/btMetadata.test.ts
 
+      - name: Set up Python for local BT seeder (CI only)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install test-only libtorrent
+        run: python -m pip install --disable-pip-version-check "libtorrent==2.1.1"
+
+      - name: End-to-end BitTorrent metadata and real-byte transfer
+        shell: pwsh
+        run: |
+          $fixturePath = Join-Path $env:RUNNER_TEMP "netpan-bt-e2e"
+          New-Item -ItemType Directory -Path $fixturePath -Force | Out-Null
+          $seed = Start-Process python -ArgumentList @("tests/e2e/btLocalSeeder.py", $fixturePath) -PassThru -NoNewWindow
+          try {
+            $ready = Join-Path $fixturePath "fixture.json"
+            $ok = $false
+            for ($i = 0; $i -lt 80; $i++) {
+              if (Test-Path -LiteralPath $ready) { $ok = $true; break }
+              if ($seed.HasExited) { throw "BT fixture seeder exited early" }
+              Start-Sleep -Milliseconds 250
+            }
+            if (-not $ok) { throw "BT fixture seeder did not become ready" }
+            npx tsx tests/e2e/btLocalIntegration.test.ts
+            if ($LASTEXITCODE -ne 0) { throw "BT real-byte transfer E2E failed" }
+          } finally {
+            Stop-Process -Id $seed.Id -Force -ErrorAction SilentlyContinue
+          }
+
       - name: Build portable Windows EXE
         run: npm run build:desktop
         env:
