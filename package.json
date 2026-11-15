@@ -16,7 +16,16 @@
     "build:electron": "tsc -p tsconfig.electron.json",
     "pre-release-check": "node scripts/pre-release-check.mjs",
     "build:desktop": "npm run build && npm run build:electron && electron-builder --win portable",
-    "dist:win": "npm run pre-release-check && electron-builder --win portable && node scripts/release/artifactIntegrityCheck.mjs"
+    "dist:win": "npm run pre-release-check && electron-builder --win portable && node scripts/release/artifactIntegrityCheck.mjs",
+    "test:direct": "tsx --test tests/downloads/directDownload.test.ts",
+    "test:pause": "tsx --test tests/downloads/pauseResume.test.ts",
+    "test:unified-actions": "tsx --test tests/downloads/unifiedTaskActions.test.ts",
+    "test:contracts": "tsx tests/release/contractRegression.test.ts",
+    "test:page-scan": "tsx --test tests/downloads/pageLinkScanner.test.ts",
+    "test:dns": "tsx --test tests/downloads/safeDnsLookup.test.ts",
+    "test:interactive-page": "tsx --test tests/downloads/interactivePageLinks.test.ts",
+    "test:file-request": "tsx --test tests/downloads/fileRequestCandidate.test.ts",
+    "test:page-selection": "tsx --test tests/downloads/pageFileSelection.test.ts"
   },
   "dependencies": {
     "@types/qrcode": "^1.5.6",

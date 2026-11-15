@@ -1,4 +1,3 @@
-import cors from 'cors'
 import express, { type ErrorRequestHandler } from 'express'
 import type { Server } from 'node:http'
 import path from 'node:path'
@@ -23,7 +22,32 @@ const desktopStaticDir = desktopRuntimeRoot
   ? path.resolve(desktopRuntimeRoot, 'dist')
   : path.resolve(__dirname, '..', 'dist')
 
-app.use(cors())
+// The direct download API must be local-only, not exposed on the LAN or web.
+app.use('/api', (req, res, next) => {
+  const host = String(req.headers.host || '')
+  const hostName = host.replace(/:\d+$/, '').toLowerCase()
+  if (!['localhost', '127.0.0.1', '[::1]'].includes(hostName)) {
+    res.status(403).json(fail('local_api_only', '仅允许本机访问下载服务'))
+    return
+  }
+  const origin = String(req.headers.origin || '')
+  if (origin) {
+    let originHost = ''
+    try {
+      const parsed = new URL(origin)
+      if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('bad origin protocol')
+      originHost = parsed.hostname.toLowerCase()
+    } catch {
+      res.status(403).json(fail('local_origin_only', '拒绝非本机网页来源'))
+      return
+    }
+    if (!['localhost', '127.0.0.1', '[::1]'].includes(originHost)) {
+      res.status(403).json(fail('local_origin_only', '拒绝非本机网页来源'))
+      return
+    }
+  }
+  next()
+})
 app.use(express.json({ limit: '1mb' }))
 
 app.get('/api/health', (_req, res) => {
@@ -75,7 +99,7 @@ app.use(errorHandler)
 export function startServer(port = config.port) {
   return new Promise<Server>((resolve, reject) => {
     setRuntimePort(port)
-    const server = app.listen(port, () => {
+    const server = app.listen(port, '127.0.0.1', () => {
       structuredLogger.info('server', 'Quark parser API listening', { port, url: `http://localhost:${port}` })
       resolve(server)
     })

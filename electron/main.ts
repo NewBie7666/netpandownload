@@ -7,6 +7,8 @@ import type { Server } from 'node:http'
 import type { Readable } from 'node:stream'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import { aria2SessionArgs, aria2SessionPath, ensureAria2SessionFile } from './aria2Session.js'
+import { openPageScanBrowser, scanInteractivePage } from './pageScanBrowser.js'
 import { openBilibiliLoginWindow } from './auth/BilibiliLoginWindow.js'
 import {
   clearBilibiliCookieStore,
@@ -44,6 +46,8 @@ let aria2Process: ChildProcessByStdio<null, Readable, Readable> | null = null
 let backendLogs = ''
 let aria2Logs = ''
 let appQuitting = false
+let shutdownStarted = false
+let shutdownCompleted = false
 let bilibiliLastLoginTime: number | undefined
 
 interface BilibiliLoginStatus {
@@ -306,6 +310,28 @@ async function waitForAria2Ready() {
   throw new Error(aria2Logs.trim() || `Timed out waiting for aria2 RPC at ${rpcUrl}`)
 }
 
+async function sendAria2Rpc(method: 'saveSession' | 'shutdown'): Promise<void> {
+  const rpcUrl = process.env.ARIA2_RPC_URL
+  const rpcSecret = process.env.ARIA2_RPC_SECRET
+  if (!rpcUrl || !rpcSecret) throw new Error('aria2 RPC is unavailable')
+  const response = await fetch(rpcUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: method,
+      method: 'aria2.' + method,
+      params: ['token:' + rpcSecret]
+    }),
+    signal: AbortSignal.timeout(4000)
+  })
+  if (!response.ok) throw new Error('aria2 RPC returned HTTP ' + response.status)
+  const payload = await response.json() as { result?: string, error?: { message?: string } }
+  if (payload.error || payload.result !== 'OK') {
+    throw new Error(payload.error?.message || 'aria2.' + method + ' failed')
+  }
+}
+
 async function startAria2Sidecar() {
   if (aria2Process) {
     return
@@ -317,6 +343,8 @@ async function startAria2Sidecar() {
     return
   }
 
+  const sessionPath = aria2SessionPath(app.getPath('userData'))
+  await ensureAria2SessionFile(sessionPath)
   const rpcSecret = randomBytes(24).toString('hex')
   process.env.ARIA2_RPC_URL = `http://127.0.0.1:${aria2RpcPort}/jsonrpc`
   process.env.ARIA2_RPC_SECRET = rpcSecret
@@ -331,6 +359,7 @@ async function startAria2Sidecar() {
       `--rpc-listen-port=${aria2RpcPort}`,
       `--rpc-secret=${rpcSecret}`,
       '--continue=true',
+      ...aria2SessionArgs(sessionPath),
       '--disable-ipv6=true',
       '--async-dns=false',
       '--max-connection-per-server=16',
@@ -448,28 +477,40 @@ async function stopBackend() {
 }
 
 async function stopAria2Sidecar() {
-  if (!aria2Process) {
-    return
-  }
-
   const processRef = aria2Process
-  aria2Process = null
-
-  processRef.kill()
-
+  if (!processRef) return
+  // Save active and paused downloads before ending the process.
+  try {
+    await sendAria2Rpc('saveSession')
+  } catch (error) {
+    appendAria2Log('aria2 session save failed: ' + String(error))
+  }
+  try {
+    await sendAria2Rpc('shutdown')
+  } catch (error) {
+    appendAria2Log('Graceful aria2 RPC shutdown error: ' + String(error))
+  }
   await new Promise<void>((resolve) => {
-    const timeout = setTimeout(() => {
-      if (!processRef.killed) {
-        processRef.kill('SIGKILL')
-      }
+    if (processRef.exitCode !== null || processRef.signalCode !== null) {
       resolve()
-    }, 5000)
-
+      return
+    }
+    const timeout = setTimeout(() => {
+      appendAria2Log('aria2 shutdown timed out; terminating')
+      processRef.kill()
+    }, 6000)
+    const fallback = setTimeout(() => {
+      clearTimeout(timeout)
+      processRef.kill('SIGKILL')
+      resolve()
+    }, 8000)
     processRef.once('exit', () => {
       clearTimeout(timeout)
+      clearTimeout(fallback)
       resolve()
     })
   })
+  if (aria2Process === processRef) aria2Process = null
 }
 
 async function waitForBackendReady() {
@@ -503,6 +544,14 @@ async function bootstrapDesktop() {
   createWindow()
   await mainWindow?.loadURL(getRendererUrl())
 }
+
+ipcMain.handle('open-page-scan-browser', async (_event, url: unknown) => {
+  return openPageScanBrowser(url)
+})
+
+ipcMain.handle('scan-interactive-page', async (_event, extensions: unknown) => {
+  return scanInteractivePage(extensions)
+})
 
 ipcMain.handle('select-download-dir', async () => {
   const result = await dialog.showOpenDialog({
@@ -554,7 +603,11 @@ app.on('window-all-closed', () => {
   }
 })
 
-app.on('before-quit', () => {
+app.on('before-quit', (event) => {
+  if (shutdownCompleted) return
+  event.preventDefault()
+  if (shutdownStarted) return
+  shutdownStarted = true
   appQuitting = true
   writeCrashLog(app, {
     timestamp: new Date().toISOString(),
@@ -562,6 +615,17 @@ app.on('before-quit', () => {
     layer: 'main',
     message: 'Application graceful shutdown started'
   })
+  void (async () => {
+    try {
+      await stopAria2Sidecar()
+      await stopBackend()
+    } catch (error) {
+      appendBackendLog('Shutdown error: ' + String(error))
+    } finally {
+      shutdownCompleted = true
+      app.quit()
+    }
+  })()
 })
 
 app.on('second-instance', () => {
@@ -610,7 +674,3 @@ app.on('activate', async () => {
   }
 })
 
-app.on('quit', () => {
-  void stopBackend()
-  void stopAria2Sidecar()
-})
