@@ -12,11 +12,20 @@ public final class UrlTools {
             Pattern.CASE_INSENSITIVE
     );
 
+    // Only public post/reel URLs; stories, profiles and login-gated resources are out of scope.
+    private static final Pattern INSTAGRAM_POST = Pattern.compile(
+            "^/(?:reel|p|tv)/[A-Za-z0-9_-]+/?$", Pattern.CASE_INSENSITIVE);
+
+    private static boolean isInstagramHost(String host) {
+        return host.equals("instagram.com") || host.equals("www.instagram.com") ||
+               host.equals("m.instagram.com");
+    }
+
     private UrlTools() {}
 
     public static String normalize(String raw) {
         String input = raw == null ? "" : raw.trim();
-        if (input.matches("(?i)^(?:(?:www|mobile)\\.)?(?:x\\.com|twitter\\.com|bilibili\\.com|youtu\\.be|youtube\\.com)/.*")) {
+        if (input.matches("(?i)^(?:(?:www|mobile)\\.)?(?:x\\.com|twitter\\.com|bilibili\\.com|youtu\\.be|youtube\\.com|instagram\\.com)/.*")) {
             input = "https://" + input;
         } else {
             Matcher matcher = LINK.matcher(input);
@@ -31,6 +40,11 @@ public final class UrlTools {
                 return "";
             }
             if (uri.getPort() != -1) return "";
+            // Tracking query parameters are not needed for public Instagram posts.
+            String lowerHost = host.toLowerCase(java.util.Locale.ROOT);
+            if (isInstagramHost(lowerHost) && INSTAGRAM_POST.matcher(uri.getPath()).matches()) {
+                return scheme.toLowerCase(java.util.Locale.ROOT) + "://" + lowerHost + uri.getRawPath();
+            }
             return uri.toString();
         } catch (URISyntaxException | IllegalArgumentException ignored) {
             return "";
@@ -44,7 +58,8 @@ public final class UrlTools {
             URI uri = new URI(url);
             String host = uri.getHost().toLowerCase();
             if (host.contains("x.com.") || host.contains("twitter.com.") ||
-                    host.contains("youtube.com.") || host.contains("bilibili.com.")) {
+                    host.contains("youtube.com.") || host.contains("bilibili.com.") ||
+                    host.contains("instagram.com.")) {
                 return "可疑域名";
             }
             if (host.equals("x.com") || host.endsWith(".x.com") ||
@@ -57,6 +72,11 @@ public final class UrlTools {
             if (host.equals("youtube.com") || host.endsWith(".youtube.com") || host.equals("youtu.be")) {
                 return "YouTube";
             }
+            if (isInstagramHost(host)) {
+                return INSTAGRAM_POST.matcher(uri.getPath()).matches()
+                        ? "Instagram" : "不支持的 Instagram 链接";
+            }
+            if (host.endsWith(".instagram.com")) return "不支持的 Instagram 链接";
             if (host.equals("pan.quark.cn")) return "夸克网盘暂未移植到 Android";
             return "其他 yt-dlp 支持的公开网站";
         } catch (URISyntaxException ignored) {
@@ -64,10 +84,27 @@ public final class UrlTools {
         }
     }
 
+    public static boolean isInstagramVideoUrl(String rawUrl) {
+        return "Instagram".equals(category(rawUrl));
+    }
+
+    public static String preferredFormat(String rawUrl) {
+        // Instagram videos commonly provide an already muxed MP4.
+        return isInstagramVideoUrl(rawUrl)
+                ? "best[ext=mp4]/bv*[ext=mp4]+ba[ext=m4a]/best"
+                : "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/best";
+    }
+
+    public static boolean isVideoFilename(String filename) {
+        return filename != null && filename.toLowerCase(java.util.Locale.ROOT)
+                .matches(".*\\.(?:mp4|mkv|webm|mov|m4v|ts)");
+    }
+
     public static boolean supportsDownload(String rawUrl) {
         String category = category(rawUrl);
         return !category.equals("无效链接") &&
                !category.equals("不支持的 X 链接") &&
+               !category.equals("不支持的 Instagram 链接") &&
                !category.equals("可疑域名") &&
                !category.equals("夸克网盘暂未移植到 Android");
     }
