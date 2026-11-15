@@ -46,6 +46,9 @@ jobs:
       - name: Bilibili P9 CID/media regression
         run: npx tsx tests/release/bilibiliPartMedia.test.ts
 
+      - name: BT metadata, deduplication and RPC regression
+        run: npx tsx tests/release/btMetadata.test.ts
+
       - name: Build portable Windows EXE
         run: npm run build:desktop
         env:
