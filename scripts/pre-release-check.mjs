@@ -7,6 +7,7 @@ const commands = [
   ['npx', ['tsx', 'server/providers/bilibili/resolver/resolver.test.ts'], 'Bilibili resolver regression test'],
   ['npx', ['tsx', 'tests/release/failureRegression.test.ts'], 'Release failure regression test'],
   ['npx', ['tsx', 'tests/release/contractRegression.test.ts'], 'Release contract regression test'],
+  ['npx', ['tsx', 'tests/release/magnetSearch.test.ts'], 'Magnet search regression test'],
   ['npx', ['tsx', 'scripts/stability/runLongSession.ts', '--mock'], 'Long-run stability mock test'],
   ['node', ['scripts/release/freeze-check.mjs'], 'RC freeze contract check']
 ]

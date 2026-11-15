@@ -23,9 +23,10 @@ export interface Aria2TaskPayload {
   downloadSpeed?: string
   dir?: string
   files?: Aria2TaskFile[]
+  bittorrent?: { info?: { name?: string } }
 }
 
-const taskKeys = ['gid', 'status', 'totalLength', 'completedLength', 'downloadSpeed', 'dir', 'files']
+const taskKeys = ['gid', 'status', 'totalLength', 'completedLength', 'downloadSpeed', 'dir', 'files', 'bittorrent']
 
 function getAria2Env() {
   return {

@@ -21,6 +21,7 @@ import {
   resolveProviderResource
 } from './api/providers'
 import DownloadCenter from './views/download-center/DownloadCenter.vue'
+import MagnetSearch from './components/MagnetSearch.vue'
 import type {
   DownloadResult,
   DownloadDecision,
@@ -746,6 +747,7 @@ onBeforeUnmount(() => {
 <template>
   <div class="page-shell">
     <main class="container">
+      <MagnetSearch />
       <section class="panel parser-panel">
         <div class="form-row">
           <label for="share-url">资源链接</label>

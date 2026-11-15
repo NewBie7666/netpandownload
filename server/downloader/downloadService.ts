@@ -116,8 +116,20 @@ function normalizeRequestedDownloadUrl(input: string) {
   }
 
   try {
-    return new URL(trimmed)
-  } catch {
+    const parsed = new URL(trimmed)
+    if (parsed.protocol === 'magnet:') {
+      const xt = parsed.searchParams.get('xt') || ''
+      if (!/^urn:btih:(?:[a-f0-9]{40}|[a-z2-7]{32})$/i.test(xt)) {
+        throw new AppError('invalid_magnet', '无效的 BT 磁力链接')
+      }
+      return parsed
+    }
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      throw new AppError('invalid_download_url', '只允许 HTTP(S) 或 BT 磁力链接')
+    }
+    return parsed
+  } catch (error) {
+    if (error instanceof AppError) throw error
     throw new AppError('invalid_download_url', '下载地址格式不正确')
   }
 }
@@ -213,6 +225,9 @@ async function ensureSafeFileDeletePath(filePath: string) {
 }
 
 async function deleteTaskFile(task: Aria2TaskPayload) {
+  if ((task.files?.length || 0) > 1) {
+    throw new AppError('multi_file_delete_unsupported', '多文件 BT 任务暂不支持一键删除本地文件，请在资源管理器中处理')
+  }
   const filePath = String(task.files?.[0]?.path || '').trim()
   if (!filePath) {
     throw new AppError('download_file_missing', '未找到该任务对应的本地文件路径')
@@ -235,9 +250,12 @@ export async function addDownloadTask(input: AddDownloadRequest): Promise<AddDow
   ensureDownloadUrlAllowed(input.url, normalizedUrl)
 
   const dir = await ensureDownloadDir(input.dir || (await getEffectiveDownloadDir()))
-  const options = getDefaultDownloadOptions(input.fileName, dir)
-  const rpcOptions = options.out ? options : { ...options, out: undefined }
-  const headers = getDownloadRequestHeaders(normalizedUrl)
+  const isMagnet = normalizedUrl.protocol === 'magnet:'
+  // Aria2 refuses HTTP-specific options (split/out) for BitTorrent.
+  const rpcOptions = isMagnet
+    ? { dir, 'bt-save-metadata': 'true', 'seed-time': '0' }
+    : getDefaultDownloadOptions(input.fileName, dir)
+  const headers = isMagnet ? [] : getDownloadRequestHeaders(normalizedUrl)
   const optionsWithHeaders = headers.length ? { ...rpcOptions, header: headers } : rpcOptions
   const sanitizedOptions = Object.entries(optionsWithHeaders).reduce<Record<string, string | string[]>>(
     (result, [key, value]) => {
