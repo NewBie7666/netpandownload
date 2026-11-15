@@ -66,7 +66,8 @@ async function testYtDlpFailureFallsBack() {
   const resolved = await resolveShare('https://www.bilibili.com/video/BV1abcdefghi', {
     runYtDlpJson: async () => {
       throw new Error('HTTP Error 412: Precondition Failed')
-    }
+    },
+    fetchPageListJson: async () => ({})
   })
 
   assert.equal(resolved.source, 'heuristic')
