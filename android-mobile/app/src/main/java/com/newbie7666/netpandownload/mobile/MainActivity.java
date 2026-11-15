@@ -126,7 +126,7 @@ public final class MainActivity extends Activity {
         linkField.setMinLines(2);
         linkField.setMaxLines(4);
         linkField.setGravity(Gravity.TOP);
-        linkField.setHint("粘贴 X/Twitter、B站、YouTube 视频地址");
+        linkField.setHint("粘贴 Instagram Reels/帖子、X、B站、YouTube 视频地址");
         linkField.setSingleLine(false);
         LinearLayout.LayoutParams inputParams = new LinearLayout.LayoutParams(-1, -2);
         inputParams.topMargin = dp(8);
@@ -180,7 +180,7 @@ public final class MainActivity extends Activity {
         statusParams.topMargin = dp(12);
         content.addView(statusText, statusParams);
 
-        detailsText = text("支持公开 X 帖子、B站和 YouTube 等 yt-dlp 可解析资源。\n\n文件保存到 下载/NetPanDownload。\n需要登录的媒体及夸克网盘链接暂不支持。\n当前任务需保持应用运行。", 14, Color.rgb(96, 109, 128));
+        detailsText = text("支持公开 Instagram Reels/帖子视频、X 帖子、B站及 YouTube。\n\n文件保存到 下载/NetPanDownload。\nInstagram 私密内容、Stories、纯图片帖子及需要登录的媒体暂不支持。\n当前任务需保持应用运行。", 14, Color.rgb(96, 109, 128));
         LinearLayout.LayoutParams detailParams = new LinearLayout.LayoutParams(-1, -2);
         detailParams.topMargin = dp(16);
         content.addView(detailsText, detailParams);
@@ -260,7 +260,7 @@ public final class MainActivity extends Activity {
                         "\n\n按「下载视频到手机」保存媒体。");
                 updateStatus("解析完成。");
             } catch (Exception error) {
-                updateStatus("解析失败：" + friendlyError(error));
+                updateStatus("解析失败：" + friendlyMediaError(url, error));
             } finally {
                 setBusy(false);
             }
@@ -302,7 +302,7 @@ public final class MainActivity extends Activity {
             request.addOption("--yes-playlist");
             request.addOption("--merge-output-format", "mp4");
             request.addOption("--no-overwrites");
-            request.addOption("-f", "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/best");
+            request.addOption("-f", UrlTools.preferredFormat(url));
             request.addOption("-o", new File(stage, "%(extractor_key)s-%(id)s-%(autonumber)03d.%(ext)s").getAbsolutePath());
 
             Function3<Float, Long, String, Unit> callback = (value, eta, line) -> {
@@ -326,20 +326,23 @@ public final class MainActivity extends Activity {
                     if (cancelled.get()) return;
                     if (item.isFile() && item.length() > 0 &&
                             !item.getName().endsWith(".part") &&
-                            !item.getName().endsWith(".ytdl")) {
+                            !item.getName().endsWith(".ytdl") &&
+                            (!UrlTools.isInstagramVideoUrl(url) || UrlTools.isVideoFilename(item.getName()))) {
                         publishDownload(item);
                         saved++;
                     }
                 }
             }
-            if (saved == 0) throw new IOException("解析成功，但没有找到完整视频文件");
+            if (saved == 0) throw new IOException(UrlTools.isInstagramVideoUrl(url)
+                    ? "没有提取到视频文件：可能是纯图片帖子、需要登录或内容不可访问"
+                    : "解析成功，但没有找到完整视频文件");
             final int total = saved;
             runOnUiThread(() -> progressBar.setProgress(100));
             updateStatus("下载完成，已保存 " + total + " 个文件到 Download/NetPanDownload");
             updateDetails("下载成功。点击「打开下载文件夹」即可查看并打开保存的视频。");
         } catch (Exception error) {
             if (cancelled.get()) updateStatus("下载已取消。");
-            else updateStatus("下载失败：" + friendlyError(error));
+            else updateStatus("下载失败：" + friendlyMediaError(url, error));
         } finally {
             activeProcessId = "";
             if (stage != null) deleteTree(stage);
@@ -404,6 +407,19 @@ public final class MainActivity extends Activity {
         if (children != null) for (File child : children) deleteTree(child);
         // Only process-owned paths under the app's private external files directory.
         file.delete();
+    }
+
+    private String friendlyMediaError(String url, Exception error) {
+        String detail = friendlyError(error);
+        if (!UrlTools.isInstagramVideoUrl(url)) return detail;
+        String normalized = detail.toLowerCase(Locale.ROOT);
+        if (normalized.contains("login") || normalized.contains("cookie") ||
+                normalized.contains("private") || normalized.contains("403") ||
+                normalized.contains("429") || normalized.contains("challenge") ||
+                normalized.contains("rate limit")) {
+            return "Instagram 拒绝访问或要求登录；当前仅支持无需登录的公开视频。详情：" + detail;
+        }
+        return "Instagram 视频提取失败，请检查帖子是否公开及解析器是否仍受支持。详情：" + detail;
     }
 
     private String friendlyError(Exception error) {
