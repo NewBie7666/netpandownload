@@ -68,7 +68,8 @@ try {
   let actualBytesSeen = false
   let complete = false
   let lastSnapshot = ''
-  for (let i = 0; i < 180; i++) {
+  // Bounded CI smoke window; same-host self-peer filtering is an environment limitation.
+  for (let i = 0; i < 40; i++) {
     const result = await listDownloadTasks()
     for (const task of result.tasks) {
       if (task.infoHash !== fixture.infoHash && task.gid !== added.gid) continue
