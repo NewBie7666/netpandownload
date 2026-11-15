@@ -51,14 +51,18 @@ def main(base: Path) -> None:
         "piece length": piece_size,
         "pieces": pieces
     }
-    tracker_uri = "http://127.0.0.1:18999/announce"
+    # BT clients may deliberately filter localhost peers as self-connections.
+    # Use the host's real private IPv4 for the loopback-on-the-same-machine fixture.
+    possible_ips = [entry[4][0] for entry in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET)]
+    host_ip = next((ip for ip in possible_ips if not ip.startswith("127.")), "127.0.0.1")
+    tracker_uri = "http://" + host_ip + ":18999/announce"
     metadata = {"announce": tracker_uri, "info": info}
     torrent_file = base / "local-test.torrent"
     torrent_file.write_bytes(bencode(metadata))
     info_hash = hashlib.sha1(bencode(info)).hexdigest()
 
     session = lt.session({
-        "listen_interfaces": "127.0.0.1:25252",
+        "listen_interfaces": "0.0.0.0:25252",
         "enable_dht": False,
         "enable_lsd": False,
         "enable_upnp": False,
@@ -81,7 +85,8 @@ def main(base: Path) -> None:
             if not self.path.startswith("/announce?"):
                 self.send_error(404)
                 return
-            peers = socket.inet_aton("127.0.0.1") + struct.pack(">H", 25252)
+            print('TRACKER announce received', flush=True)
+            peers = socket.inet_aton(host_ip) + struct.pack(">H", 25252)
             response = b"d8:intervali30e5:peers6:" + peers + b"e"
             self.send_response(200)
             self.send_header("Content-Type", "text/plain")
@@ -92,7 +97,7 @@ def main(base: Path) -> None:
         def log_message(self, *_args):
             return
 
-    server = ThreadingHTTPServer(("127.0.0.1", 18999), Tracker)
+    server = ThreadingHTTPServer(("0.0.0.0", 18999), Tracker)
     magnet = "magnet:?" + urlencode({
         "xt": "urn:btih:" + info_hash,
         "dn": filename,
@@ -107,7 +112,7 @@ def main(base: Path) -> None:
         "size": len(payload)
     }), encoding="utf-8")
 
-    print("Local BT fixture seeded on 127.0.0.1:25252", flush=True)
+    print("Local BT fixture seeded on " + host_ip + ":25252", flush=True)
     try:
         server.serve_forever()
     finally:
