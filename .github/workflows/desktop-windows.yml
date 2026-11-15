@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - feat/desktop-code-magnet-search-20261115
+      - 'fix/**'
   workflow_dispatch:
 
 permissions:
@@ -38,6 +39,12 @@ jobs:
 
       - name: Magnet search regression
         run: npx tsx tests/release/magnetSearch.test.ts
+
+      - name: Bilibili multi-part resolver regression
+        run: npx tsx server/providers/bilibili/resolver/resolver.test.ts
+
+      - name: Bilibili P9 CID/media regression
+        run: npx tsx tests/release/bilibiliPartMedia.test.ts
 
       - name: Build portable Windows EXE
         run: npm run build:desktop
