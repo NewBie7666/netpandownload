@@ -84,7 +84,7 @@ export async function runYtDlpMediaUrl(episodeUrl: string, options: ResolveMedia
         '--sleep-interval',
         '1',
         ...buildYtDlpHeaderArgs(context),
-        normalizeBiliEpisodeUrl(context.url)
+        normalizeBiliEpisodeUrl(episodeUrl)
       ],
       {
         encoding: 'utf8',
