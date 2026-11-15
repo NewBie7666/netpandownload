@@ -37,6 +37,23 @@ export function normalizeBiliUrl(input: string) {
   return value
 }
 
+/**
+ * Preserve the selected part when resolving a single episode's media URL.
+ * Listing/cache canonicalization still intentionally omits tracking and p.
+ */
+export function normalizeBiliEpisodeUrl(input: string) {
+  const normalized = normalizeBiliUrl(input)
+  try {
+    const source = new URL(input)
+    const p = Number(source.searchParams.get('p') || '')
+    if (!/^\/video\/BV[0-9A-Za-z]+\/?$/i.test(source.pathname) ||
+        !Number.isInteger(p) || p < 1 || p > 10000) return normalized
+    return normalized + '?p=' + p
+  } catch {
+    return normalized
+  }
+}
+
 export function toStableCacheKey(input: string) {
   return `bili:stable:${normalizeBiliUrl(input)}`
 }

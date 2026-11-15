@@ -66,7 +66,8 @@ async function testYtDlpFailureFallsBack() {
   const resolved = await resolveShare('https://www.bilibili.com/video/BV1abcdefghi', {
     runYtDlpJson: async () => {
       throw new Error('HTTP Error 412: Precondition Failed')
-    }
+    },
+    fetchPageListJson: async () => ({})
   })
 
   assert.equal(resolved.source, 'heuristic')
@@ -222,6 +223,87 @@ function testFileEpisodeMapping() {
   assert.equal(resolved.episodes[index]?.url, 'https://www.bilibili.com/video/BV1abcdefghi?p=2')
 }
 
+
+async function testUserReportedP9AndCompletePlaylist() {
+  const url = 'https://www.bilibili.com/video/BV1bYcMzdEgS/?spm_id_from=333.788&p=9'
+  const pages = Array.from({ length: 12 }, (_, i) => ({
+    cid: 9000 + i + 1,
+    page: i + 1,
+    part: '第' + (i + 1) + '集',
+    duration: 1200
+  }))
+  const resolved = await resolveShare(url, {
+    runYtDlpJson: async () => ({ id: 'BV1bYcMzdEgS', title: 'A single partial result' }),
+    fetchInitialStateJson: async () => ({
+      videoData: { bvid: 'BV1bYcMzdEgS', title: '电视剧合集', pages }
+    })
+  })
+  assert.equal(resolved.episodes.length, 12)
+  assert.equal(resolved.files.length, 12)
+  assert.equal(resolved.episodes[0].title, '电视剧合集 · P1 第1集')
+  assert.equal(resolved.episodes[8].url, 'https://www.bilibili.com/video/BV1bYcMzdEgS?p=9')
+  assert.equal((resolved.episodes[8].downloadInfo as { cid: number }).cid, 9009)
+  assert.equal(resolved.files[8].fid, 'bilibili:episode:BV1bYcMzdEgS-p9')
+  assert.equal(new Set(resolved.files.map(f => f.fid)).size, 12)
+}
+
+async function testPageListWhenHtmlAndYtDlpUnavailable() {
+  const url = 'https://www.bilibili.com/video/BV1bYcMzdEgS/?p=9'
+  const resolved = await resolveShare(url, {
+    runYtDlpJson: async () => { throw new Error('upstream 412') },
+    fetchInitialStateJson: async () => { throw new Error('HTML blocked') },
+    fetchPageListJson: async () => ({
+      videoData: { bvid: 'BV1bYcMzdEgS', pages: [
+        { cid: 201, page: 1, part: '第一集' },
+        { cid: 202, page: 2, part: '第二集' },
+        { cid: 209, page: 9, part: '第九集' }
+      ] }
+    })
+  })
+  assert.equal(resolved.source, 'page-list')
+  assert.equal(resolved.files.length, 3)
+  assert.equal(resolved.episodes[2].url, 'https://www.bilibili.com/video/BV1bYcMzdEgS?p=9')
+}
+
+async function testIndependentBvidCollection() {
+  const resolved = await resolveShare('https://www.bilibili.com/video/BV1bYcMzdEgS/', {
+    runYtDlpJson: async () => ({ title: 'single' }),
+    fetchInitialStateJson: async () => ({
+      videoData: {
+        bvid: 'BV1bYcMzdEgS',
+        ugc_season: {
+          sections: [{ episodes: [
+            { bvid: 'BV1aaa111', title: '合集 第1集', cid: 101 },
+            { bvid: 'BV1bbb222', title: '合集 第2集', cid: 202 },
+            { bvid: 'BV1ccc333', title: '合集 第3集', cid: 303 }
+          ] }]
+        }
+      }
+    })
+  })
+  assert.equal(resolved.files.length, 3)
+  assert.deepEqual(resolved.episodes.map(e => e.url), [
+    'https://www.bilibili.com/video/BV1aaa111',
+    'https://www.bilibili.com/video/BV1bbb222',
+    'https://www.bilibili.com/video/BV1ccc333'
+  ])
+}
+
+async function testNoFakeP1WhenPlaylistCannotLoad() {
+  await assert.rejects(
+    () => resolveShare('https://www.bilibili.com/video/BV1bYcMzdEgS/?p=9', {
+      runYtDlpJson: async () => { throw new Error('blocked') },
+      fetchInitialStateJson: async () => { throw new Error('blocked') },
+      fetchPageListJson: async () => ({})
+    }),
+    /无法获取完整分P/
+  )
+}
+
+await testUserReportedP9AndCompletePlaylist()
+await testPageListWhenHtmlAndYtDlpUnavailable()
+await testIndependentBvidCollection()
+await testNoFakeP1WhenPlaylistCannotLoad()
 await testBangumiFlatten()
 await testPlaylistEntries()
 await testYtDlpFailureFallsBack()

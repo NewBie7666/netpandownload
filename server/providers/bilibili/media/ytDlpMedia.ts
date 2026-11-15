@@ -6,7 +6,7 @@ import { promisify } from 'node:util'
 import { AppError } from '../../../http.js'
 import { createAccessContext } from '../access/context.js'
 import { buildYtDlpHeaderArgs } from '../access/headers.js'
-import { normalizeBiliUrl } from '../resolver/index.js'
+import { normalizeBiliEpisodeUrl } from '../resolver/index.js'
 import { classifyFailure, withFailureLayer } from '../stability/index.js'
 import type { ResolveMediaOptions } from './types.js'
 
@@ -84,7 +84,7 @@ export async function runYtDlpMediaUrl(episodeUrl: string, options: ResolveMedia
         '--sleep-interval',
         '1',
         ...buildYtDlpHeaderArgs(context),
-        normalizeBiliUrl(context.url)
+        normalizeBiliEpisodeUrl(episodeUrl)
       ],
       {
         encoding: 'utf8',

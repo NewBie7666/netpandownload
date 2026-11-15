@@ -24,18 +24,18 @@ function pickBvid(episodeUrl: string, episodeInfo: unknown) {
   return asString(info?.bvid) || asString(arc?.bvid) || urlMatch?.[1] || ''
 }
 
-function pickCid(episodeInfo: unknown) {
+function pickCid(episodeInfo: unknown, part: number) {
   const info = isRecord(episodeInfo) ? episodeInfo : undefined
   const page = info && isRecord(info.page) ? info.page : undefined
   const pages = info && Array.isArray(info.pages) ? info.pages.filter(isRecord) : []
-  return asNumber(info?.cid) || asNumber(page?.cid) || asNumber(pages[0]?.cid)
+  return asNumber(page?.cid) || (part > 1 ? asNumber(pages[part - 1]?.cid) : undefined) || asNumber(info?.cid) || (part === 1 ? asNumber(pages[0]?.cid) : undefined)
 }
 
-function pickCidFromViewPayload(payload: unknown) {
+function pickCidFromViewPayload(payload: unknown, part: number) {
   if (!isRecord(payload)) return undefined
   const data = isRecord(payload.data) ? payload.data : undefined
   const pages = data && Array.isArray(data.pages) ? data.pages.filter(isRecord) : []
-  return asNumber(data?.cid) || asNumber(pages[0]?.cid)
+  return part > 1 ? asNumber(pages[part - 1]?.cid) : asNumber(pages[0]?.cid) || asNumber(data?.cid)
 }
 
 function pickPlayableUrl(payload: unknown) {
@@ -45,7 +45,7 @@ function pickPlayableUrl(payload: unknown) {
   return asString(durl[0]?.url)
 }
 
-async function resolveCidByBvid(bvid: string, context: AccessContext) {
+async function resolveCidByBvid(bvid: string, context: AccessContext, part: number) {
   const apiUrl = new URL('https://api.bilibili.com/x/web-interface/view')
   apiUrl.searchParams.set('bvid', bvid)
 
@@ -62,9 +62,9 @@ async function resolveCidByBvid(bvid: string, context: AccessContext) {
   }
 
   const payload = await response.json()
-  const cid = pickCidFromViewPayload(payload)
+  const cid = pickCidFromViewPayload(payload, part)
   if (!cid) {
-    throw new AppError('media_resolution_failed', 'B站视频信息接口未返回 cid，无法解析媒体直链')
+    throw new AppError('media_resolution_failed', 'B站视频信息接口未返回第 ' + part + ' P 的 cid，无法解析媒体直链')
   }
   return cid
 }
@@ -80,7 +80,8 @@ export async function resolvePlayUrlMedia(
   }
 
   const context = accessContext || createAccessContext(episodeUrl)
-  const cid = pickCid(episodeInfo) || await resolveCidByBvid(bvid, context)
+  const part = (() => { try { return Number(new URL(episodeUrl).searchParams.get('p') || 1) || 1 } catch { return 1 } })()
+  const cid = pickCid(episodeInfo, part) || await resolveCidByBvid(bvid, context, part)
   const apiUrl = new URL('https://api.bilibili.com/x/player/playurl')
   apiUrl.searchParams.set('bvid', bvid)
   apiUrl.searchParams.set('cid', String(cid))
