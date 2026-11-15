@@ -28,6 +28,8 @@ const child = spawn(executable, [
   '--rpc-listen-port=16829',
   '--rpc-secret=' + secret,
   '--enable-dht=false',
+  // CI peers live on the same host: avoid aria2 filtering the fixture seeder as our own IP.
+  '--bt-external-ip=203.0.113.9',
   '--enable-peer-exchange=true',
   '--listen-port=25253',
   '--seed-time=0',
