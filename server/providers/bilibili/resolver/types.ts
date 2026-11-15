@@ -44,5 +44,6 @@ export interface ResolverAttempt {
 export interface ResolveShareOptions {
   runYtDlpJson?: (url: string) => Promise<YtDlpInfo>
   fetchInitialStateJson?: (url: string) => Promise<YtDlpInfo>
+  fetchPageListJson?: (url: string) => Promise<YtDlpInfo>
   expandShortUrl?: (url: string) => Promise<string>
 }
