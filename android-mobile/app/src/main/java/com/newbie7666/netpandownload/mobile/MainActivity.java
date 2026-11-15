@@ -9,6 +9,7 @@ import android.content.Intent;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.SystemClock;
 import android.os.Environment;
 import android.provider.MediaStore;
 import android.view.Gravity;
@@ -24,7 +25,6 @@ import android.widget.Toast;
 import android.content.Context;
 
 import com.yausername.ffmpeg.FFmpeg;
-import com.yausername.youtubedl_android.mapper.VideoInfo;
 import com.yausername.youtubedl_android.YoutubeDL;
 import com.yausername.youtubedl_android.YoutubeDLRequest;
 
@@ -33,8 +33,13 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import org.json.JSONObject;
+import org.json.JSONArray;
 import java.util.Locale;
 import java.util.UUID;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -49,6 +54,15 @@ import kotlin.jvm.functions.Function3;
 public final class MainActivity extends Activity {
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private final AtomicBoolean cancelled = new AtomicBoolean(false);
+    private final AtomicBoolean timedOut = new AtomicBoolean(false);
+    private final ScheduledExecutorService timeoutWorker = Executors.newSingleThreadScheduledExecutor();
+    private final StringBuilder lastLog = new StringBuilder();
+    private static final int COOKIE_PICKER_REQUEST = 1931;
+    private static final long EXTRACT_TIMEOUT_MS = 120_000L;
+    private static final long STALL_TIMEOUT_MS = 90_000L;
+    private volatile long commandStartMs;
+    private volatile long lastActivityMs;
+    private volatile boolean downloadStarted;
 
     private EditText linkField;
     private TextView statusText;
@@ -57,6 +71,10 @@ public final class MainActivity extends Activity {
     private Button inspectButton;
     private Button downloadButton;
     private Button cancelButton;
+    private Button updateExtractorButton;
+    private Button importCookieButton;
+    private Button clearCookieButton;
+    private TextView extractorVersionText;
     private volatile boolean busy;
     private volatile boolean ready;
     private volatile String activeProcessId = "";
@@ -71,8 +89,12 @@ public final class MainActivity extends Activity {
                 YoutubeDL.getInstance().init(getApplicationContext());
                 FFmpeg.getInstance().init(getApplicationContext());
                 ready = true;
-                updateStatus("本地解析器就绪，可以粘贴视频链接。");
-                runOnUiThread(() -> setButtons(false));
+                String version = extractorVersion();
+                updateStatus("解析器就绪（yt-dlp " + version + "）。Instagram 建议先点「更新解析器」。");
+                runOnUiThread(() -> {
+                    extractorVersionText.setText("yt-dlp 版本：" + version);
+                    setButtons(false);
+                });
             } catch (Exception error) {
                 updateStatus("初始化失败：" + friendlyError(error));
                 runOnUiThread(() -> setButtons(false));
@@ -117,6 +139,14 @@ public final class MainActivity extends Activity {
         subtitleParams.topMargin = dp(8);
         subtitleParams.bottomMargin = dp(26);
         content.addView(subtitle, subtitleParams);
+
+        extractorVersionText = text("yt-dlp 版本：检测中…", 14, Color.rgb(84, 98, 118));
+        content.addView(extractorVersionText);
+        updateExtractorButton = new Button(this);
+        updateExtractorButton.setText("更新 yt-dlp 解析器（官方稳定版）");
+        updateExtractorButton.setEnabled(false);
+        updateExtractorButton.setOnClickListener(v -> updateExtractor());
+        content.addView(updateExtractorButton);
 
         TextView urlLabel = text("视频链接", 16, Color.rgb(30, 40, 55));
         content.addView(urlLabel);
@@ -184,6 +214,17 @@ public final class MainActivity extends Activity {
         LinearLayout.LayoutParams detailParams = new LinearLayout.LayoutParams(-1, -2);
         detailParams.topMargin = dp(16);
         content.addView(detailsText, detailParams);
+        detailsText.setTextIsSelectable(true);
+
+        importCookieButton = new Button(this);
+        importCookieButton.setText("导入 Instagram cookies.txt（可选）");
+        importCookieButton.setOnClickListener(v -> chooseCookieFile());
+        content.addView(importCookieButton);
+
+        clearCookieButton = new Button(this);
+        clearCookieButton.setText("清除已导入的 Instagram Cookies");
+        clearCookieButton.setOnClickListener(v -> clearCookieFile());
+        content.addView(clearCookieButton);
 
         Button openDownloads = new Button(this);
         openDownloads.setText("打开下载文件夹");
@@ -230,7 +271,10 @@ public final class MainActivity extends Activity {
     private void setButtons(boolean isBusy) {
         inspectButton.setEnabled(ready && !isBusy);
         downloadButton.setEnabled(ready && !isBusy);
-        cancelButton.setEnabled(isBusy);
+        updateExtractorButton.setEnabled(ready && !isBusy);
+        importCookieButton.setEnabled(!isBusy);
+        clearCookieButton.setEnabled(!isBusy);
+        cancelButton.setEnabled(isBusy && !activeProcessId.isEmpty());
     }
 
     private void setBusy(boolean value) {
@@ -250,17 +294,27 @@ public final class MainActivity extends Activity {
         if (busy || !ready) return;
         String url = checkedUrl();
         if (url == null) return;
+        cancelled.set(false);
         setBusy(true);
-        updateStatus("正在使用手机本地解析视频信息……");
+        updateStatus("正在检查视频信息（可能需要访问 Instagram API）…");
         worker.execute(() -> {
+            String taskId = "netpan-info-" + UUID.randomUUID();
             try {
-                VideoInfo info = YoutubeDL.getInstance().getInfo(url);
-                String title = info.getTitle();
-                updateDetails("来源：" + UrlTools.category(url) + "\n标题：" + (title == null ? "(无标题)" : title) +
-                        "\n\n按「下载视频到手机」保存媒体。");
+                YoutubeDLRequest request = new YoutubeDLRequest(url);
+                configureExtractorRequest(request, url);
+                request.addOption("--skip-download");
+                request.addOption("--dump-single-json");
+                String json = runYtDlp(request, taskId, true);
+                JSONObject info = new JSONObject(json.trim());
+                String title = info.optString("title", "(无标题)");
+                JSONArray entries = info.optJSONArray("entries");
+                String entryCount = entries != null ? "\\n资源数量：" + entries.length() : "";
+                updateDetails("来源：" + UrlTools.category(url) + "\\n标题：" + title +
+                        entryCount + "\\n\\n可以点击「下载视频到手机」。");
                 updateStatus("解析完成。");
             } catch (Exception error) {
                 updateStatus("解析失败：" + friendlyMediaError(url, error));
+                showFailureLog(error);
             } finally {
                 setBusy(false);
             }
@@ -289,7 +343,6 @@ public final class MainActivity extends Activity {
     private void performDownload(String url) {
         File stage = null;
         String taskId = "netpan-" + UUID.randomUUID();
-        activeProcessId = taskId;
         try {
             File root = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
             if (root == null) throw new IOException("手机存储不可用");
@@ -297,7 +350,7 @@ public final class MainActivity extends Activity {
             if (!stage.mkdirs()) throw new IOException("无法创建临时文件夹");
 
             YoutubeDLRequest request = new YoutubeDLRequest(url);
-            request.addOption("--ignore-config");
+            configureExtractorRequest(request, url);
             request.addOption("--no-mtime");
             request.addOption("--yes-playlist");
             request.addOption("--merge-output-format", "mp4");
@@ -305,18 +358,7 @@ public final class MainActivity extends Activity {
             request.addOption("-f", UrlTools.preferredFormat(url));
             request.addOption("-o", new File(stage, "%(extractor_key)s-%(id)s-%(autonumber)03d.%(ext)s").getAbsolutePath());
 
-            Function3<Float, Long, String, Unit> callback = (value, eta, line) -> {
-                final int progress = Math.min(100, Math.max(0, Math.round(value)));
-                runOnUiThread(() -> {
-                    progressBar.setProgress(progress);
-                    if (line != null && line.contains("[download]")) {
-                        statusText.setText("手机本地下载中：" + progress + "%");
-                    }
-                });
-                return Unit.INSTANCE;
-            };
-
-            YoutubeDL.getInstance().execute(request, taskId, callback);
+            runYtDlp(request, taskId, false);
             if (cancelled.get()) return;
 
             File[] outputs = stage.listFiles();
@@ -342,9 +384,11 @@ public final class MainActivity extends Activity {
             updateDetails("下载成功。点击「打开下载文件夹」即可查看并打开保存的视频。");
         } catch (Exception error) {
             if (cancelled.get()) updateStatus("下载已取消。");
-            else updateStatus("下载失败：" + friendlyMediaError(url, error));
+            else {
+                updateStatus("下载失败：" + friendlyMediaError(url, error));
+                showFailureLog(error);
+            }
         } finally {
-            activeProcessId = "";
             if (stage != null) deleteTree(stage);
             setBusy(false);
         }
@@ -353,7 +397,7 @@ public final class MainActivity extends Activity {
     private void cancelDownload() {
         if (!busy) return;
         cancelled.set(true);
-        updateStatus("正在取消下载……");
+        updateStatus("正在取消任务……");
         String task = activeProcessId;
         if (!task.isEmpty()) {
             new Thread(() -> {
@@ -363,6 +407,186 @@ public final class MainActivity extends Activity {
                     // The worker might have already completed.
                 }
             }).start();
+        }
+    }
+
+    private String extractorVersion() {
+        try {
+            return YoutubeDL.getInstance().versionName(getApplicationContext());
+        } catch (Exception ignored) {
+            return "未知";
+        }
+    }
+
+    private void updateExtractor() {
+        if (!ready || busy) return;
+        setBusy(true);
+        updateStatus("正在从官方渠道更新 yt-dlp；请保持应用运行及网络连接…");
+        worker.execute(() -> {
+            String before = extractorVersion();
+            try {
+                String result = YoutubeDL.getInstance()
+                        .updateYoutubeDL(getApplicationContext(), YoutubeDL.UpdateChannel._STABLE)
+                        .toString();
+                String after = extractorVersion();
+                updateStatus("yt-dlp 更新结果：" + result + "，版本 " + before + " → " + after);
+                runOnUiThread(() -> extractorVersionText.setText("yt-dlp 版本：" + after));
+            } catch (Exception error) {
+                updateStatus("yt-dlp 更新失败（原解析器仍可用）："
+                        + friendlyError(error) + "。请检查是否能访问 GitHub。");
+            } finally {
+                setBusy(false);
+            }
+        });
+    }
+
+    private File cookieFile() {
+        return new File(getFilesDir(), "instagram-cookies.txt");
+    }
+
+    private void chooseCookieFile() {
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.setType("text/plain");
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        startActivityForResult(intent, COOKIE_PICKER_REQUEST);
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode != COOKIE_PICKER_REQUEST || resultCode != RESULT_OK ||
+                data == null || data.getData() == null) return;
+        Uri selected = data.getData();
+        worker.execute(() -> {
+            File temporary = new File(getFilesDir(), "instagram-cookies.tmp");
+            try (InputStream input = getContentResolver().openInputStream(selected);
+                 OutputStream output = new java.io.FileOutputStream(temporary)) {
+                if (input == null) throw new IOException("无法读取文件");
+                byte[] buffer = new byte[8192];
+                long total = 0;
+                int count;
+                while ((count = input.read(buffer)) != -1) {
+                    total += count;
+                    if (total > 1024 * 1024) throw new IOException("Cookie 文件不能超过 1 MB");
+                    output.write(buffer, 0, count);
+                }
+                output.flush();
+            } catch (Exception error) {
+                temporary.delete();
+                updateStatus("Cookies 导入失败：" + friendlyError(error));
+                return;
+            }
+            try {
+                byte[] bytes = java.nio.file.Files.readAllBytes(temporary.toPath());
+                String first = new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
+                if (!first.startsWith("# Netscape HTTP Cookie File") &&
+                        !first.startsWith("# HTTP Cookie File") &&
+                        !first.contains("\\t")) {
+                    throw new IOException("文件不是 Netscape cookies.txt 格式");
+                }
+                if (!temporary.renameTo(cookieFile())) {
+                    java.nio.file.Files.copy(temporary.toPath(), cookieFile().toPath(),
+                            java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                }
+                updateStatus("已导入本地 cookies.txt；仅用于 Instagram 视频请求，可随时清除。");
+            } catch (Exception error) {
+                updateStatus("Cookies 导入失败：" + friendlyError(error));
+            } finally {
+                temporary.delete();
+            }
+        });
+    }
+
+    private void clearCookieFile() {
+        File file = cookieFile();
+        if (file.exists() && !file.delete()) {
+            updateStatus("清除失败，请重试或清除应用数据。");
+        } else {
+            updateStatus("Instagram Cookies 已清除。");
+        }
+    }
+
+    private void configureExtractorRequest(YoutubeDLRequest request, String url) {
+        request.addOption("--ignore-config");
+        request.addOption("--socket-timeout", "15");
+        request.addOption("--retries", "2");
+        request.addOption("--extractor-retries", "1");
+        request.addOption("--fragment-retries", "2");
+        if (UrlTools.isInstagramVideoUrl(url) && cookieFile().isFile()) {
+            request.addOption("--cookies", cookieFile().getAbsolutePath());
+        }
+    }
+
+    private synchronized void appendLog(String line) {
+        if (line == null || line.trim().isEmpty()) return;
+        lastLog.append(line).append('\n');
+        if (lastLog.length() > 12000) {
+            lastLog.delete(0, lastLog.length() - 8000);
+        }
+    }
+
+    private synchronized String diagnosticTail() {
+        return InstagramDiagnostics.tail(lastLog.toString(), 2400);
+    }
+
+    private synchronized void resetLog() {
+        lastLog.setLength(0);
+    }
+
+    private String runYtDlp(YoutubeDLRequest request, String taskId, boolean inspecting)
+            throws Exception {
+        resetLog();
+        timedOut.set(false);
+        downloadStarted = false;
+        commandStartMs = SystemClock.elapsedRealtime();
+        lastActivityMs = commandStartMs;
+        activeProcessId = taskId;
+        runOnUiThread(() -> setButtons(true));
+        ScheduledFuture<?> watchdog = timeoutWorker.scheduleAtFixedRate(() -> {
+            if (!taskId.equals(activeProcessId) || timedOut.get() || cancelled.get()) return;
+            long now = SystemClock.elapsedRealtime();
+            boolean initialTimeout = !downloadStarted && now - commandStartMs > EXTRACT_TIMEOUT_MS;
+            boolean stalled = downloadStarted && now - lastActivityMs > STALL_TIMEOUT_MS;
+            if (initialTimeout || stalled) {
+                timedOut.set(true);
+                updateStatus("yt-dlp 响应超时，正在中止任务…");
+                try {
+                    YoutubeDL.getInstance().destroyProcessById(taskId);
+                } catch (Exception ignored) {
+                    // The process may already have exited.
+                }
+            }
+        }, 5, 5, TimeUnit.SECONDS);
+        try {
+            String result = YoutubeDL.getInstance().execute(request, taskId,
+                    (Float progress, Long eta, String line) -> {
+                        if (line != null && !line.isEmpty()) {
+                            appendLog(line);
+                            lastActivityMs = SystemClock.elapsedRealtime();
+                            if (line.contains("[download]")) downloadStarted = true;
+                            final String status = line;
+                            final int percent = Math.min(100, Math.max(0, Math.round(progress)));
+                            runOnUiThread(() -> {
+                                if (status.contains("[download]")) {
+                                    progressBar.setProgress(percent);
+                                    statusText.setText("下载中：" + percent + "%");
+                                } else if (status.contains("Downloading") ||
+                                        status.contains("Setting up session") ||
+                                        status.contains("Extracting URL")) {
+                                    statusText.setText(inspecting ? "解析中：" +
+                                            InstagramDiagnostics.tail(status, 130)
+                                            : "准备下载：" + InstagramDiagnostics.tail(status, 130));
+                                }
+                            });
+                        }
+                        return Unit.INSTANCE;
+                    }).getOut();
+            if (timedOut.get()) throw new IOException("yt-dlp 请求超时");
+            if (cancelled.get()) throw new IOException("下载已取消");
+            return result;
+        } finally {
+            watchdog.cancel(false);
+            if (taskId.equals(activeProcessId)) activeProcessId = "";
         }
     }
 
@@ -411,28 +635,29 @@ public final class MainActivity extends Activity {
 
     private String friendlyMediaError(String url, Exception error) {
         String detail = friendlyError(error);
-        if (!UrlTools.isInstagramVideoUrl(url)) return detail;
-        String normalized = detail.toLowerCase(Locale.ROOT);
-        if (normalized.contains("login") || normalized.contains("cookie") ||
-                normalized.contains("private") || normalized.contains("403") ||
-                normalized.contains("429") || normalized.contains("challenge") ||
-                normalized.contains("rate limit")) {
-            return "Instagram 拒绝访问或要求登录；当前仅支持无需登录的公开视频。详情：" + detail;
+        if (!UrlTools.isInstagramVideoUrl(url)) {
+            return timedOut.get() ? "请求超时，请检查网络和解析器状态。" : detail;
         }
-        return "Instagram 视频提取失败，请检查帖子是否公开及解析器是否仍受支持。详情：" + detail;
+        return InstagramDiagnostics.summarize(detail + "\\n" + diagnosticTail(), timedOut.get());
+    }
+
+    private void showFailureLog(Exception error) {
+        String log = InstagramDiagnostics.tail(friendlyError(error) + "\\n" + diagnosticTail(), 3200);
+        updateDetails("诊断日志（可长按复制）\\n" + log +
+                "\\n\\nCSRF 警告本身不代表最终原因。若提示登录要求，可手动导入本人账户 cookies.txt。");
     }
 
     private String friendlyError(Exception error) {
         String message = error.getMessage();
         if (message == null || message.trim().isEmpty()) return error.getClass().getSimpleName();
-        if (message.length() > 320) return message.substring(0, 320);
-        return message;
+        return InstagramDiagnostics.tail(message, 1400);
     }
 
     @Override
     protected void onDestroy() {
         if (busy) cancelDownload();
         worker.shutdownNow();
+        timeoutWorker.shutdownNow();
         super.onDestroy();
     }
 }
