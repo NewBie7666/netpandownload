@@ -9,6 +9,7 @@ import { AppError, fail } from './http.js'
 import { structuredLogger } from './logging/structuredLogger.js'
 import { downloadDecisionRouter } from './router/downloadDecisionRouter.js'
 import { downloadsRouter } from './routes/downloads.js'
+import { magnetsRouter } from './routes/magnets.js'
 import { downloadEngineRouter } from './routes/downloadEngine.js'
 import { productRouter } from './routes/product.js'
 import { providersRouter } from './routes/providers.js'
@@ -38,6 +39,7 @@ app.get('/api/health', (_req, res) => {
 
 app.use('/api/quark', quarkRouter)
 app.use('/api/downloads', downloadsRouter)
+app.use('/api/magnets', magnetsRouter)
 app.use('/api/download-engine', downloadEngineRouter)
 app.use('/api/providers', providersRouter)
 app.use('/api/product', productRouter)
