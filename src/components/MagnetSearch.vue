@@ -49,8 +49,8 @@ async function download(item: MagnetCandidate) {
   message.value = ''
   downloading.value = item.hash
   try {
-    await addDownloadTask({ url: item.magnet })
-    message.value = '已加入内置 BT 下载队列，可在下方下载中心查看进度。'
+    const added = await addDownloadTask({ url: item.magnet, fileName: item.title })
+    message.value = added.duplicate ? '相同 BT 资源已有任务，未重复下载。' : '已加入 BT 下载器：正在发现节点及获取元数据；可在下载中心查看连接数和进度。'
   } catch (reason) {
     error.value = reason instanceof Error ? reason.message : '下载任务创建失败'
   } finally {
