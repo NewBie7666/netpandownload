@@ -33,6 +33,7 @@ export interface ProductUiTask {
   diagnosis?: ProductDiagnosis
   health?: ProductHealth
   traceId?: string
+  bt?: UnifiedTask['bt']
   createdAt: number
 }
 
@@ -84,6 +85,7 @@ export function normalizeProductTask(task: UnifiedTask): ProductUiTask {
     diagnosis: task.diagnosis,
     health: task.health || task.diagnosis?.health,
     traceId: task.traceId,
+    bt: task.bt,
     createdAt: task.createdAt
   }
   assertProductUiTask(normalized)
