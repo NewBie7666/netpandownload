@@ -78,7 +78,7 @@ export async function resolveShare(inputUrl: string, options: ResolveShareOption
 
   // The stable public page listing returns page, part and CID for every BV multi-P part.
   if (isVideoInput(inputUrl) && !candidates.some(c => c.episodes.length > 1)) {
-    const pageList = await publicPageListResolver(inputUrl)
+    const pageList = await publicPageListResolver(inputUrl, options)
     addCandidate(candidates, pageList.result)
   }
 
