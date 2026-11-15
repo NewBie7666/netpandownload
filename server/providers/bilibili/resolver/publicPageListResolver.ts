@@ -2,14 +2,14 @@ import { AppError } from '../../../http.js'
 import { createAccessContext } from '../access/context.js'
 import { buildBilibiliHeaders } from '../access/headers.js'
 import { normalizeBiliEpisodes } from '../bilibiliNormalizer.js'
-import type { ResolveShareOptions, ResolverAttempt, YtDlpInfo } from './types.js'
+import type { ResolverAttempt, YtDlpInfo } from './types.js'
 import { buildResolvedShare } from './utils.js'
 
 /**
  * yt-dlp also uses the public pagelist endpoint to enumerate multi-P videos.
  * This is a metadata-only fallback; do not treat failed requests as a one-P playlist.
  */
-export async function publicPageListResolver(inputUrl: string, options: ResolveShareOptions): Promise<ResolverAttempt> {
+export async function publicPageListResolver(inputUrl: string): Promise<ResolverAttempt> {
   const bvid = inputUrl.match(/(?:https?:\/\/)?(?:www\.)?bilibili\.com\/video\/(BV[0-9a-z]+)/i)?.[1]
   if (!bvid) return { ok: false, error: new Error('not a BV video') }
 
