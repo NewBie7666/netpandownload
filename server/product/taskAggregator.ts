@@ -5,7 +5,8 @@ import type { DownloadEngineTask, EngineTaskStatus } from '../download-engine/ta
 import { calculateDownloadHealth } from '../providers/bilibili/diagnostics/index.js'
 
 function mapAria2Status(status: DownloadTask['status']): UnifiedTaskStatus {
-  if (status === 'active' || status === 'waiting') return 'running'
+  if (status === 'active') return 'running'
+  if (status === 'waiting') return 'pending'
   if (status === 'complete') return 'done'
   return status
 }
@@ -36,7 +37,19 @@ function aria2ToUnified(task: DownloadTask): UnifiedTask {
     progress: task.progress,
     source: 'aria2',
     createdAt: Date.now(),
-    gid: task.gid
+    gid: task.gid,
+    error: task.errorMessage,
+    bt: task.isTorrent ? {
+      isTorrent: true,
+      infoHash: task.infoHash,
+      metadataPending: task.metadataPending,
+      metadataElapsedSeconds: task.metadataElapsedSeconds,
+      connections: task.connections,
+      numSeeders: task.numSeeders,
+      errorCode: task.errorCode,
+      errorMessage: task.errorMessage,
+      diagnosis: task.diagnosis
+    } : undefined
   }
 }
 
@@ -65,7 +78,8 @@ function mergeTask(existing: UnifiedTask | undefined, incoming: UnifiedTask): Un
     error: engineTask.error || runtimeTask.error,
     health: engineTask.health || runtimeTask.health,
     diagnosis: engineTask.diagnosis || runtimeTask.diagnosis,
-    traceId: engineTask.traceId || runtimeTask.traceId
+    traceId: engineTask.traceId || runtimeTask.traceId,
+    bt: runtimeTask.bt || engineTask.bt
   }
 }
 

@@ -100,6 +100,16 @@ export interface DownloadTask {
   downloadSpeed: number
   progress: number
   dir?: string
+  isTorrent?: boolean
+  infoHash?: string
+  metadataPending?: boolean
+  metadataElapsedSeconds?: number
+  connections?: number
+  numSeeders?: number
+  errorCode?: string
+  errorMessage?: string
+  diagnosis?: string
+  followedBy?: string[]
 }
 
 export interface DownloadTasksResult {
@@ -135,6 +145,7 @@ export interface AddDownloadRequest {
 
 export interface AddDownloadResult {
   gid: string
+  duplicate?: boolean
 }
 
 export interface RemoveDownloadRequest {
@@ -167,6 +178,7 @@ export interface UnifiedTask {
   downloadUrl?: string
   error?: string
   traceId?: string
+  bt?: Pick<DownloadTask, 'isTorrent' | 'infoHash' | 'metadataPending' | 'metadataElapsedSeconds' | 'connections' | 'numSeeders' | 'errorCode' | 'errorMessage' | 'diagnosis'>
   health?: 'stable' | 'degraded' | 'unstable'
   diagnosis?: {
     rootCause: string

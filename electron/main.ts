@@ -1,7 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain, session } from 'electron'
 import { randomBytes } from 'node:crypto'
 import { spawn, type ChildProcessByStdio } from 'node:child_process'
-import { access } from 'node:fs/promises'
+import { access, mkdir, writeFile } from 'node:fs/promises'
 import { constants as fsConstants } from 'node:fs'
 import type { Server } from 'node:http'
 import type { Readable } from 'node:stream'
@@ -317,6 +317,18 @@ async function startAria2Sidecar() {
     return
   }
 
+  // Keep DHT routing history and unfinished downloads outside the portable EXE.
+  const btStateDir = path.join(app.getPath('userData'), 'bt-state')
+  await mkdir(btStateDir, { recursive: true })
+  const sessionFile = path.join(btStateDir, 'aria2-session.txt')
+  try {
+    await access(sessionFile, fsConstants.F_OK)
+  } catch {
+    await writeFile(sessionFile, '', 'utf8')
+  }
+  const dhtFile = path.join(btStateDir, 'dht.dat')
+  const warningLog = path.join(btStateDir, 'aria2-warnings.log')
+
   const rpcSecret = randomBytes(24).toString('hex')
   process.env.ARIA2_RPC_URL = `http://127.0.0.1:${aria2RpcPort}/jsonrpc`
   process.env.ARIA2_RPC_SECRET = rpcSecret
@@ -331,6 +343,22 @@ async function startAria2Sidecar() {
       `--rpc-listen-port=${aria2RpcPort}`,
       `--rpc-secret=${rpcSecret}`,
       '--continue=true',
+      '--enable-dht=true',
+      '--enable-dht6=false',
+      '--enable-peer-exchange=true',
+      '--bt-enable-lpd=true',
+      '--bt-load-saved-metadata=true',
+      '--bt-max-peers=96',
+      '--bt-tracker-connect-timeout=20',
+      '--bt-tracker-timeout=35',
+      '--listen-port=24000-24099',
+      '--dht-listen-port=24100-24199',
+      `--dht-file-path=${dhtFile}`,
+      `--input-file=${sessionFile}`,
+      `--save-session=${sessionFile}`,
+      '--save-session-interval=30',
+      `--log=${warningLog}`,
+      '--log-level=warn',
       '--disable-ipv6=true',
       '--async-dns=false',
       '--max-connection-per-server=16',

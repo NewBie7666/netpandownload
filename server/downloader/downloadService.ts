@@ -1,4 +1,5 @@
 import { mkdir, rm, stat } from 'node:fs/promises'
+import { btDownloadOptions, infoHashFromMagnet, metadataDiagnostic, normalizeBtih } from './btSupport.js'
 import { homedir } from 'node:os'
 import path from 'node:path'
 import { spawn } from 'node:child_process'
@@ -37,7 +38,16 @@ import {
 
 const allowedDownloadUrlCache = new Map<string, number>()
 const allowedDownloadUrlTtlMs = 30 * 60 * 1000
-const downloadTaskHistorySize = 20
+const downloadTaskHistorySize = 50
+const btNames = new Map<string, string>()
+const btFirstSeen = new Map<string, number>()
+let btAddSerial: Promise<unknown> = Promise.resolve()
+
+function runBtAddSerial<T>(callback: () => Promise<T>): Promise<T> {
+  const current = btAddSerial.then(callback, callback)
+  btAddSerial = current.catch(() => undefined)
+  return current
+}
 
 function cleanupAllowedUrls() {
   const now = Date.now()
@@ -181,16 +191,34 @@ function normalizeTask(task: Aria2TaskPayload): DownloadTask {
   const downloadSpeed = toNumber(task.downloadSpeed)
   const progress = totalLength > 0 ? Math.min(100, Math.round((completedLength / totalLength) * 100)) : 0
   const filePath = task.files?.[0]?.path || ''
-
+  const hash = normalizeBtih(task.infoHash || '') || infoHashFromMagnet(filePath)
+  const isTorrent = Boolean(hash || task.bittorrent || btNames.has(task.gid) || /[[]METADATA[]]/i.test(filePath))
+  const hasMetadata = Boolean(task.bittorrent?.info?.name) || (isTorrent && totalLength > 0)
+  const metadataPending = isTorrent && !hasMetadata && task.status !== 'complete' && task.status !== 'error'
+  if (metadataPending && !btFirstSeen.has(task.gid)) btFirstSeen.set(task.gid, Date.now())
+  if (!metadataPending) btFirstSeen.delete(task.gid)
+  const elapsed = metadataPending ? Math.floor((Date.now() - (btFirstSeen.get(task.gid) || Date.now())) / 1000) : 0
+  const connections = toNumber(task.connections)
+  const seeders = toNumber(task.numSeeders)
+  const friendlyName = task.bittorrent?.info?.name || btNames.get(task.gid) ||
+    (filePath && !/[[]METADATA[]]/i.test(filePath) ? path.basename(filePath) : '') ||
+    (isTorrent ? 'BT元数据获取中' : task.gid)
   return {
     gid: task.gid,
-    fileName: filePath ? path.basename(filePath) : task.gid,
+    fileName: friendlyName,
     status: (task.status || 'waiting') as DownloadTask['status'],
-    totalLength,
-    completedLength,
-    downloadSpeed,
-    progress,
-    dir: task.dir
+    totalLength, completedLength, downloadSpeed, progress,
+    dir: task.dir,
+    isTorrent,
+    infoHash: hash || undefined,
+    metadataPending,
+    metadataElapsedSeconds: metadataPending ? elapsed : undefined,
+    connections: isTorrent ? connections : undefined,
+    numSeeders: isTorrent ? seeders : undefined,
+    errorCode: task.errorCode || undefined,
+    errorMessage: task.errorMessage || undefined,
+    diagnosis: task.errorMessage || (metadataPending ? metadataDiagnostic(elapsed, connections, seeders) : undefined),
+    followedBy: task.followedBy
   }
 }
 
@@ -250,12 +278,28 @@ export async function addDownloadTask(input: AddDownloadRequest): Promise<AddDow
   ensureDownloadUrlAllowed(input.url, normalizedUrl)
 
   const dir = await ensureDownloadDir(input.dir || (await getEffectiveDownloadDir()))
-  const isMagnet = normalizedUrl.protocol === 'magnet:'
-  // Aria2 refuses HTTP-specific options (split/out) for BitTorrent.
-  const rpcOptions = isMagnet
-    ? { dir, 'bt-save-metadata': 'true', 'seed-time': '0' }
-    : getDefaultDownloadOptions(input.fileName, dir)
-  const headers = isMagnet ? [] : getDownloadRequestHeaders(normalizedUrl)
+  if (normalizedUrl.protocol === 'magnet:') {
+    const infoHash = infoHashFromMagnet(normalizedUrl.toString())
+    if (!infoHash) throw new AppError('invalid_magnet', 'BT Info Hash 不合法')
+    return runBtAddSerial(async () => {
+      const existing = [...await aria2TellActive(), ...await aria2TellWaiting(0, 100), ...await aria2TellStopped(0, 100)]
+        .find(task => normalizeBtih(task.infoHash || '') === infoHash &&
+          task.status !== 'error' && task.status !== 'removed')
+      if (existing) {
+        return { gid: existing.gid, duplicate: true }
+      }
+      const gid = await aria2AddUri(normalizedUrl.toString(), btDownloadOptions(dir))
+      const title = String(input.fileName || '').trim()
+      if (title) btNames.set(gid, title.slice(0, 240))
+      btFirstSeen.set(gid, Date.now())
+      return { gid, duplicate: false }
+    })
+  }
+
+  // Preserve HTTP download settings; BitTorrent-only options must not leak here.
+  const options = getDefaultDownloadOptions(input.fileName, dir)
+  const rpcOptions = options.out ? options : { ...options, out: undefined }
+  const headers = getDownloadRequestHeaders(normalizedUrl)
   const optionsWithHeaders = headers.length ? { ...rpcOptions, header: headers } : rpcOptions
   const sanitizedOptions = Object.entries(optionsWithHeaders).reduce<Record<string, string | string[]>>(
     (result, [key, value]) => {

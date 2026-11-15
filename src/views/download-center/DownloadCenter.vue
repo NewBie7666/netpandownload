@@ -34,7 +34,8 @@ const filterItems: { value: TaskFilter; label: string }[] = [
 
 const tasks = ref<ProductUiTask[]>([])
 const history = ref<ProductUiTask[]>([])
-const selectedTask = ref<ProductUiTask | null>(null)
+const selectedTaskId = ref('')
+const selectedTask = computed(() => tasks.value.find(task => task.id === selectedTaskId.value) || null)
 const filter = ref<TaskFilter>('all')
 const search = ref('')
 const message = ref('')
@@ -168,7 +169,7 @@ onBeforeUnmount(() => {
           </div>
         </div>
       </div>
-      <TaskList :tasks="filteredTasks" @select="selectedTask = $event" />
+      <TaskList :tasks="filteredTasks" @select="selectedTaskId = $event.id" />
     </div>
 
     <div class="dc-section">
@@ -181,7 +182,7 @@ onBeforeUnmount(() => {
       <HistoryPanel :items="history" />
     </div>
 
-    <TaskDetailDrawer :task="selectedTask" @close="selectedTask = null" />
+    <TaskDetailDrawer :task="selectedTask" @close="selectedTaskId = ''" />
   </section>
 </template>
 

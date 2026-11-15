@@ -13,6 +13,7 @@ interface Aria2RpcResponse<T> {
 
 interface Aria2TaskFile {
   path?: string
+  length?: string
 }
 
 export interface Aria2TaskPayload {
@@ -23,10 +24,17 @@ export interface Aria2TaskPayload {
   downloadSpeed?: string
   dir?: string
   files?: Aria2TaskFile[]
-  bittorrent?: { info?: { name?: string } }
+  bittorrent?: { info?: { name?: string }; announceList?: string[][] }
+  infoHash?: string
+  connections?: string
+  numSeeders?: string
+  errorCode?: string
+  errorMessage?: string
+  followedBy?: string[]
+  following?: string
 }
 
-const taskKeys = ['gid', 'status', 'totalLength', 'completedLength', 'downloadSpeed', 'dir', 'files', 'bittorrent']
+const taskKeys = ['gid', 'status', 'totalLength', 'completedLength', 'downloadSpeed', 'dir', 'files', 'bittorrent', 'infoHash', 'connections', 'numSeeders', 'errorCode', 'errorMessage', 'followedBy', 'following']
 
 function getAria2Env() {
   return {
@@ -129,6 +137,10 @@ export function aria2TellWaiting(offset = 0, num = 20) {
 
 export function aria2TellStopped(offset = 0, num = 20) {
   return callAria2<Aria2TaskPayload[]>('tellStopped', [offset, num, taskKeys])
+}
+
+export function aria2SaveSession() {
+  return callAria2<string>('saveSession')
 }
 
 export function aria2TellStatus(gid: string) {
