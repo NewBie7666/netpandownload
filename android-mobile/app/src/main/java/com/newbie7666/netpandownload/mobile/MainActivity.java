@@ -32,9 +32,11 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InterruptedIOException;
 import java.io.OutputStream;
 import org.json.JSONObject;
 import org.json.JSONArray;
+import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 import java.util.concurrent.ScheduledExecutorService;
@@ -45,7 +47,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import kotlin.Unit;
-import kotlin.jvm.functions.Function3;
 
 /**
  * Standalone downloader. No Express, Electron, LAN service or cloud parser.
@@ -54,6 +55,7 @@ import kotlin.jvm.functions.Function3;
 public final class MainActivity extends Activity {
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private final AtomicBoolean cancelled = new AtomicBoolean(false);
+    private final InstagramProvider instagram = new InstagramProvider(cancelled::get);
     private final AtomicBoolean timedOut = new AtomicBoolean(false);
     private final ScheduledExecutorService timeoutWorker = Executors.newSingleThreadScheduledExecutor();
     private final StringBuilder lastLog = new StringBuilder();
@@ -76,6 +78,7 @@ public final class MainActivity extends Activity {
     private Button clearCookieButton;
     private TextView extractorVersionText;
     private volatile boolean busy;
+    private boolean mediaTaskActive;
     private volatile boolean ready;
     private volatile String activeProcessId = "";
 
@@ -90,7 +93,7 @@ public final class MainActivity extends Activity {
                 FFmpeg.getInstance().init(getApplicationContext());
                 ready = true;
                 String version = extractorVersion();
-                updateStatus("解析器就绪（yt-dlp " + version + "）。Instagram 建议先点「更新解析器」。");
+                updateStatus("解析器就绪。公开 Instagram 视频优先使用网页解析。");
                 runOnUiThread(() -> {
                     extractorVersionText.setText("yt-dlp 版本：" + version);
                     setButtons(false);
@@ -274,12 +277,23 @@ public final class MainActivity extends Activity {
         updateExtractorButton.setEnabled(ready && !isBusy);
         importCookieButton.setEnabled(!isBusy);
         clearCookieButton.setEnabled(!isBusy);
-        cancelButton.setEnabled(isBusy && !activeProcessId.isEmpty());
+        cancelButton.setEnabled(isBusy && mediaTaskActive);
     }
 
     private void setBusy(boolean value) {
         busy = value;
-        runOnUiThread(() -> setButtons(value));
+        runOnUiThread(() -> {
+            if (!value) mediaTaskActive = false;
+            setButtons(value);
+        });
+    }
+
+    private void beginMediaTask() {
+        cancelled.set(false);
+        timedOut.set(false);
+        resetLog();
+        mediaTaskActive = true;
+        setBusy(true);
     }
 
     private void updateStatus(String value) {
@@ -294,12 +308,22 @@ public final class MainActivity extends Activity {
         if (busy || !ready) return;
         String url = checkedUrl();
         if (url == null) return;
-        cancelled.set(false);
-        setBusy(true);
-        updateStatus("正在检查视频信息（可能需要访问 Instagram API）…");
+        beginMediaTask();
+        updateStatus("正在检查视频信息…");
         worker.execute(() -> {
             String taskId = "netpan-info-" + UUID.randomUUID();
             try {
+                if (UrlTools.isInstagramVideoUrl(url)) {
+                    try {
+                        updateStatus("正在解析 Instagram 公开网页…");
+                        InstagramPage.Post post = instagram.inspect(url);
+                        checkMediaCancelled();
+                        showVideoInfo(url, "Instagram 网页", post.title(), post.videos().size());
+                        return;
+                    } catch (IOException error) {
+                        fallBackFromInstagram(error);
+                    }
+                }
                 YoutubeDLRequest request = new YoutubeDLRequest(url);
                 configureExtractorRequest(request, url);
                 request.addOption("--skip-download");
@@ -308,17 +332,34 @@ public final class MainActivity extends Activity {
                 JSONObject info = new JSONObject(json.trim());
                 String title = info.optString("title", "(无标题)");
                 JSONArray entries = info.optJSONArray("entries");
-                String entryCount = entries != null ? "\\n资源数量：" + entries.length() : "";
-                updateDetails("来源：" + UrlTools.category(url) + "\\n标题：" + title +
-                        entryCount + "\\n\\n可以点击「下载视频到手机」。");
-                updateStatus("解析完成。");
+                showVideoInfo(url, "yt-dlp", title, entries == null ? 0 : entries.length());
             } catch (Exception error) {
-                updateStatus("解析失败：" + friendlyMediaError(url, error));
-                showFailureLog(error);
+                if (cancelled.get()) updateStatus("解析已取消。");
+                else {
+                    updateStatus("解析失败：" + friendlyMediaError(url, error));
+                    showFailureLog(error);
+                }
             } finally {
                 setBusy(false);
             }
         });
+    }
+
+    private void showVideoInfo(String url, String extractor, String title, int count) {
+        String entryCount = count == 0 ? "" : "\n资源数量：" + count;
+        updateDetails("来源：" + UrlTools.category(url) + "\n解析方式：" + extractor + "\n标题：" + title +
+                entryCount + "\n\n可以点击「下载视频到手机」。");
+        updateStatus("解析完成。");
+    }
+
+    private void fallBackFromInstagram(IOException error) throws InterruptedIOException {
+        checkMediaCancelled();
+        appendLog("Instagram 网页解析或下载：" + friendlyError(error));
+        updateStatus("Instagram 网页处理未完成，正在尝试 yt-dlp…");
+    }
+
+    private void checkMediaCancelled() throws InterruptedIOException {
+        if (cancelled.get()) throw new InterruptedIOException("用户取消任务");
     }
 
     private void startDownload() {
@@ -326,8 +367,7 @@ public final class MainActivity extends Activity {
         String url = checkedUrl();
         if (url == null) return;
         closeKeyboard();
-        cancelled.set(false);
-        setBusy(true);
+        beginMediaTask();
         runOnUiThread(() -> progressBar.setProgress(0));
         updateStatus("准备下载：" + UrlTools.category(url));
         worker.execute(() -> performDownload(url));
@@ -349,33 +389,39 @@ public final class MainActivity extends Activity {
             stage = new File(root, "temp-" + taskId);
             if (!stage.mkdirs()) throw new IOException("无法创建临时文件夹");
 
-            YoutubeDLRequest request = new YoutubeDLRequest(url);
-            configureExtractorRequest(request, url);
-            request.addOption("--no-mtime");
-            request.addOption("--yes-playlist");
-            request.addOption("--merge-output-format", "mp4");
-            request.addOption("--no-overwrites");
-            request.addOption("-f", UrlTools.preferredFormat(url));
-            request.addOption("-o", new File(stage, "%(extractor_key)s-%(id)s-%(autonumber)03d.%(ext)s").getAbsolutePath());
+            boolean isInstagram = UrlTools.isInstagramVideoUrl(url);
+            List<File> nativeOutputs = isInstagram ? downloadInstagram(url, stage) : null;
+            File[] outputs;
+            if (nativeOutputs != null) {
+                outputs = nativeOutputs.toArray(new File[0]);
+            } else {
+                YoutubeDLRequest request = new YoutubeDLRequest(url);
+                configureExtractorRequest(request, url);
+                request.addOption("--no-mtime");
+                request.addOption("--yes-playlist");
+                request.addOption("--merge-output-format", "mp4");
+                request.addOption("--no-overwrites");
+                request.addOption("-f", UrlTools.preferredFormat(url));
+                request.addOption("-o", new File(stage, "%(extractor_key)s-%(id)s-%(autonumber)03d.%(ext)s").getAbsolutePath());
+                runYtDlp(request, taskId, false);
+                outputs = stage.listFiles();
+            }
 
-            runYtDlp(request, taskId, false);
-            if (cancelled.get()) return;
-
-            File[] outputs = stage.listFiles();
+            checkMediaCancelled();
             int saved = 0;
             if (outputs != null) {
                 for (File item : outputs) {
-                    if (cancelled.get()) return;
+                    checkMediaCancelled();
                     if (item.isFile() && item.length() > 0 &&
                             !item.getName().endsWith(".part") &&
                             !item.getName().endsWith(".ytdl") &&
-                            (!UrlTools.isInstagramVideoUrl(url) || UrlTools.isVideoFilename(item.getName()))) {
+                            (!isInstagram || UrlTools.isVideoFilename(item.getName()))) {
                         publishDownload(item);
                         saved++;
                     }
                 }
             }
-            if (saved == 0) throw new IOException(UrlTools.isInstagramVideoUrl(url)
+            if (saved == 0) throw new IOException(isInstagram
                     ? "没有提取到视频文件：可能是纯图片帖子、需要登录或内容不可访问"
                     : "解析成功，但没有找到完整视频文件");
             final int total = saved;
@@ -394,10 +440,30 @@ public final class MainActivity extends Activity {
         }
     }
 
+    private List<File> downloadInstagram(String url, File stage) throws IOException {
+        File nativeStage = new File(stage, "instagram");
+        if (!nativeStage.mkdir()) throw new IOException("无法创建 Instagram 临时文件夹");
+        try {
+            updateStatus("正在解析 Instagram 公开网页…");
+            InstagramPage.Post post = instagram.inspect(url);
+            updateStatus("Instagram MP4 下载中…");
+            return instagram.download(post, nativeStage, percent -> runOnUiThread(() -> {
+                if (cancelled.get()) return;
+                progressBar.setProgress(Math.min(99, percent));
+                statusText.setText("Instagram MP4 下载中：" + percent + "%");
+            }));
+        } catch (IOException error) {
+            deleteTree(nativeStage);
+            fallBackFromInstagram(error);
+            return null;
+        }
+    }
+
     private void cancelDownload() {
         if (!busy) return;
         cancelled.set(true);
         updateStatus("正在取消任务……");
+        instagram.cancel();
         String task = activeProcessId;
         if (!task.isEmpty()) {
             new Thread(() -> {
@@ -535,7 +601,7 @@ public final class MainActivity extends Activity {
 
     private String runYtDlp(YoutubeDLRequest request, String taskId, boolean inspecting)
             throws Exception {
-        resetLog();
+        checkMediaCancelled();
         timedOut.set(false);
         downloadStarted = false;
         commandStartMs = SystemClock.elapsedRealtime();
@@ -543,13 +609,15 @@ public final class MainActivity extends Activity {
         activeProcessId = taskId;
         runOnUiThread(() -> setButtons(true));
         ScheduledFuture<?> watchdog = timeoutWorker.scheduleAtFixedRate(() -> {
-            if (!taskId.equals(activeProcessId) || timedOut.get() || cancelled.get()) return;
+            if (!taskId.equals(activeProcessId) || timedOut.get()) return;
             long now = SystemClock.elapsedRealtime();
             boolean initialTimeout = !downloadStarted && now - commandStartMs > EXTRACT_TIMEOUT_MS;
             boolean stalled = downloadStarted && now - lastActivityMs > STALL_TIMEOUT_MS;
-            if (initialTimeout || stalled) {
-                timedOut.set(true);
-                updateStatus("yt-dlp 响应超时，正在中止任务…");
+            if (cancelled.get() || initialTimeout || stalled) {
+                if (!cancelled.get()) {
+                    timedOut.set(true);
+                    updateStatus("yt-dlp 响应超时，正在中止任务…");
+                }
                 try {
                     YoutubeDL.getInstance().destroyProcessById(taskId);
                 } catch (Exception ignored) {
@@ -567,6 +635,7 @@ public final class MainActivity extends Activity {
                             final String status = line;
                             final int percent = Math.min(100, Math.max(0, Math.round(progress)));
                             runOnUiThread(() -> {
+                                if (cancelled.get()) return;
                                 if (status.contains("[download]")) {
                                     progressBar.setProgress(percent);
                                     statusText.setText("下载中：" + percent + "%");
@@ -638,13 +707,13 @@ public final class MainActivity extends Activity {
         if (!UrlTools.isInstagramVideoUrl(url)) {
             return timedOut.get() ? "请求超时，请检查网络和解析器状态。" : detail;
         }
-        return InstagramDiagnostics.summarize(detail + "\\n" + diagnosticTail(), timedOut.get());
+        return InstagramDiagnostics.summarize(detail + "\n" + diagnosticTail(), timedOut.get());
     }
 
     private void showFailureLog(Exception error) {
-        String log = InstagramDiagnostics.tail(friendlyError(error) + "\\n" + diagnosticTail(), 3200);
-        updateDetails("诊断日志（可长按复制）\\n" + log +
-                "\\n\\nCSRF 警告本身不代表最终原因。若提示登录要求，可手动导入本人账户 cookies.txt。");
+        String log = InstagramDiagnostics.tail(friendlyError(error) + "\n" + diagnosticTail(), 3200);
+        updateDetails("诊断日志（可长按复制）\n" + log +
+                "\n\nCSRF 警告本身不代表最终原因。若提示登录要求，可手动导入本人账户 cookies.txt。");
     }
 
     private String friendlyError(Exception error) {
