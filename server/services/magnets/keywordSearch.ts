@@ -51,7 +51,10 @@ export function parseMovieCards(html: string): MagnetMovie[] {
     try {
       const url = new URL(href.replace(/&amp;/gi, '&'), BASE)
       if (url.origin !== BASE) continue
-      const rawCode = decodeURIComponent(url.pathname.split('/').filter(Boolean).pop() || '')
+      const parts = url.pathname.split('/').filter(Boolean)
+      // Search, actor and pagination paths are not movie detail URLs.
+      if (parts.length !== 1 && !(parts.length === 2 && /^(?:ja|cn|en)$/i.test(parts[0]))) continue
+      const rawCode = decodeURIComponent(parts[parts.length - 1] || '')
       code = normalizeVideoCode(rawCode)
     } catch {
       continue
