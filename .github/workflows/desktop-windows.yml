@@ -81,6 +81,9 @@ jobs:
             Stop-Process -Id $seed.Id -Force -ErrorAction SilentlyContinue
           }
 
+      - name: BT task deletion and file safety regression
+        run: npx tsx tests/release/btDelete.test.ts
+
       - name: Build portable Windows EXE
         run: npm run build:desktop
         env:
