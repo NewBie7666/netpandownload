@@ -62,6 +62,12 @@ declare global {
   }
 }
 
+type WorkspaceTab = 'magnet' | 'links' | 'downloads'
+type DownloadTab = 'tasks' | 'history'
+
+// UI-only navigation: all existing API and download handlers stay unchanged.
+const workspace = ref<WorkspaceTab>('magnet')
+const downloadTab = ref<DownloadTab>('tasks')
 const shareUrl = ref('')
 const passcode = ref('')
 const currentProviderId = ref<ProviderId | ''>('')
@@ -760,7 +766,26 @@ onBeforeUnmount(() => {
 <template>
   <div class="page-shell">
     <main class="container">
-      <MagnetSearch />
+      <header class="workspace-header">
+        <div class="workspace-title">
+          <h1>NetPanDownload</h1>
+          <p>一处搜索与解析，集中管理下载</p>
+        </div>
+        <nav class="workspace-tabs" aria-label="工作区">
+          <button type="button" :class="{ active: workspace === 'magnet' }" :aria-current="workspace === 'magnet' ? 'page' : undefined" @click="workspace = 'magnet'">磁力搜索</button>
+          <button type="button" :class="{ active: workspace === 'links' }" :aria-current="workspace === 'links' ? 'page' : undefined" @click="workspace = 'links'">链接解析</button>
+          <button type="button" :class="{ active: workspace === 'downloads' }" :aria-current="workspace === 'downloads' ? 'page' : undefined" @click="workspace = 'downloads'">下载管理 <span v-if="downloadTasks.length" class="task-count">{{ downloadTasks.length }}</span></button>
+        </nav>
+      </header>
+
+      <p v-if="errorMessage" class="message error" role="alert">{{ errorMessage }}</p>
+      <p v-if="noticeMessage" class="message success" role="status">{{ noticeMessage }}</p>
+
+      <div v-show="workspace === 'magnet'" class="workspace-section">
+        <MagnetSearch />
+      </div>
+
+      <div v-show="workspace === 'links'" class="workspace-section">
       <section class="panel parser-panel">
         <div class="form-row">
           <label for="share-url">资源链接</label>
@@ -817,9 +842,6 @@ onBeforeUnmount(() => {
         </div>
       </section>
 
-      <p v-if="errorMessage" class="message error">{{ errorMessage }}</p>
-      <p v-if="noticeMessage" class="message success">{{ noticeMessage }}</p>
-
       <section class="panel file-panel">
         <div class="table-header">
           <div>
@@ -871,8 +893,14 @@ onBeforeUnmount(() => {
           </table>
         </div>
       </section>
+      </div>
 
-      <section class="panel task-panel">
+      <div v-show="workspace === 'downloads'" class="workspace-section">
+        <div class="download-tabs" role="group" aria-label="下载管理视图">
+          <button type="button" :class="{ active: downloadTab === 'tasks' }" @click="downloadTab = 'tasks'">当前任务</button>
+          <button type="button" :class="{ active: downloadTab === 'history' }" @click="downloadTab = 'history'">统计与历史</button>
+        </div>
+      <section v-show="downloadTab === 'tasks'" class="panel task-panel">
         <div class="table-header">
           <div>
             <h2>下载任务</h2>
@@ -911,7 +939,8 @@ onBeforeUnmount(() => {
         </div>
       </section>
 
-      <DownloadCenter />
+      <DownloadCenter v-if="workspace === 'downloads' && downloadTab === 'history'" />
+      </div>
     </main>
 
     <div v-if="downloadDialog" class="modal-mask" @click.self="downloadDialog = null">
@@ -971,3 +1000,51 @@ onBeforeUnmount(() => {
     </div>
   </div>
 </template>
+
+<style scoped>
+.workspace-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 18px;
+}
+.workspace-title h1 { font-size: 23px; line-height: 1.25; }
+.workspace-title p { color: #64748b; font-size: 13px; margin-top: 5px; }
+.workspace-tabs, .download-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #f1f5f9;
+}
+.workspace-tabs button, .download-tabs button {
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #475569;
+  min-height: 40px;
+  padding: 8px 16px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+}
+.workspace-tabs button.active, .download-tabs button.active {
+  background: #ffffff;
+  color: #047857;
+  box-shadow: 0 1px 4px rgb(15 23 42 / 0.10);
+}
+.workspace-tabs button:focus-visible, .download-tabs button:focus-visible { outline: 2px solid #059669; outline-offset: 2px; }
+.task-count { display: inline-flex; align-items: center; justify-content: center; border-radius: 12px; background: #e2e8f0; padding: 1px 7px; font-size: 12px; margin-left: 4px; }
+.download-tabs { width: fit-content; margin: 0 0 14px; }
+.workspace-section > .task-panel, .workspace-section > .product-panel { margin-top: 0; }
+.workspace-section > .magnet-panel { margin-top: 0; }
+@media (max-width: 640px) {
+  .workspace-header { align-items: stretch; }
+  .workspace-tabs { width: 100%; }
+  .workspace-tabs button { flex: 1; padding: 8px 6px; }
+}
+</style>
