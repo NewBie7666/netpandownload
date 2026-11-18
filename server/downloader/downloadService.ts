@@ -350,31 +350,68 @@ export async function resumeDownloadTask(gid: string) {
 }
 
 /**
- * aria2.remove() moves active, paused and waiting tasks to the stopped list.
- * Remove the stopped record too; otherwise users still see a "Removed" task.
+ * An aria2.remove() response only acknowledges the request. The stopped record
+ * may not yet exist, so removeDownloadResult must not be sent immediately.
  */
-async function clearAria2TaskRecord(gid: string, status: string): Promise<void> {
-  if (status !== 'complete' && status !== 'error' && status !== 'removed') {
-    await aria2Remove(gid)
-  }
-  let lastError: unknown
-  for (let attempt = 0; attempt < 16; attempt++) {
+function isUnknownGid(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error)
+  return /(?:GID|download).*?(?:not found|does not exist|not exist|unknown)/i.test(message) ||
+    /(?:not found|does not exist|not exist|unknown).*?(?:GID|download)/i.test(message)
+}
+
+async function waitForStoppedTask(gid: string): Promise<'stopped' | 'missing'> {
+  for (let attempt = 0; attempt < 24; attempt++) {
     try {
-      await aria2RemoveDownloadResult(gid)
-      return
+      const task = await aria2TellStatus(gid)
+      if (['complete', 'error', 'removed'].includes(task.status)) return 'stopped'
     } catch (error) {
-      lastError = error
-      const message = error instanceof Error ? error.message : String(error)
-      // The task may have already been removed by aria2 itself.
-      if (/GID.*not found|GID.*not exist|not found.*GID/i.test(message)) return
-      if (attempt < 15) await sleep(150)
+      if (isUnknownGid(error)) return 'missing'
+      throw error
     }
+    await sleep(250)
   }
   throw new AppError(
-    'download_record_delete_failed',
-    '已停止下载，但 aria2 尚未清除任务记录：' + (lastError instanceof Error ? lastError.message : '请重试'),
+    'download_stop_timeout',
+    'aria2 未确认该任务已停止，为防止正在写入文件，暂不执行本地文件删除。请重试。',
     502
   )
+}
+
+interface RecordCleanup {
+  removed: boolean
+  warning?: string
+}
+
+async function clearAria2TaskRecord(gid: string, status: string): Promise<RecordCleanup> {
+  if (!['complete', 'error', 'removed'].includes(status)) {
+    try {
+      await aria2Remove(gid)
+    } catch (error) {
+      if (!isUnknownGid(error)) throw error
+    }
+  }
+
+  const final = await waitForStoppedTask(gid)
+  if (final === 'missing') return { removed: true }
+
+  // Some aria2 versions return HTTP 400 while a task is moving to the
+  // stopped list, and in other cases the record may be already purged.
+  let lastError: unknown
+  for (let attempt = 0; attempt < 8; attempt++) {
+    try {
+      await aria2RemoveDownloadResult(gid)
+      return { removed: true }
+    } catch (error) {
+      if (isUnknownGid(error)) return { removed: true }
+      lastError = error
+      if (attempt < 7) await sleep(250)
+    }
+  }
+  return {
+    removed: false,
+    warning: 'aria2 已停止下载，但任务历史记录未清除：' +
+      (lastError instanceof Error ? lastError.message : '请重试')
+  }
 }
 
 export async function removeDownloadTask(gid: string, input: RemoveDownloadRequest = {}) {
@@ -384,8 +421,8 @@ export async function removeDownloadTask(gid: string, input: RemoveDownloadReque
   }
 
   const task = await aria2TellStatus(gid)
-  // Validate manifest paths *before* removing anything. Never delete an entire
-  // BT folder: every target must be an individual aria2-reported regular file.
+  // Verify all aria2-reported file paths before stopping anything. Never
+  // recursively delete parent folders or paths outside configured downloads.
   const targets = input.deleteFile
     ? await prepareTaskFileDeletion(
       (task.files || []).map(file => String(file.path || '')),
@@ -393,28 +430,32 @@ export async function removeDownloadTask(gid: string, input: RemoveDownloadReque
     )
     : []
 
-  // On Windows deleting an active or paused file first often fails with EPERM.
-  // Stop the transfer, clear its history record, then release/delete its files.
-  await clearAria2TaskRecord(gid, task.status)
+  // A paused BT task can hold Windows file handles until it is stopped.
+  const cleaned = await clearAria2TaskRecord(gid, task.status)
   btNames.delete(gid)
   btFirstSeen.delete(gid)
-  // Persist the removal so stale tasks do not reappear next time the EXE starts.
   await aria2SaveSession().catch(() => undefined)
 
-  if (!input.deleteFile) return { gid, deletedFiles: 0 }
+  // Removing a stopped download record and deleting local files are two
+  // distinct operations. A 400 from removeDownloadResult must not prevent a
+  // safely stopped transfer from having its files deleted, when requested.
+  if (!input.deleteFile) {
+    return { gid, deletedFiles: 0, ...(cleaned.warning ? { warning: cleaned.warning } : {}) }
+  }
 
   try {
     const deletedFiles = await deletePreparedTaskFiles(targets)
-    return { gid, deletedFiles }
-  } catch (error) {
-    // Removing the task record was successful, but Windows may still hold a lock
-    // or another app may be using the file. Report the partial outcome honestly.
     return {
       gid,
-      deletedFiles: 0,
-      warning: error instanceof Error
-        ? '任务记录已删除，但部分本地文件未能删除：' + error.message
-        : '任务记录已删除，但部分本地文件未能删除，请手动检查下载目录。'
+      deletedFiles,
+      ...(cleaned.warning ? { warning: cleaned.warning + '。本地文件清理已执行。' } : {})
+    }
+  } catch (error) {
+    const fileWarning = error instanceof Error ? error.message : '请检查本地文件权限'
+    const recordWarning = cleaned.removed ? '下载记录已清除' : '下载任务已停止，但历史记录仍存在'
+    return {
+      gid, deletedFiles: 0,
+      warning: recordWarning + '；部分本地文件未能删除：' + fileWarning
     }
   }
 }

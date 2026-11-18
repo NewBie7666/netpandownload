@@ -22,6 +22,7 @@ type RecordState = { gid: string; status: string; files: { path: string }[] }
 const items = new Map<string, RecordState>()
 const rpcMethods: string[] = []
 let expectFileBeforeRemove: string | undefined
+const transitionCountdown = new Map<string, number>()
 
 globalThis.fetch = (async (_url: RequestInfo | URL, options?: RequestInit) => {
   const body = JSON.parse(String(options?.body || '{}')) as { method: string; params: unknown[] }
@@ -32,17 +33,34 @@ globalThis.fetch = (async (_url: RequestInfo | URL, options?: RequestInit) => {
   if (method === 'tellStatus') {
     const task = items.get(gid)
     if (!task) return new Response(JSON.stringify({ error: { message: 'GID not found' } }))
+    // Simulate asynchronous aria2 removal: RPC acknowledges the command while
+    // the transfer remains active until later status polls.
+    const left = transitionCountdown.get(gid)
+    if (left !== undefined) {
+      if (left <= 0) {
+        task.status = 'removed'
+        transitionCountdown.delete(gid)
+      } else {
+        transitionCountdown.set(gid, left - 1)
+      }
+    }
     result = task
   } else if (method === 'remove') {
     const task = items.get(gid)
     assert.ok(task, 'only an existing task can be removed')
     if (expectFileBeforeRemove) await access(expectFileBeforeRemove) // File must still exist.
-    task.status = 'removed'
+    if (gid === 'paused-gid') transitionCountdown.set(gid, 2)
+    else task.status = 'removed'
     result = gid
   } else if (method === 'removeDownloadResult') {
     const task = items.get(gid)
     assert.ok(task, 'only a known task should be cleaned up')
     assert.ok(['removed', 'complete', 'error'].includes(task.status))
+    if (gid === 'http400-gid') {
+      return new Response(JSON.stringify({
+        jsonrpc: '2.0', id: 1, error: { code: 1, message: 'GID is not yet removable' }
+      }), { status: 400 })
+    }
     items.delete(gid)
     result = 'OK'
   } else if (method === 'saveSession') {
@@ -64,7 +82,11 @@ try {
   await assert.rejects(access(paused))
   await assert.rejects(access(paused + '.aria2'))
   assert.ok(!items.has('paused-gid'))
-  assert.deepEqual(rpcMethods.slice(1, 4), ['remove', 'removeDownloadResult', 'saveSession'])
+  const pausedRpc = rpcMethods.slice(1)
+  assert.equal(pausedRpc[0], 'remove')
+  assert.equal(pausedRpc[1], 'tellStatus')
+  assert.equal(pausedRpc.filter(m => m === 'tellStatus').length, 3)
+  assert.ok(pausedRpc.indexOf('removeDownloadResult') > pausedRpc.indexOf('tellStatus'))
 
   // 2. Completed BT tasks may have multiple individually reported files.
   const nested = path.join(downloadDir, 'Collection')
@@ -116,7 +138,20 @@ try {
   const missing = await removeDownloadTask('missing-gid', { deleteFile: true })
   assert.equal(missing.deletedFiles, 0)
 
-  console.log('PASS: paused/completed/multi-file BT deletion, Windows file release order, record-only, path protection and metadata task.')
+  // 7. aria2 can emit HTTP 400 on removeDownloadResult even after the job is
+  // stopped; this must show its true RPC message and still delete local files.
+  const stubborn = path.join(downloadDir, 'http400.mp4')
+  await writeFile(stubborn, 'downloaded bytes')
+  items.set('http400-gid', {
+    gid: 'http400-gid', status: 'paused', files: [{ path: stubborn }]
+  })
+  const stubbornResult = await removeDownloadTask('http400-gid', { deleteFile: true })
+  assert.equal(stubbornResult.deletedFiles, 1)
+  assert.match(stubbornResult.warning || '', /aria2\.removeDownloadResult HTTP 400: GID is not yet removable/)
+  await assert.rejects(access(stubborn))
+  assert.equal(items.get('http400-gid')?.status, 'removed')
+
+  console.log('PASS: state-transition polling, paused/completed/multi-file BT deletion, RPC 400 partial cleanup and safety.')
 } finally {
   globalThis.fetch = originalFetch
   delete process.env.NETPAN_DATA_DIR

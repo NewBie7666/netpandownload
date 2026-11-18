@@ -84,15 +84,28 @@ async function callAria2<T>(method: string, params: unknown[] = []): Promise<T> 
       })
     })
 
-    if (!response.ok) {
-      throw new AppError('aria2_rpc_failed', `aria2 RPC returned HTTP ${response.status}`, 502)
+    // aria2 can return a JSON-RPC error body with HTTP 400. Read it before
+    // testing response.ok, otherwise the only visible clue is "HTTP 400".
+    const responseText = await response.text()
+    let payload: Aria2RpcResponse<T> = {}
+    try {
+      payload = JSON.parse(responseText) as Aria2RpcResponse<T>
+    } catch {
+      // Some HTTP errors are plain-text. Keep only a bounded, sanitized excerpt.
     }
-
-    const payload = (await response.json()) as Aria2RpcResponse<T>
+    const detail = String(payload.error?.message || (response.ok ? '' : responseText.slice(0, 400)))
+      .replaceAll(env.rpcSecret, '[redacted]')
+    if (!response.ok) {
+      throw new AppError(
+        'aria2_rpc_failed',
+        `aria2.${method} HTTP ${response.status}${detail ? ': ' + detail : ''}`,
+        502
+      )
+    }
     if (payload.error) {
       throw new AppError(
         'aria2_rpc_failed',
-        payload.error.message || `${method} failed`,
+        `aria2.${method}: ${detail || 'RPC error'}`,
         502
       )
     }
