@@ -45,6 +45,13 @@ interface KeywordResult {
 const searchMode = ref<'general' | 'keyword' | 'code'>('general')
 const categoryFilter = ref('all')
 const sourceFilter = ref('all')
+const showFilters = ref(false)
+const categoryLabels: Record<string, string> = {
+  all: '全部类型', movie: '电影', tv: '电视剧', book: '电子书', anime: '动漫', learning: '课程/学术'
+}
+const sourceLabels: Record<string, string> = {
+  all: '全部来源', bitsearch: 'BitSearch', nyaa: 'Nyaa', academic: 'Academic Torrents'
+}
 const generalResult = ref<GeneralResult | null>(null)
 const query = ref('')
 const searching = ref(false)
@@ -144,34 +151,47 @@ async function copyMagnet(value: string) {
 
 <template>
   <section class="panel parser-panel magnet-panel">
-    <h2>BT 磁力聚合搜索</h2>
-    <p class="magnet-help">默认检索电影、电视剧、书籍、动漫及公开课程的综合 BT 索引；各来源可独立选择。番号搜索单独保留。结果不代表资源可以下载，且请确保拥有下载及分享授权。</p>
+    <div class="magnet-heading">
+      <div>
+        <h2>磁力搜索</h2>
+        <p class="magnet-help">一个搜索框查找影视、图书、动漫与学术资源；番号检索可在左侧切换。请仅下载授权资源。</p>
+      </div>
+    </div>
     <form class="magnet-form" @submit.prevent="search">
-      <label for="magnet-mode">方式</label>
-      <select id="magnet-mode" v-model="searchMode" :disabled="searching || !!loadingCode" @change="resetResults">
-        <option value="general">通用磁力搜索</option>
-        <option value="keyword">番号关键词 / 部分番号</option>
-        <option value="code">完整番号（精确）</option>
-      </select>
-      <label for="magnet-code">{{ searchMode === 'code' ? '番号' : '关键词' }}</label>
-      <select v-if="searchMode === 'general'" id="magnet-category" v-model="categoryFilter" aria-label="资源分类" :disabled="searching">
-        <option value="all">全部类型</option>
-        <option value="movie">电影</option>
-        <option value="tv">电视剧</option>
-        <option value="book">图书 / 电子书</option>
-        <option value="anime">动漫</option>
-        <option value="learning">课程 / 学术</option>
-      </select>
-      <select v-if="searchMode === 'general'" id="magnet-source" v-model="sourceFilter" aria-label="搜索源" :disabled="searching">
-        <option value="all">全部通用搜索源</option>
-        <option value="bitsearch">BitSearch（综合）</option>
-        <option value="nyaa">Nyaa（动漫）</option>
-        <option value="academic">Academic Torrents（学术）</option>
-      </select>
-      <input id="magnet-code" v-model="query" :maxlength="searchMode === 'code' ? 32 : 80" autocomplete="off"
-        :placeholder="searchMode === 'general' ? '例如 Night of the Living Dead、Ubuntu、小说标题' : searchMode === 'keyword' ? '例如 FPRE、FPRE-24' : '例如 FPRE-249'"
-        :disabled="searching || !!loadingCode" />
-      <button class="primary-button" :disabled="searching || !!loadingCode || !query.trim()" type="submit">{{ searching ? '搜索中…' : '搜索' }}</button>
+      <div class="magnet-search-row">
+        <select id="magnet-mode" v-model="searchMode" aria-label="搜索模式" :disabled="searching || !!loadingCode" @change="resetResults">
+          <option value="general">通用搜索</option>
+          <option value="keyword">番号模糊</option>
+          <option value="code">番号精确</option>
+        </select>
+        <input id="magnet-code" v-model="query" :maxlength="searchMode === 'code' ? 32 : 80" autocomplete="off"
+          :aria-label="searchMode === 'code' ? '输入完整番号' : '输入搜索关键词'"
+          :placeholder="searchMode === 'general' ? '输入电影、电视剧、图书名称或关键词' : searchMode === 'keyword' ? '输入关键词或部分番号，如 FPRE-24' : '输入完整番号，如 FPRE-249'"
+          :disabled="searching || !!loadingCode" />
+        <button class="primary-button" :disabled="searching || !!loadingCode || !query.trim()" type="submit">{{ searching ? '搜索中…' : '搜索' }}</button>
+      </div>
+      <div v-if="searchMode === 'general'" class="magnet-filter-bar">
+        <button class="filter-toggle" type="button" :aria-expanded="showFilters" aria-controls="magnet-advanced" :disabled="searching" @click="showFilters = !showFilters">{{ showFilters ? '收起筛选' : '分类与来源筛选' }}</button>
+        <span class="magnet-filter-summary">{{ categoryLabels[categoryFilter] || '全部类型' }} · {{ sourceLabels[sourceFilter] || '全部来源' }}</span>
+      </div>
+      <div v-if="searchMode === 'general' && showFilters" id="magnet-advanced" class="magnet-advanced">
+        <label for="magnet-category">资源分类</label>
+        <select id="magnet-category" v-model="categoryFilter" :disabled="searching">
+          <option value="all">全部类型</option>
+          <option value="movie">电影</option>
+          <option value="tv">电视剧</option>
+          <option value="book">图书 / 电子书</option>
+          <option value="anime">动漫</option>
+          <option value="learning">课程 / 学术</option>
+        </select>
+        <label for="magnet-source">搜索源</label>
+        <select id="magnet-source" v-model="sourceFilter" :disabled="searching">
+          <option value="all">全部通用搜索源</option>
+          <option value="bitsearch">BitSearch（综合）</option>
+          <option value="nyaa">Nyaa（动漫）</option>
+          <option value="academic">Academic Torrents（学术）</option>
+        </select>
+      </div>
     </form>
     <p v-if="error" class="magnet-error" role="alert">{{ error }}</p>
     <p v-if="message" class="magnet-success" role="status">{{ message }}</p>
@@ -226,18 +246,36 @@ async function copyMagnet(value: string) {
 </template>
 
 <style scoped>
-.magnet-panel { margin-top: 22px; }
-.magnet-panel h2 { margin: 0 0 12px; }
-.magnet-help { color: #64748b; line-height: 1.6; }
-.magnet-form { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: 20px 0; }
-.magnet-form input { flex: 1 1 240px; min-width: 0; padding: 12px; border: 1px solid #cbd5e1; border-radius: 8px; }
-.magnet-form select { max-width: 210px; min-width: 0; padding: 12px; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; }
+.magnet-panel { padding: 24px 28px; }
+.magnet-heading { margin-bottom: 20px; }
+.magnet-heading h2 { margin: 0 0 7px; color: #0f172a; font-size: 19px; font-weight: 650; }
+.magnet-help { color: #64748b; line-height: 1.55; font-size: 13px; }
+.magnet-form { display: grid; gap: 10px; margin: 0 0 16px; }
+.magnet-search-row { display: flex; align-items: stretch; gap: 10px; }
+.magnet-search-row input { flex: 1; min-width: 0; padding: 11px 14px; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; font: inherit; outline: none; }
+.magnet-search-row input:focus { border-color: #059669; box-shadow: 0 0 0 3px #d1fae5; background: #fff; }
+.magnet-search-row select, .magnet-advanced select { border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; padding: 10px 12px; color: #334155; font: inherit; }
+.magnet-search-row select { width: 135px; }
+.magnet-filter-bar { display: flex; align-items: center; gap: 12px; padding-left: 2px; }
+.filter-toggle { border: 0; color: #047857; background: none; font: inherit; font-size: 13px; font-weight: 650; padding: 4px 0; }
+.filter-toggle:hover { text-decoration: underline; }
+.magnet-filter-summary { color: #64748b; font-size: 12px; }
+.magnet-advanced { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px; border: 1px solid #e2e8f0; border-radius: 10px; background: #f8fafc; }
+.magnet-advanced label { color: #475569; font-size: 13px; font-weight: 600; }
+.magnet-advanced select { min-width: 140px; }
 .magnet-results { margin-top: 16px; }
 .magnet-results h3 { margin: 18px 0 10px; }
 .magnet-result { display: flex; gap: 12px; justify-content: space-between; align-items: center; padding: 12px; border-top: 1px solid #e2e8f0; flex-wrap: wrap; }
 .magnet-result-info { display: grid; gap: 6px; min-width: 0; overflow-wrap: anywhere; flex: 1 1 240px; }
 .magnet-result-info small { color: #64748b; }
 .magnet-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
-.magnet-error { color: #b91c1c; }
-.magnet-success { color: #047857; }
+.magnet-error { color: #b91c1c; font-size: 13px; }
+.magnet-success { color: #047857; font-size: 13px; }
+@media (max-width: 640px) {
+  .magnet-panel { padding: 18px 16px; }
+  .magnet-search-row { flex-wrap: wrap; }
+  .magnet-search-row select { width: calc(40% - 5px); }
+  .magnet-search-row input { width: calc(60% - 5px); flex: 1; }
+  .magnet-search-row .primary-button { width: 100%; }
+}
 </style>
