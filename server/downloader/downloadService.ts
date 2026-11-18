@@ -1,4 +1,6 @@
-import { mkdir, rm, stat } from 'node:fs/promises'
+import { mkdir } from 'node:fs/promises'
+import { setTimeout as sleep } from 'node:timers/promises'
+import { prepareTaskFileDeletion, deletePreparedTaskFiles } from './taskFileDeletion.js'
 import { btDownloadOptions, infoHashFromMagnet, metadataDiagnostic, normalizeBtih } from './btSupport.js'
 import { homedir } from 'node:os'
 import path from 'node:path'
@@ -26,6 +28,7 @@ import {
   aria2Pause,
   aria2Remove,
   aria2RemoveDownloadResult,
+  aria2SaveSession,
   aria2TellActive,
   aria2TellStatus,
   aria2TellStopped,
@@ -222,53 +225,6 @@ function normalizeTask(task: Aria2TaskPayload): DownloadTask {
   }
 }
 
-function isPathInside(childPath: string, parentPath: string) {
-  const relative = path.relative(path.resolve(parentPath), path.resolve(childPath))
-  return Boolean(relative) && !relative.startsWith('..') && !path.isAbsolute(relative)
-}
-
-async function ensureSafeFileDeletePath(filePath: string) {
-  const resolvedFilePath = path.resolve(filePath)
-  const allowedDirs = [
-    await getEffectiveDownloadDir(),
-    await ensureDownloadDir(getDefaultDownloadDir())
-  ]
-
-  if (!allowedDirs.some((dir) => isPathInside(resolvedFilePath, dir))) {
-    throw new AppError('download_file_delete_forbidden', '只能删除下载目录内的任务文件', 403)
-  }
-
-  let fileStat
-  try {
-    fileStat = await stat(resolvedFilePath)
-  } catch {
-    throw new AppError('download_file_missing', '未找到该任务对应的本地文件')
-  }
-
-  if (!fileStat.isFile()) {
-    throw new AppError('download_file_delete_forbidden', '只能删除普通文件，不能删除目录', 403)
-  }
-
-  return resolvedFilePath
-}
-
-async function deleteTaskFile(task: Aria2TaskPayload) {
-  if ((task.files?.length || 0) > 1) {
-    throw new AppError('multi_file_delete_unsupported', '多文件 BT 任务暂不支持一键删除本地文件，请在资源管理器中处理')
-  }
-  const filePath = String(task.files?.[0]?.path || '').trim()
-  if (!filePath) {
-    throw new AppError('download_file_missing', '未找到该任务对应的本地文件路径')
-  }
-
-  const safePath = await ensureSafeFileDeletePath(filePath)
-  try {
-    await rm(safePath, { force: false })
-  } catch {
-    throw new AppError('download_file_delete_failed', '删除本地文件失败')
-  }
-}
-
 export async function addDownloadTask(input: AddDownloadRequest): Promise<AddDownloadResult> {
   if (!getAria2Availability().enabled) {
     throw new AppError('aria2_unavailable', getAria2Availability().message, 503)
@@ -393,6 +349,34 @@ export async function resumeDownloadTask(gid: string) {
   return { gid }
 }
 
+/**
+ * aria2.remove() moves active, paused and waiting tasks to the stopped list.
+ * Remove the stopped record too; otherwise users still see a "Removed" task.
+ */
+async function clearAria2TaskRecord(gid: string, status: string): Promise<void> {
+  if (status !== 'complete' && status !== 'error' && status !== 'removed') {
+    await aria2Remove(gid)
+  }
+  let lastError: unknown
+  for (let attempt = 0; attempt < 16; attempt++) {
+    try {
+      await aria2RemoveDownloadResult(gid)
+      return
+    } catch (error) {
+      lastError = error
+      const message = error instanceof Error ? error.message : String(error)
+      // The task may have already been removed by aria2 itself.
+      if (/GID.*not found|GID.*not exist|not found.*GID/i.test(message)) return
+      if (attempt < 15) await sleep(150)
+    }
+  }
+  throw new AppError(
+    'download_record_delete_failed',
+    '已停止下载，但 aria2 尚未清除任务记录：' + (lastError instanceof Error ? lastError.message : '请重试'),
+    502
+  )
+}
+
 export async function removeDownloadTask(gid: string, input: RemoveDownloadRequest = {}) {
   const availability = getAria2Availability()
   if (!availability.enabled) {
@@ -400,17 +384,39 @@ export async function removeDownloadTask(gid: string, input: RemoveDownloadReque
   }
 
   const task = await aria2TellStatus(gid)
-  if (input.deleteFile) {
-    await deleteTaskFile(task)
-  }
+  // Validate manifest paths *before* removing anything. Never delete an entire
+  // BT folder: every target must be an individual aria2-reported regular file.
+  const targets = input.deleteFile
+    ? await prepareTaskFileDeletion(
+      (task.files || []).map(file => String(file.path || '')),
+      [await getEffectiveDownloadDir(), await ensureDownloadDir(getDefaultDownloadDir())]
+    )
+    : []
 
-  if (task.status === 'complete' || task.status === 'error' || task.status === 'removed') {
-    await aria2RemoveDownloadResult(gid)
-  } else {
-    await aria2Remove(gid)
-  }
+  // On Windows deleting an active or paused file first often fails with EPERM.
+  // Stop the transfer, clear its history record, then release/delete its files.
+  await clearAria2TaskRecord(gid, task.status)
+  btNames.delete(gid)
+  btFirstSeen.delete(gid)
+  // Persist the removal so stale tasks do not reappear next time the EXE starts.
+  await aria2SaveSession().catch(() => undefined)
 
-  return { gid }
+  if (!input.deleteFile) return { gid, deletedFiles: 0 }
+
+  try {
+    const deletedFiles = await deletePreparedTaskFiles(targets)
+    return { gid, deletedFiles }
+  } catch (error) {
+    // Removing the task record was successful, but Windows may still hold a lock
+    // or another app may be using the file. Report the partial outcome honestly.
+    return {
+      gid,
+      deletedFiles: 0,
+      warning: error instanceof Error
+        ? '任务记录已删除，但部分本地文件未能删除：' + error.message
+        : '任务记录已删除，但部分本地文件未能删除，请手动检查下载目录。'
+    }
+  }
 }
 
 export async function openDownloadDirectory(): Promise<OpenDownloadDirResult> {
