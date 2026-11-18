@@ -69,8 +69,8 @@ try {
     addDownloadTask({ url: magnet, fileName: 'Legal test content' })
   ])
   assert.equal(a.gid, b.gid)
-  assert.equal(a.duplicate, false)
-  assert.equal(b.duplicate, true)
+  // Concurrent requests may reach the serialized queue in either order.
+  assert.deepEqual([a.duplicate, b.duplicate].sort(), [false, true])
   assert.equal(added, 1, 'the same infohash must be added once')
   const pending = (await listDownloadTasks()).tasks[0]
   assert.equal(pending.metadataPending, true)
