@@ -40,6 +40,9 @@ jobs:
       - name: Magnet search regression
         run: npx tsx tests/release/magnetSearch.test.ts
 
+      - name: General magnet search regression
+        run: npx tsx tests/release/magnetGeneralSearch.test.ts
+
       - name: Bilibili multi-part resolver regression
         run: npx tsx server/providers/bilibili/resolver/resolver.test.ts
 
