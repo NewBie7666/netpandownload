@@ -152,6 +152,12 @@ export interface RemoveDownloadRequest {
   deleteFile?: boolean
 }
 
+export interface RemoveDownloadResult {
+  gid: string
+  deletedFiles: number
+  warning?: string
+}
+
 export interface OpenDownloadDirResult {
   dir: string
 }
