@@ -87,6 +87,7 @@ const downloaderMessage = ref('')
 const downloaderDefaultDir = ref('')
 const taskActionGid = ref('')
 const deleteTaskDialog = ref<DownloadTask | null>(null)
+const deleteTaskError = ref('')
 const selectedFileIds = ref<string[]>([])
 const batchDownloadLoading = ref(false)
 const batchDownloadDone = ref(0)
@@ -668,22 +669,34 @@ async function toggleDownloadTask(task: DownloadTask) {
 }
 
 function requestDeleteDownloadTask(task: DownloadTask) {
+  deleteTaskError.value = ''
   deleteTaskDialog.value = task
 }
 
 async function confirmDeleteDownloadTask(deleteFile: boolean) {
   const task = deleteTaskDialog.value
-  if (!task) return
+  if (!task || taskActionGid.value) return
 
   clearMessages()
+  deleteTaskError.value = ''
   taskActionGid.value = task.gid
   try {
-    await removeDownloadTask(task.gid, { deleteFile })
-    noticeMessage.value = deleteFile ? 'Task record and local file removed' : 'Task record removed'
+    const outcome = await removeDownloadTask(task.gid, { deleteFile })
+    if (outcome.warning) {
+      errorMessage.value = outcome.warning
+    } else if (deleteFile) {
+      noticeMessage.value = outcome.deletedFiles
+        ? `已移除任务记录并删除 ${outcome.deletedFiles} 个本地文件。`
+        : '已移除任务记录；未发现需要删除的本地文件。'
+    } else {
+      noticeMessage.value = '已移除下载任务记录，原文件保留。'
+    }
     deleteTaskDialog.value = null
     await refreshDownloadTasks(true)
   } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : '删除下载任务失败'
+    const text = error instanceof Error ? error.message : '删除下载任务失败'
+    deleteTaskError.value = text
+    errorMessage.value = text
   } finally {
     taskActionGid.value = ''
   }
@@ -928,11 +941,12 @@ onBeforeUnmount(() => {
           <button class="icon-button" type="button" aria-label="关闭" @click="deleteTaskDialog = null">x</button>
         </div>
         <p class="modal-file">{{ deleteTaskDialog.fileName }}</p>
-        <p class="delete-note">请选择删除方式。本地文件只会在确认后删除。</p>
+        <p class="delete-note">请选择删除方式。下载中的任务会先停止，之后仅删除该任务关联的实际文件；其他文件不会被删除。</p>
+        <p v-if="deleteTaskError" class="message error" role="alert">{{ deleteTaskError }}</p>
         <div class="modal-actions">
-          <button class="ghost-button" type="button" @click="deleteTaskDialog = null">取消</button>
-          <button class="ghost-button" type="button" @click="confirmDeleteDownloadTask(false)">只删除记录</button>
-          <button class="danger-button" type="button" @click="confirmDeleteDownloadTask(true)">删除记录并删除本地文件</button>
+          <button class="ghost-button" type="button" :disabled="Boolean(taskActionGid)" @click="deleteTaskDialog = null">取消</button>
+          <button class="ghost-button" type="button" :disabled="Boolean(taskActionGid)" @click="confirmDeleteDownloadTask(false)">只删除记录</button>
+          <button class="danger-button" type="button" :disabled="Boolean(taskActionGid)" @click="confirmDeleteDownloadTask(true)">{{ taskActionGid ? '正在删除…' : '删除记录并删除本地文件' }}</button>
         </div>
       </div>
     </div>
