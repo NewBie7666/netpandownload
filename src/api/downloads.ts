@@ -6,7 +6,8 @@ import type {
   DownloadTask,
   DownloadTasksResult,
   OpenDownloadDirResult,
-  RemoveDownloadRequest
+  RemoveDownloadRequest,
+  RemoveDownloadResult
 } from '../../shared/types'
 
 async function postJson<T>(url: string, body: unknown): Promise<T> {
@@ -66,7 +67,7 @@ export function resumeDownloadTask(gid: string) {
 }
 
 export function removeDownloadTask(gid: string, payload: RemoveDownloadRequest = {}) {
-  return postJson<{ gid: string }>(`/api/downloads/remove/${encodeURIComponent(gid)}`, payload)
+  return postJson<RemoveDownloadResult>(`/api/downloads/remove/${encodeURIComponent(gid)}`, payload)
 }
 
 export function openDownloadDir() {
