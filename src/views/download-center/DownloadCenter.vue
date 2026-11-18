@@ -38,6 +38,44 @@ const selectedTaskId = ref('')
 const selectedTask = computed(() => tasks.value.find(task => task.id === selectedTaskId.value) || null)
 const filter = ref<TaskFilter>('all')
 const search = ref('')
+const showTaskOverview = ref(false)
+const showClearHistoryConfirm = ref(false)
+const historyNotice = ref('')
+const historyClearError = ref('')
+
+// The server does not expose a history-deletion endpoint. Keep this action
+// strictly presentational and persistent per client, without touching downloads.
+const HIDDEN_HISTORY_STORAGE_KEY = 'netpandownload-hidden-history-v1'
+const hiddenHistoryIds = ref<string[]>([])
+const visibleHistory = computed(() => {
+  const hidden = new Set(hiddenHistoryIds.value)
+  return history.value.filter(item => !hidden.has(item.id))
+})
+
+function restoreHiddenHistory() {
+  try {
+    const stored = JSON.parse(window.localStorage.getItem(HIDDEN_HISTORY_STORAGE_KEY) || '[]') as unknown
+    if (Array.isArray(stored)) {
+      hiddenHistoryIds.value = stored.filter((id): id is string => typeof id === 'string')
+    }
+  } catch {
+    // A damaged or unavailable local preference must not affect task retrieval.
+    hiddenHistoryIds.value = []
+  }
+}
+
+function clearVisibleHistory() {
+  historyClearError.value = ''
+  const ids = [...new Set([...hiddenHistoryIds.value, ...visibleHistory.value.map(item => item.id)])].slice(-2000)
+  try {
+    window.localStorage.setItem(HIDDEN_HISTORY_STORAGE_KEY, JSON.stringify(ids))
+    hiddenHistoryIds.value = ids
+    showClearHistoryConfirm.value = false
+    historyNotice.value = '已从当前设备的界面清除历史显示；下载文件和服务端历史存档均未删除。'
+  } catch {
+    historyClearError.value = '无法保存清除状态。请检查当前应用的本地存储权限。'
+  }
+}
 const message = ref('')
 const bilibiliCookieStatus = ref<'anonymous' | 'logged_in' | 'expired'>('anonymous')
 
@@ -112,6 +150,7 @@ async function refreshDownloadCenter(silent = false) {
 }
 
 onMounted(() => {
+  restoreHiddenHistory()
   void refreshDownloadCenter(true)
   pollTimer = window.setInterval(() => {
     void refreshDownloadCenter(true)
@@ -148,10 +187,17 @@ onBeforeUnmount(() => {
       <p>{{ message }}</p>
     </div>
 
-    <div class="dc-section">
+    <div class="dc-reveal-row">
+      <button class="ghost-button" type="button" :aria-expanded="showTaskOverview" @click="showTaskOverview = !showTaskOverview">
+        {{ showTaskOverview ? '收起聚合任务列表' : '查看聚合任务列表' }}
+      </button>
+      <span class="path-text">当前任务的操作请使用上方「当前任务」页面。</span>
+    </div>
+
+    <div v-if="showTaskOverview" class="dc-section">
       <div class="dc-section-header">
         <div>
-          <h3>任务列表</h3>
+          <h3>聚合任务列表</h3>
           <p>按任务标题、状态和来源查看下载进度</p>
         </div>
         <div class="dc-tools">
@@ -176,10 +222,25 @@ onBeforeUnmount(() => {
       <div class="dc-section-header">
         <div>
           <h3>历史记录</h3>
-          <p>只展示成功和失败的最终结果</p>
+          <p>仅显示已结束的任务；清除仅影响当前设备的显示</p>
+        </div>
+        <button class="ghost-button dc-clear-button" type="button"
+          :disabled="!visibleHistory.length" @click="historyNotice = ''; historyClearError = ''; showClearHistoryConfirm = true">
+          清除历史
+        </button>
+      </div>
+      <div v-if="showClearHistoryConfirm" class="dc-clear-confirm" role="alertdialog"
+        aria-labelledby="clear-history-title" aria-describedby="clear-history-description" aria-modal="false">
+        <strong id="clear-history-title">清除 {{ visibleHistory.length }} 条历史显示？</strong>
+        <p id="clear-history-description">此操作只隐藏本设备已显示的历史记录，刷新页面后仍有效。不会删除下载文件、服务端历史存档，也不会停止正在下载的任务。</p>
+        <p v-if="historyClearError" class="message error" role="alert">{{ historyClearError }}</p>
+        <div class="dc-clear-actions">
+          <button class="ghost-button" type="button" @click="showClearHistoryConfirm = false">取消</button>
+          <button class="danger-button" type="button" @click="clearVisibleHistory">确认清除显示</button>
         </div>
       </div>
-      <HistoryPanel :items="history" />
+      <p v-if="historyNotice" class="dc-history-notice" role="status">{{ historyNotice }}</p>
+      <HistoryPanel :items="visibleHistory" />
     </div>
 
     <TaskDetailDrawer :task="selectedTask" @close="selectedTaskId = ''" />
@@ -210,5 +271,31 @@ onBeforeUnmount(() => {
 .dc-health-badge.is-unstable {
   color: #b91c1c;
   background: #fee2e2;
+}
+.dc-reveal-row {
+  padding: 0 24px 14px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.dc-reveal-row .path-text { margin-top: 0; }
+.dc-clear-button { align-self: center; }
+.dc-clear-confirm {
+  margin: 14px 24px;
+  border: 1px solid #fecaca;
+  background: #fffafa;
+  border-radius: 10px;
+  padding: 16px 18px;
+  display: grid;
+  gap: 10px;
+}
+.dc-clear-confirm strong { color: #991b1b; font-size: 14px; }
+.dc-clear-confirm p { color: #475569; line-height: 1.5; font-size: 13px; }
+.dc-clear-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.dc-history-notice { margin: 12px 24px; font-size: 13px; color: #047857; }
+@media (max-width: 640px) {
+  .dc-reveal-row { padding: 0 16px 14px; }
+  .dc-clear-confirm { margin: 12px 16px; }
 }
 </style>
