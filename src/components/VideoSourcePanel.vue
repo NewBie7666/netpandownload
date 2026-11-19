@@ -159,7 +159,7 @@ onMounted(() => { void refresh().catch(e => { error.value = e instanceof Error ?
 <template>
   <section class="panel video-source-panel">
     <h2>影视源解析下载</h2>
-    <p class="video-hint">从影视仓复制 TVBox 配置网址或 JSON，选择站点搜索影片并选集下载。支持 Type3 JavaScript、JVM 与部分 DEX；依赖 Android 原生库的加固站点尚未兼容。</p>
+    <p class="video-hint">从影视仓复制 TVBox 配置网址或 JSON，选择站点搜索影片并选集下载。支持 Type3 JavaScript、JVM 与部分 DEX。Android 原生 Spider 可通过本机 ADB Gateway（需预先配置）尝试解析；Android 本机代理流尚不支持跨设备下载。</p>
     <form class="video-config-form" @submit.prevent="importSource">
       <label for="vs-config-input"><strong>影视源配置 URL / JSON</strong></label>
       <textarea id="vs-config-input" v-model="configInput" rows="2" required
