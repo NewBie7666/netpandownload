@@ -1,0 +1,43 @@
+name: Public search isolated build
+on:
+  pull_request:
+    paths: ['public-search/**', 'server/search-core/**', 'server/services/magnets/**', 'tests/public-search/**', 'package*.json', '.github/workflows/public-search.yml']
+  push:
+    branches: [main, 'codex/public-search-*']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  public-search:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - run: npm ci --ignore-scripts
+      - run: npm run test:public
+      - run: npx tsx tests/release/magnetSearch.test.ts
+      - run: npx tsx tests/release/magnetGeneralSearch.test.ts
+      - run: npx tsx tests/release/contractRegression.test.ts
+      - run: npm run build
+      - run: npm run package:public
+      - run: npm ci --omit=dev --ignore-scripts --prefix release/public-search-staging
+      - run: npm audit --omit=dev --prefix release/public-search-staging
+      - run: node public-search/scripts/smoke.mjs
+      - name: Validate isolated deployment templates
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y nginx-core
+          sudo python3 public-search/scripts/verify-nginx.py "$(command -v node)"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: netpandownload-public-search
+          path: |
+            release/netpandownload-public-search.zip
+            release/netpandownload-public-search.zip.sha256

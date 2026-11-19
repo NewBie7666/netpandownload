@@ -1,5 +1,13 @@
 # Quark Download MVP
 
+## Isolated public search edition
+
+`npm run package:public` builds a separate search-only frontend/API and creates
+`release/netpandownload-public-search.zip`. The public runtime has no download,
+task, settings, authentication or history routes. Existing desktop/local builds
+keep their full capabilities. Deploy it to a separate directory, user, service
+and hostname; see [公开搜索版部署指南](docs/PUBLIC_SEARCH_DEPLOY.md).
+
 Current versions of this project run as a local Quark MVP with both:
 
 - `Web + Local Express` development mode

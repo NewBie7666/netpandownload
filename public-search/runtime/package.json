@@ -1,0 +1,15 @@
+{
+  "name": "netpandownload-public-search",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node dist-public/server/public-search/server/index.js"
+  },
+  "dependencies": {
+    "express": "4.22.3"
+  }
+}

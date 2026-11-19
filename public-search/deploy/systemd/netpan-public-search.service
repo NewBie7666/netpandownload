@@ -1,0 +1,44 @@
+[Unit]
+Description=NetPanDownload public search service (isolated)
+Documentation=https://github.com/NewBie7666/netpandownload/blob/main/docs/PUBLIC_SEARCH_DEPLOY.md
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=netpan-public-search
+Group=netpan-public-search
+WorkingDirectory=/opt/netpan-public-search/current
+EnvironmentFile=-/etc/netpan-public-search.env
+ExecStart=/usr/bin/node /opt/netpan-public-search/current/dist-public/server/public-search/server/index.js
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=15s
+KillSignal=SIGTERM
+UMask=027
+LimitNOFILE=4096
+MemoryMax=384M
+TasksMax=64
+CPUQuota=100%
+
+# This process only serves the bundled public search page and makes outbound
+# HTTPS searches. It has no downloader binaries, private cookies, or data
+# directory and should not be able to write the release tree.
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+LockPersonality=true
+RestrictNamespaces=true
+RestrictSUIDSGID=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+ReadOnlyPaths=/opt/netpan-public-search/current
+
+[Install]
+WantedBy=multi-user.target
