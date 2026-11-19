@@ -25,7 +25,7 @@ public final class NetPanSpiderRunner {
     }
 
     public static void main(String[] args) {
-        final PrintStream resultOut = System.out;
+        final PrintStream resultOut = new PrintStream(System.out, true, java.nio.charset.StandardCharsets.UTF_8);
         System.setOut(System.err);
         int exitCode = 0;
         try {
@@ -34,7 +34,7 @@ public final class NetPanSpiderRunner {
             }
             final String[] values = new String[8];
             for (int index = 0; index < values.length; index++) {
-                values[index] = index < args.length ? args[index] : "";
+                values[index] = index < args.length ? decodeTransportArg(args[index]) : "";
             }
             String[] classPath = System.getProperty("java.class.path", "").split(java.util.regex.Pattern.quote(File.pathSeparator));
             URL[] urls = new URL[classPath.length];
@@ -66,6 +66,14 @@ public final class NetPanSpiderRunner {
             System.setOut(resultOut);
         }
         System.exit(exitCode);
+    }
+
+    /** Decode the ASCII wire format before invoking Spider methods. */
+    private static String decodeTransportArg(String value) {
+        final String prefix = "netpan_utf8_base64:";
+        if (!value.startsWith(prefix)) return value;
+        byte[] bytes = java.util.Base64.getDecoder().decode(value.substring(prefix.length()));
+        return new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
     }
 
     private static Throwable unwrap(Throwable error) {
