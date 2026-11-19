@@ -479,9 +479,14 @@ async function invokeRunner(runtime: JavaRuntime, jar: string, className: string
   const page = argument(args.page === undefined ? 1 : args.page, 'page', 8)
   const id = argument(args.id, 'id', 4096)
   const flag = argument(args.flag, 'flag', 512)
+  // java.exe converts Windows native argv through the process code page on
+  // some hosts, even with -Dfile.encoding=UTF-8. Encode every variable value
+  // as ASCII/Base64 and decode in our own runner before Spider invocation.
+  const utf8Arg = (value: string) => 'netpan_utf8_base64:' + Buffer.from(value, 'utf8').toString('base64')
   const result = await runBounded(runtime.java, [
     '-noverify', '-Xmx512m', '-Dfile.encoding=UTF-8', '-Dtvbox.spiderCacheDir=' + cacheDir,
-    '-cp', classpath, 'NetPanSpiderRunner', className, action, ext, keyword, page, id, flag, vipFlagsArgument(flags)
+    '-cp', classpath, 'NetPanSpiderRunner', className, action,
+    utf8Arg(ext), utf8Arg(keyword), utf8Arg(page), utf8Arg(id), utf8Arg(flag), utf8Arg(vipFlagsArgument(flags))
   ], { timeoutMs: JAVA_TIMEOUT_MS, maxStdout: MAX_JAVA_STDOUT, maxStderr: MAX_JAVA_STDERR })
   if (result.timedOut) throw appError('type3_java_timeout', 'JVM Spider 执行超时', 504)
   if (result.truncated) throw appError('type3_java_output_too_large', 'JVM Spider 输出超过安全上限', 422)
