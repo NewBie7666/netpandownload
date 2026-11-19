@@ -89,3 +89,15 @@ SHA256：`06616cbc221027d807acd512ac6258f4007c526a97c2548e458f673c85fe0b69`。�
 公开仓库中的证据已去除本机绝对路径和用户实际搜索词；原始诊断文件保留在本地。
 
 GitHub 同步说明：本次代码已整理到最新 main 的基础上，并重新通过完整预发布检查。上述 EXE 校验和与实网记录对应此前已验收的本地便携包，不表示已经为本次同步提交重新发布 EXE；分支上的 GitHub Actions 会另行构建代码产物。
+
+## 可选 Android 真实 Spider Gateway（新增，未完成真机验收）
+
+在原有 Windows JS/JVM/纯 DEX 支持之外，新增与 MTplayer Android SpiderGateway 的 **HTTP 协议适配**。仅通过 ADB 转发的本机回环接口发送带 Bearer token 的 `/v1/spider/search`、`detail`、`player` 请求。
+
+- 默认未启用；`NETPAN_TYPE3_GATEWAY_MODE=native` 仅在本机遇到 `type3_java_native_unsupported` 时转交 Android；`always` 可让非 JS 的 csp_* 源强制通过 Android 执行。
+- **没有实现 Windows 直接加载 wexguard ARM .so**；没有修改原有 .so 预检和 JVM 加载行为。
+- 目前完成的是本地模拟 Gateway 的协议回归与 provider 搜索/详情/播放解析，尚无 Android 实机 WexGuard 搜索、选线及下载的成功证据。
+- Android 设备的本机 `/media`、LAN 地址或 `/v1/spider/native/` 流需要单独的安全媒体中继；暂不允许绕过 SSRF 检查，也不标记下载成功。
+- 上游 DNS、GoProxy、业务接口和后续原生调用依然可能失败；不得使用“支持全量 Type3”描述当前状态。
+
+使用及安全说明见 [TYPE3_ANDROID_GATEWAY.md](TYPE3_ANDROID_GATEWAY.md)。MTplayer 与 MarcoMovie 第三方源码没有直接复制或打包进本仓库。
