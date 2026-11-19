@@ -2,6 +2,7 @@
 from pathlib import Path
 import subprocess
 import shutil
+import sys
 import tempfile
 
 source = Path(__file__).resolve().parents[1] / 'deploy/nginx-public-search.conf.in'
@@ -23,7 +24,7 @@ with tempfile.TemporaryDirectory(prefix='netpan-public-nginx-') as name:
     # unit with that executable, without creating /usr/bin/node or installing a unit.
     unit_source = source.parent / 'systemd/netpan-public-search.service'
     unit = folder / 'netpan-public-search.service'
-    node = shutil.which('node')
+    node = sys.argv[1] if len(sys.argv) > 1 else shutil.which('node')
     if not node:
         raise RuntimeError('Node.js is required to validate the unit')
     unit.write_text(unit_source.read_text(encoding='utf-8').replace('ExecStart=/usr/bin/node ', f'ExecStart={node} '), encoding='utf-8')
