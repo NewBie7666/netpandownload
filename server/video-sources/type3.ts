@@ -2,6 +2,7 @@ import type { VideoSource } from '../../shared/videoSources.js'
 import { AppError } from '../http.js'
 import { invokeJavaScriptSource } from './type3-js.js'
 import { invokeJavaSource } from './type3-java.js'
+import { invokeType3Gateway, shouldUseType3Gateway } from './type3-gateway.js'
 
 export type Type3Action = 'home' | 'search' | 'detail' | 'play'
 export interface Type3Arguments { keyword?: string; page?: number; id?: string; flag?: string }
@@ -20,9 +21,20 @@ export async function resolveType3WebMedia(url: string, headers: Record<string, 
 export async function invokeType3(source: VideoSource, action: Type3Action, args: Type3Arguments = {}): Promise<Record<string, unknown>> {
   let result: unknown
   try {
-    result = source.runtime === 'javascript'
-      ? await invokeJavaScriptSource(source, action, args)
-      : await invokeJavaSource(source, action, args)
+    if (source.runtime === 'javascript') {
+      result = await invokeJavaScriptSource(source, action, args)
+    } else if (shouldUseType3Gateway(action, source)) {
+      result = await invokeType3Gateway(source, action, args)
+    } else {
+      try {
+        result = await invokeJavaSource(source, action, args)
+      } catch (localError) {
+        // Fail over only on the independently confirmed Android-native ABI block.
+        // Do not hide a broken source, network failure, or parser regression.
+        if (!shouldUseType3Gateway(action, source, localError)) throw localError
+        result = await invokeType3Gateway(source, action, args)
+      }
+    }
   } catch (error) {
     if (error instanceof AppError) throw error
     const failure = error as { code?: unknown; message?: unknown }
