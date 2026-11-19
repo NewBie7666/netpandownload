@@ -20,7 +20,7 @@
     "build:desktop": "npm run build && npm run build:electron && electron-builder --win portable --x64 && node scripts/release/artifactIntegrityCheck.mjs",
     "dist:win": "npm run pre-release-check && electron-builder --win portable --x64 && node scripts/release/artifactIntegrityCheck.mjs",
     "test:video-sources": "tsx --test tests/downloads/videoSources.test.ts",
-    "test:type3": "tsx --tsconfig tsconfig.server.json --test tests/downloads/type3Js.test.ts tests/downloads/type3Java.test.ts tests/downloads/type3Integration.test.ts",
+    "test:type3": "tsx --tsconfig tsconfig.server.json --test tests/downloads/type3Js.test.ts tests/downloads/type3Java.test.ts tests/downloads/type3Integration.test.ts tests/downloads/type3Gateway.test.ts",
     "test:hls": "tsx --tsconfig tsconfig.server.json --test tests/downloads/hlsParser.test.ts tests/downloads/hlsNetwork.test.ts tests/downloads/hlsMedia.test.ts"
   },
   "dependencies": {
