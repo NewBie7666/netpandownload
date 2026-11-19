@@ -61,7 +61,7 @@ This direction is not fully implemented in the current version. The current proj
 
 打开桌面版顶部的「影视源下载」，粘贴影视仓 / TVBox 的配置网址或 JSON，点击「一键导入影视源」。支持 MacCMS JSON 站点（`type=1`），以及 Type3 JavaScript、标准 JVM JAR 和不依赖原生库的 DEX 转 JVM 调用。选择站点搜索影片、查看详情并点击剧集的「解析并下载」。MP4 使用 aria2，HLS 点播使用便携包内置的 FFmpeg 合并为 MP4。进度、失败原因和文件目录可在「下载管理」中查看。
 
-导入只保存配置。每个 Type3 站点能否运行还取决于脚本接口、Android API 和依赖库，实际执行错误会显示在界面。包含 Android ARM 原生库的加固 Spider（如当前王二小 newwex）尚未兼容。能力边界及真实测试记录见 [Type3 兼容性报告](docs/TYPE3_COMPATIBILITY.md)。已有最终 m3u8 地址时，可展开「直接下载 m3u8」。HLS 支持 MPEG-TS、fMP4 和标准 AES-128 点播，直播、DRM 和外置音轨暂不支持。暂停后的 HLS 任务从头下载。
+导入只保存配置。每个 Type3 站点能否运行还取决于脚本接口、Android API 和依赖库，实际执行错误会显示在界面。包含 Android ARM 原生库的加固 Spider（如当前王二小 newwex）尚未兼容。能力边界及真实测试记录见 [Type3 兼容性报告](docs/TYPE3_COMPATIBILITY.md)。对包含 Android ARM `.so` 的 `csp_*` 站点，可选使用 [ADB 转发的 Android Spider Gateway](docs/TYPE3_ANDROID_GATEWAY.md)：Android 运行真正的 Spider，Windows 接收搜索/详情/线路 JSON；当前不支持 Android 本地媒体代理流的跨设备直接下载，仍需真机验收。已有最终 m3u8 地址时，可展开「直接下载 m3u8」。HLS 支持 MPEG-TS、fMP4 和标准 AES-128 点播，直播、DRM 和外置音轨暂不支持。暂停后的 HLS 任务从头下载。
 
 构建 Type3 桌面运行时：从 TVBoxPC v1.8.1 发布页取得 `TVBoxPC_v1.8.1.zip`，执行 `npm run prepare:type3-java -- -ArchivePath <文件路径> -Force`。准备脚本复制 JRE、Android 桩、dex2jar 与库文件，编译本项目 Runner 并保留各依赖的许可声明。便携包包含该运行时，使用者不需要另外安装 Java。`npm run test:type3` 执行脚本、JVM、DEX 和 provider 集成回归；`node tests/e2e/type3LiveSmoke.mjs` 执行需联网的 NASA 自写验收源，并记录王二小实际执行结果。
 
