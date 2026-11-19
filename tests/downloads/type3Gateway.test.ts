@@ -129,11 +129,6 @@ test('Gateway dispatch is opt-in, limited to native ABI errors and rejects exter
     assert.equal(shouldUseType3Gateway('search', source, new AppError('type3_java_native_unsupported', 'native')), true)
     assert.equal(shouldUseType3Gateway('search', source, new AppError('type3_java_failed', 'broken')), false)
     assert.equal(shouldUseType3Gateway('search', { ...source, runtime: 'javascript' }, new AppError('type3_java_native_unsupported', 'native')), false)
-    await assert.rejects(() => invokeType3(source, 'search', { keyword: 'test' }).then(() => null).catch(error => {
-      // The normal JVM path may be missing in CI; exercise gateway configuration
-      // directly instead by selecting explicit mode below.
-      throw error
-    }))
     process.env.NETPAN_TYPE3_GATEWAY_MODE = 'always'
     await assert.rejects(
       () => invokeType3(source, 'search', { keyword: 'test' }),
