@@ -1,0 +1,33 @@
+{
+  "date": "2026-11-20",
+  "application": "<workspace>\\release\\win-unpacked\\Quark Desktop MVP.exe",
+  "fixture": "Self-written MacCMS directory served by httpbingo; MDN MP4 and Mux HLS public test media",
+  "checks": [
+    "TVBox URL import",
+    "Unknown format reported",
+    "Search and detail through UI",
+    "MP4 and HLS queue through UI",
+    "HLS pause/resume",
+    "Manual m3u8 form and task removal",
+    "Cross-origin API rejection",
+    "ffprobe video track and FFmpeg actual decode"
+  ],
+  "files": [
+    {
+      "file": "<temp>\\netpan-tvbox-smoke-9dkT54\\downloaded\\NetPan TVBox Smoke-HLS Sample-d4a8af5a.mp4",
+      "bytes": 10867100,
+      "codec": "h264",
+      "decoded": true
+    },
+    {
+      "file": "<temp>\\netpan-tvbox-smoke-9dkT54\\downloaded\\NetPan TVBox Smoke-MP4 Sample.mp4",
+      "bytes": 1128375,
+      "codec": "h264",
+      "decoded": true
+    }
+  ],
+  "publicationRedactions": {
+    "localPaths": true,
+    "userSearchQuery": true
+  }
+}

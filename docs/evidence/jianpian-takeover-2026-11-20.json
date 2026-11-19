@@ -1,0 +1,71 @@
+{
+  "date": "2026-11-20",
+  "selectedSource": {
+    "name": "贱片┃秒播",
+    "api": "csp_WexAiJianPianGuard",
+    "configUrl": "https://9280.kstore.vip/newwex.json",
+    "keyword": "<user-query>"
+  },
+  "runningAsarSha256": "9ebb461cf9238cc93acedffd2d7ebf3040bb552f5d4e33e9e39663cb79ecc082",
+  "matchesCurrentBuild": true,
+  "observedUiError": "type3_java_native_unsupported",
+  "productModified": false,
+  "originalGuardExperiment": {
+    "mode": "original Guard + actual DexNative; only reference placeholder excluded",
+    "exitCode": 1,
+    "stdout": "",
+    "stderr": "OpenJDK 64-Bit Server VM warning: Options -Xverify:none and -noverify were deprecated in JDK 13 and will likely be removed in a future release.\n[NetPanSpiderRunner] java.lang.ExceptionInInitializerError: null\njava.lang.ExceptionInInitializerError\n\tat com.github.catvod.spider.Init.init(Unknown Source)\n\tat java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)\n\tat java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(Unknown Source)\n\tat java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(Unknown Source)\n\tat java.base/java.lang.reflect.Method.invoke(Unknown Source)\n\tat NetPanSpiderRunner.initializeContextClass(NetPanSpiderRunner.java:120)\n\tat NetPanSpiderRunner.initializeGlobalSpiderState(NetPanSpiderRunner.java:107)\n\tat NetPanSpiderRunner.main(NetPanSpiderRunner.java:48)\nCaused by: java.lang.RuntimeException: java.lang.UnsatisfiedLinkError: <temp>\\netpan-spider-windows-research\\guard-host-cache\\cache\\.wexfnw463ixookf8: Can't load this .dll (machine code=0x34) on a AMD 64-bit platform\n\tat com.github.catvod.spider.DexNative.<clinit>(Unknown Source)\n\t... 8 more\nCaused by: java.lang.UnsatisfiedLinkError: <temp>\\netpan-spider-windows-research\\guard-host-cache\\cache\\.wexfnw463ixookf8: Can't load this .dll (machine code=0x34) on a AMD 64-bit platform\n\tat java.base/jdk.internal.loader.NativeLibraries.load(Native Method)\n\tat java.base/jdk.internal.loader.NativeLibraries$NativeLibraryImpl.open(Unknown Source)\n\tat java.base/jdk.internal.loader.NativeLibraries.loadLibrary(Unknown Source)\n\tat java.base/jdk.internal.loader.NativeLibraries.loadLibrary(Unknown Source)\n\tat java.base/java.lang.ClassLoader.loadLibrary(Unknown Source)\n\tat java.base/java.lang.Runtime.load0(Unknown Source)\n\tat java.base/java.lang.System.load(Unknown Source)\n\t... 9 more\n"
+  },
+  "nativeFunctionExperiment": {
+    "file": "<temp>/netpan-spider-windows-research/inner-native-calls.json",
+    "results": [
+      {
+        "method": "Java_com_wexfnw_libso_LoadNiMa_helloJNI",
+        "input": "",
+        "return": [
+          "str",
+          "hello JNI!"
+        ]
+      },
+      {
+        "method": "Java_com_wexfnw_libso_LoadNiMa_contains",
+        "input": "<user-query>",
+        "return": 0
+      },
+      {
+        "method": "Java_com_wexfnw_libso_LoadNiMa_contains",
+        "input": "三体",
+        "return": 0
+      }
+    ],
+    "limitation": "Standalone Unicorn probe only, not integrated into JVM or app; no search/detail/play/download success is implied."
+  },
+  "endToEnd": {
+    "search": false,
+    "detail": false,
+    "resolve": false,
+    "download": false
+  },
+  "businessDependencies": {
+    "guardLoader": "DexNative.getLoader/getSpider",
+    "searchFilter": "LoadNiMa.contains(String)",
+    "proxy": "GoProxy.startServer, local ports 8964-9998 / fallback 9978",
+    "mediaEndpoint": "http://127.0.0.1:9978/media",
+    "domainDiscovery": "AliDNS TXT swrdsfeiujo25sw.cc -> wangerniu.<suffix> -> resourceDomainConfig"
+  },
+  "networkDiagnostics": {
+    "defaultDomain": {
+      "host": "ev5356.970xw.com",
+      "result": "DNS failure; no HTTP response"
+    },
+    "previousCandidate": {
+      "host": "wangerniu.cqxkn.com",
+      "result": "DNS failure; no HTTP response"
+    },
+    "limitation": "Current dynamic TXT candidates were not fully validated; these DNS failures do not prove the entire source service is unavailable."
+  },
+  "publicationRedactions": {
+    "localPaths": true,
+    "userSearchQuery": true
+  }
+}

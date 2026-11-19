@@ -7,6 +7,7 @@ import path from 'node:path'
 import { spawn } from 'node:child_process'
 import type {
   AddDownloadRequest,
+  AddDirectDownloadRequest,
   AddDownloadResult,
   DownloadHealthResult,
   DownloadSettingsResult,
@@ -16,8 +17,11 @@ import type {
   OpenDownloadDirResult,
   RemoveDownloadRequest
 } from '../../shared/types.js'
+import { validateDirectDownloadInput } from './directDownload.js'
+import { normalizeMediaHeaders } from '../video-sources/mediaHeaders.js'
 import { getRuntimePort } from '../config.js'
 import { AppError } from '../http.js'
+import { isHlsGid, listHlsTasks, getHlsTask, pauseHls, resumeHls, removeHls } from '../hls/hlsTasks.js'
 import {
   getConfiguredDownloadDir,
   getDownloadSettings as readDownloadSettings,
@@ -225,7 +229,7 @@ function normalizeTask(task: Aria2TaskPayload): DownloadTask {
   }
 }
 
-export async function addDownloadTask(input: AddDownloadRequest): Promise<AddDownloadResult> {
+export async function addDownloadTask(input: AddDownloadRequest, mediaHeaders?: Record<string, string>): Promise<AddDownloadResult> {
   if (!getAria2Availability().enabled) {
     throw new AppError('aria2_unavailable', getAria2Availability().message, 503)
   }
@@ -255,7 +259,9 @@ export async function addDownloadTask(input: AddDownloadRequest): Promise<AddDow
   // Preserve HTTP download settings; BitTorrent-only options must not leak here.
   const options = getDefaultDownloadOptions(input.fileName, dir)
   const rpcOptions = options.out ? options : { ...options, out: undefined }
-  const headers = getDownloadRequestHeaders(normalizedUrl)
+  const headers = mediaHeaders
+    ? Object.entries(normalizeMediaHeaders(mediaHeaders)).map(([name, value]) => name + ': ' + value)
+    : getDownloadRequestHeaders(normalizedUrl)
   const optionsWithHeaders = headers.length ? { ...rpcOptions, header: headers } : rpcOptions
   const sanitizedOptions = Object.entries(optionsWithHeaders).reduce<Record<string, string | string[]>>(
     (result, [key, value]) => {
@@ -273,6 +279,14 @@ export async function addDownloadTask(input: AddDownloadRequest): Promise<AddDow
   return { gid }
 }
 
+/** Submit a validated public media URL from a trusted provider. */
+export async function addDirectDownloadTask(input: unknown, mediaHeaders?: Record<string, string>): Promise<AddDownloadResult> {
+  const safe = await validateDirectDownloadInput(input)
+  registerAllowedDownloadUrl(safe.url)
+  const request: AddDirectDownloadRequest = { url: safe.url, fileName: safe.fileName }
+  return addDownloadTask(request, mediaHeaders)
+}
+
 export async function listDownloadTasks(): Promise<DownloadTasksResult> {
   const availability = getAria2Availability()
   const defaultDir = await getEffectiveDownloadDir()
@@ -282,7 +296,7 @@ export async function listDownloadTasks(): Promise<DownloadTasksResult> {
       enabled: false,
       message: availability.message,
       defaultDir,
-      tasks: []
+      tasks: await listHlsTasks()
     }
   }
 
@@ -293,6 +307,7 @@ export async function listDownloadTasks(): Promise<DownloadTasksResult> {
   ])
 
   const tasks = [...active, ...waiting, ...stopped].map(normalizeTask)
+  tasks.push(...await listHlsTasks())
 
   return {
     enabled: true,
@@ -321,6 +336,7 @@ export async function updateDownloadSettings(input: { downloadDir?: string }): P
 }
 
 export async function getDownloadTaskStatus(gid: string) {
+  if (isHlsGid(gid)) return getHlsTask(gid)
   const availability = getAria2Availability()
   if (!availability.enabled) {
     throw new AppError('aria2_unavailable', availability.message, 503)
@@ -330,6 +346,7 @@ export async function getDownloadTaskStatus(gid: string) {
 }
 
 export async function pauseDownloadTask(gid: string) {
+  if (isHlsGid(gid)) return pauseHls(gid)
   const availability = getAria2Availability()
   if (!availability.enabled) {
     throw new AppError('aria2_unavailable', availability.message, 503)
@@ -340,6 +357,7 @@ export async function pauseDownloadTask(gid: string) {
 }
 
 export async function resumeDownloadTask(gid: string) {
+  if (isHlsGid(gid)) return resumeHls(gid)
   const availability = getAria2Availability()
   if (!availability.enabled) {
     throw new AppError('aria2_unavailable', availability.message, 503)
@@ -415,6 +433,7 @@ async function clearAria2TaskRecord(gid: string, status: string): Promise<Record
 }
 
 export async function removeDownloadTask(gid: string, input: RemoveDownloadRequest = {}) {
+  if (isHlsGid(gid)) return removeHls(gid, input)
   const availability = getAria2Availability()
   if (!availability.enabled) {
     throw new AppError('aria2_unavailable', availability.message, 503)

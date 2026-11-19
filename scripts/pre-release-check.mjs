@@ -8,6 +8,9 @@ const commands = [
   ['npx', ['tsx', 'tests/release/failureRegression.test.ts'], 'Release failure regression test'],
   ['npx', ['tsx', 'tests/release/contractRegression.test.ts'], 'Release contract regression test'],
   ['npx', ['tsx', 'tests/release/magnetSearch.test.ts'], 'Magnet search regression test'],
+  ['npm', ['run', 'test:video-sources'], 'TVBox video source regression test'],
+  ['npm', ['run', 'test:type3'], 'Type3 JavaScript/JVM integration regression'],
+  ['npm', ['run', 'test:hls'], 'HLS media regression test'],
   ['npx', ['tsx', 'scripts/stability/runLongSession.ts', '--mock'], 'Long-run stability mock test'],
   ['node', ['scripts/release/freeze-check.mjs'], 'RC freeze contract check']
 ]
@@ -16,6 +19,7 @@ function run(command, args, label) {
   console.log(`[pre-release-check] ${label}`)
   const result = spawnSync(command, args, {
     stdio: 'inherit',
+    env: { ...process.env, NETPAN_TYPE3_REQUIRE_RUNTIME: '1' },
     shell: process.platform === 'win32'
   })
 

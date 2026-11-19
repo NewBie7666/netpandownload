@@ -14,16 +14,23 @@
     "build:client": "vue-tsc --noEmit && vite build",
     "build:server": "tsc -p tsconfig.server.json",
     "build:electron": "tsc -p tsconfig.electron.json",
+    "prepare:ffmpeg": "powershell -ExecutionPolicy Bypass -File scripts/prepare-ffmpeg.ps1",
+    "prepare:type3-java": "powershell -ExecutionPolicy Bypass -File scripts/prepare-type3-java.ps1",
     "pre-release-check": "node scripts/pre-release-check.mjs",
-    "build:desktop": "npm run build && npm run build:electron && electron-builder --win portable",
-    "dist:win": "npm run pre-release-check && electron-builder --win portable && node scripts/release/artifactIntegrityCheck.mjs"
+    "build:desktop": "npm run build && npm run build:electron && electron-builder --win portable --x64 && node scripts/release/artifactIntegrityCheck.mjs",
+    "dist:win": "npm run pre-release-check && electron-builder --win portable --x64 && node scripts/release/artifactIntegrityCheck.mjs",
+    "test:video-sources": "tsx --test tests/downloads/videoSources.test.ts",
+    "test:type3": "tsx --tsconfig tsconfig.server.json --test tests/downloads/type3Js.test.ts tests/downloads/type3Java.test.ts tests/downloads/type3Integration.test.ts",
+    "test:hls": "tsx --tsconfig tsconfig.server.json --test tests/downloads/hlsParser.test.ts tests/downloads/hlsNetwork.test.ts tests/downloads/hlsMedia.test.ts"
   },
   "dependencies": {
     "@types/qrcode": "^1.5.6",
     "@vitejs/plugin-vue": "^5.2.4",
     "axios": "^1.7.9",
+    "cheerio": "1.0.0",
     "concurrently": "^9.1.2",
     "cors": "^2.8.5",
+    "crypto-js": "4.2.0",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "qrcode": "^1.5.4",
@@ -35,11 +42,11 @@
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.10.5",
     "cross-env": "^7.0.3",
     "electron": "^31.7.7",
     "electron-builder": "^24.13.3",
-    "@types/express": "^5.0.0",
-    "@types/node": "^22.10.5",
     "wait-on": "^7.2.0"
   },
   "build": {
@@ -68,13 +75,30 @@
         "filter": [
           "**/*"
         ]
+      },
+      {
+        "from": "resources/ffmpeg",
+        "to": "ffmpeg",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "resources/type3/java",
+        "to": "type3/java",
+        "filter": [
+          "**/*",
+          "!src/**/*",
+          "!tools/**/*"
+        ]
       }
     ],
     "win": {
       "signAndEditExecutable": false,
       "target": [
         "portable"
-      ]
+      ],
+      "artifactName": "NetPanDownload-${version}-windows-${arch}.${ext}"
     }
   }
 }

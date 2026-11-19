@@ -1,0 +1,103 @@
+{
+  "date": "2026-11-19T22:11:42.196Z",
+  "executable": "<workspace>\\release\\NetPanDownload-0.1.0-windows-x64.exe",
+  "scratch": "<temp>\\netpan-type3-live-llG94j",
+  "results": [
+    {
+      "runtime": "JavaScript",
+      "keyword": "Artemis",
+      "searchCount": 1,
+      "videoId": "Artemis Origins",
+      "title": "Artemis Origins",
+      "detailMatched": true,
+      "mediaUrl": "https://images-assets.nasa.gov/video/Artemis%20Origins/Artemis%20Origins~preview.mp4",
+      "output": "<temp>\\netpan-type3-live-llG94j\\downloaded\\be85800a-5a74-446b-998a-2e9ed3332af4\\Artemis Origins-Preview.mp4",
+      "gid": "a7762d7aa05d9fbe",
+      "bytes": 6797356,
+      "completedLength": 6797356,
+      "decoded": true,
+      "uiDownload": true
+    },
+    {
+      "runtime": "JVM JAR",
+      "keyword": "Artemis",
+      "searchCount": 1,
+      "videoId": "Artemis Origins",
+      "title": "Artemis Origins",
+      "detailMatched": true,
+      "mediaUrl": "https://images-assets.nasa.gov/video/Artemis%20Origins/Artemis%20Origins~preview.mp4",
+      "output": "<temp>\\netpan-type3-live-llG94j\\downloaded\\nasa-live-jvm\\Artemis Origins-Preview.mp4",
+      "gid": "0165dce04989b821",
+      "bytes": 6797356,
+      "completedLength": 6797356,
+      "decoded": true,
+      "uiDownload": false
+    },
+    {
+      "runtime": "DEX converted to JVM",
+      "keyword": "Artemis",
+      "searchCount": 1,
+      "videoId": "Artemis Origins",
+      "title": "Artemis Origins",
+      "detailMatched": true,
+      "mediaUrl": "https://images-assets.nasa.gov/video/Artemis%20Origins/Artemis%20Origins~preview.mp4",
+      "output": "<temp>\\netpan-type3-live-llG94j\\downloaded\\nasa-live-dex\\Artemis Origins-Preview.mp4",
+      "gid": "044b94daa675d67a",
+      "bytes": 6797356,
+      "completedLength": 6797356,
+      "decoded": true,
+      "uiDownload": false
+    }
+  ],
+  "browserParser": {
+    "fixture": true,
+    "parse": 1,
+    "url": "https://www.w3schools.com/html/mov_bbb.mp4",
+    "output": "<temp>\\netpan-type3-live-llG94j\\downloaded\\browser-parser\\HTML parser fixture-Video.mp4",
+    "bytes": 788493,
+    "decoded": true
+  },
+  "hlsPlayer": {
+    "fixture": true,
+    "output": "<temp>\\netpan-type3-live-llG94j\\downloaded\\hls-player\\Type3 HLS fixture-Sample-81aa337d.mp4",
+    "bytes": 10867100,
+    "decoded": true
+  },
+  "newwex": {
+    "imported": 100,
+    "api": "csp_AiNewHuaJuanGuard",
+    "response": {
+      "ok": false,
+      "error": "type3_java_native_unsupported",
+      "message": "该 Spider 包含 Android 原生库（.so），Windows JVM 适配器已拒绝执行；需要原生 Android 兼容层"
+    }
+  },
+  "fantaiying": {
+    "imported": 49,
+    "source": "🐯虎牙┃直播",
+    "apiUrl": "https://ghproxy.net/https://raw.githubusercontent.com/fantaiying7/EXT/refs/heads/main/drpy2.min.js",
+    "ext": "https://ghproxy.net/https://raw.githubusercontent.com/fantaiying7/EXT/refs/heads/main/%E8%99%8E%E7%89%99.js",
+    "home": {
+      "ok": true,
+      "result": {
+        "sourceId": "531a60fd-2992-4c84-bdf4-1112d72f0213",
+        "ok": true,
+        "sampleCount": 0
+      }
+    },
+    "search": {
+      "ok": false,
+      "error": "type3_js_empty_result",
+      "message": "Type3 JavaScript search 返回空结果，未视为兼容成功"
+    }
+  },
+  "artifact": {
+    "file": "<workspace>\\release\\NetPanDownload-0.1.0-windows-x64.exe",
+    "sha256": "06616cbc221027d807acd512ac6258f4007c526a97c2548e458f673c85fe0b69",
+    "bytes": 227857635
+  },
+  "publicationRedactions": {
+    "localPaths": true,
+    "userSearchQuery": true
+  }
+}

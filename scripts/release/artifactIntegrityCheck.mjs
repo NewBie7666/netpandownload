@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, statSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
 
 const root = process.cwd()
@@ -9,47 +9,37 @@ function fail(message) {
   throw new Error(`[artifact-integrity] ${message}`)
 }
 
-function walk(dir, files = []) {
-  if (!existsSync(dir)) return files
-  for (const name of readdirSync(dir)) {
-    const full = join(dir, name)
-    const stat = statSync(full)
-    if (stat.isDirectory()) walk(full, files)
-    else if (stat.isFile()) files.push(full)
-  }
-  return files
+function containsFile(dir) {
+  if (!existsSync(dir)) return false
+  return readdirSync(dir, { withFileTypes: true }).some(entry =>
+    entry.isFile() || (entry.isDirectory() && containsFile(join(dir, entry.name)))
+  )
 }
 
 for (const dir of ['dist', 'dist-server', 'dist-electron']) {
-  const full = join(root, dir)
-  if (!existsSync(full)) fail(`missing build directory ${dir}`)
-  if (!walk(full).length) fail(`empty build directory ${dir}`)
+  if (!containsFile(join(root, dir))) fail(`missing or empty build directory: ${dir}`)
 }
 
-if (!existsSync(releaseDir)) fail('missing release directory')
-
-const exeFiles = readdirSync(releaseDir)
-  .map((name) => join(releaseDir, name))
-  .filter((file) => statSync(file).isFile() && file.toLowerCase().endsWith('.exe'))
-if (!exeFiles.length) fail('no portable exe found in release directory')
-
-for (const exe of exeFiles) {
-  const size = statSync(exe).size
-  if (size < minExeBytes) {
-    fail(`exe is unexpectedly small: ${relative(root, exe)} (${size} bytes)`)
-  }
-}
+const { version } = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
+const exe = join(releaseDir, `NetPanDownload-${version}-windows-x64.exe`)
+if (!existsSync(exe)) fail(`missing portable executable: ${relative(root, exe)}`)
+const size = statSync(exe).size
+if (size < minExeBytes) fail(`exe is unexpectedly small: ${relative(root, exe)} (${size} bytes)`)
 
 const unpackedResources = join(releaseDir, 'win-unpacked', 'resources')
-if (existsSync(unpackedResources)) {
-  for (const resourceName of ['aria2', 'yt-dlp']) {
-    const source = join(root, 'resources', resourceName)
-    const target = join(unpackedResources, resourceName)
-    if (existsSync(source) && walk(source).length && !existsSync(target)) {
-      fail(`resource exists in source but is missing from artifact: ${resourceName}`)
-    }
+for (const binary of ['aria2/win/aria2c.exe', 'yt-dlp/win/yt-dlp.exe', 'ffmpeg/win/ffmpeg.exe', 'ffmpeg/win/ffprobe.exe',
+  'type3/java/jre/bin/java.exe', 'type3/java/stubs/stubs.jar', 'type3/java/runner/NetPanSpiderRunner.class']) {
+  const packaged = join(unpackedResources, binary)
+  if (!existsSync(packaged) || !statSync(packaged).isFile() || statSync(packaged).size === 0) {
+    fail(`missing bundled executable: ${relative(root, packaged)}`)
   }
 }
+if (!containsFile(join(unpackedResources, 'ffmpeg', 'licenses'))) {
+  fail('missing bundled FFmpeg license notices')
+}
+for (const directory of ['type3/java/libs', 'type3/java/d2j']) {
+  if (!containsFile(join(unpackedResources, directory))) fail('missing Type3 JVM dependencies: ' + directory)
+}
+if (!existsSync(join(unpackedResources, 'type3/java/WinBox-LICENSE.txt'))) fail('missing Type3 stub license notice')
 
-console.log(`[artifact-integrity] release contains ${exeFiles.length} exe artifact(s)`)
-console.log('[artifact-integrity] artifact integrity passed')
+console.log(`[artifact-integrity] ${relative(root, exe)} passed bundled runtime checks`)

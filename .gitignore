@@ -16,3 +16,14 @@ tmp-*
 src/*.v05-broken-backup.*
 resources/aria2/win/aria2c.exe
 resources/yt-dlp/win/yt-dlp.exe
+resources/ffmpeg/win/*.exe
+resources/ffmpeg/win/*.dll
+resources/ffmpeg/licenses/
+
+/reports/
+resources/type3/java/jre/
+resources/type3/java/stubs/
+resources/type3/java/libs/
+resources/type3/java/d2j/
+resources/type3/java/tools/
+resources/type3/java/runner/
