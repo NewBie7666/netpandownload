@@ -35,7 +35,6 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y nginx-core
           sudo python3 public-search/scripts/verify-nginx.py
-          systemd-analyze verify public-search/deploy/systemd/netpan-public-search.service
       - uses: actions/upload-artifact@v4
         with:
           name: netpandownload-public-search

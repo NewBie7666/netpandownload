@@ -9,7 +9,7 @@
 构建需要 Node.js 22 或更高版本：
 
 ```bash
-npm ci
+npm ci --ignore-scripts
 npm run build:public
 npm run package:public
 ```
@@ -77,6 +77,8 @@ sudoedit /etc/netpan-public-search.env
 ## systemd
 
 安装独立 unit：
+
+先确认服务器有 Node.js 22+，且 `node --version`、`npm --version` 可用。模板使用 `/usr/bin/node`；若 `command -v node` 返回其他绝对路径，请在新 unit 的 `ExecStart` 中使用该实际路径，不要修改私人服务的运行环境。
 
 ```bash
 sudo install -o root -g root -m 0644 \
