@@ -2,6 +2,8 @@
 
 更新日期：2026-11-20。此报告区分“配置导入”“运行时执行”和“实际下载”。本轮接入了 JavaScript、标准 JVM JAR、纯 DEX 转 JVM 三条路径；**王二小 newwex 的加固 Android csp Spider 尚未完成兼容**，不能称为所有 Type3 源均可用。
 
+被拒绝原包的 `.so` 真实文件名、ELF 架构、哈希以及产品预检/JVM 原始加载器的两份实际调用栈，见 [Type3 原生拒绝详情](TYPE3_NATIVE_REJECTION.md)。
+
 ## 当前窗口接管核查
 
 用户实际打开的程序 app.asar SHA256 为 `9ebb461cf9238cc93acedffd2d7ebf3040bb552f5d4e33e9e39663cb79ecc082`，与最新构建完全相同。当前站点为「贱片┃秒播」`csp_WexAiJianPianGuard`，配置为 newwex，搜索词「<user-query>」。界面原生库报错已实际观察到；不是旧版本、JSON 扩展名或导入位置的问题。
