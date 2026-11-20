@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { test } from 'node:test'
 import { AppError } from '../../server/http.js'
-import { stageHlsPlaylist } from '../../server/hls/hlsMedia.js'
+import { getHlsSegmentConcurrency, stageHlsPlaylist } from '../../server/hls/hlsMedia.js'
 import { parseHlsMediaPlaylist, type HlsByteRange } from '../../server/hls/hlsParser.js'
 import { runFfmpeg } from '../../server/hls/hlsTasks.js'
 
@@ -204,5 +204,93 @@ test('rejects HTML or nested playlists as media and aborts before writing partia
       undefined, fakeFetcher(new Map([[root + 'part.ts', Buffer.alloc(188, 0x47)]]), []) as never), /中止/)
     const files = await readdir(directory)
     assert.deepEqual(files, [])
+  } finally { await rm(directory, { recursive: true, force: true }) }
+})
+
+test('HLS prefetch overlaps downloads but writes video segments in original playlist order', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'hls-parallel-order-'))
+  const segments = 9
+  const playlist = parseHlsMediaPlaylist([
+    '#EXTM3U', '#EXT-X-TARGETDURATION:2',
+    ...Array.from({ length: segments }, (_, i) => '#EXTINF:2,\nchunk-' + i + '.ts'),
+    '#EXT-X-ENDLIST'
+  ].join('\n'), base)
+  let active = 0
+  let peak = 0
+  const completed: number[] = []
+  const progress: number[] = []
+  const fetcher = async (url: string, _limit: number, signal?: AbortSignal) => {
+    assert.ok(!signal?.aborted)
+    const index = Number(/chunk-(\d+)\.ts/.exec(url)?.[1])
+    active++
+    peak = Math.max(peak, active)
+    await new Promise(resolve => setTimeout(resolve, index === 0 ? 65 : 8))
+    active--
+    completed.push(index)
+    return { data: Buffer.alloc(188, 0x47), url }
+  }
+  try {
+    const local = await stageHlsPlaylist(
+      playlist, directory, root, new AbortController().signal,
+      async item => { progress.push(item.completedSegments) },
+      fetcher, 3
+    )
+    assert.equal(peak, 3)
+    assert.ok(completed.indexOf(1) < completed.indexOf(0), 'expected independent requests to complete out of order')
+    assert.deepEqual(progress, Array.from({ length: segments }, (_, i) => i + 1))
+    const text = await readFile(local, 'utf8')
+    assert.deepEqual(text.match(/segment-\d+\.ts/g),
+      Array.from({ length: segments }, (_, i) => 'segment-' + i + '.ts'))
+    assert.equal((await readdir(directory)).filter(name => name.startsWith('segment-')).length, segments)
+  } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
+})
+
+test('HLS concurrency configuration clamps unsafe values and keeps a usable default', () => {
+  assert.equal(getHlsSegmentConcurrency(), getHlsSegmentConcurrency(process.env.NETPAN_HLS_CONCURRENCY))
+  assert.equal(getHlsSegmentConcurrency('3'), 3)
+  assert.equal(getHlsSegmentConcurrency(0), 1)
+  assert.equal(getHlsSegmentConcurrency(30), 12)
+  assert.equal(getHlsSegmentConcurrency('not-an-integer'), 6)
+})
+
+test('HLS retries a transient segment failure without duplicating the output', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'hls-parallel-retry-'))
+  const list = parseHlsMediaPlaylist(
+    '#EXTM3U\n#EXTINF:2,\nretry.ts\n#EXT-X-ENDLIST', base
+  )
+  let attempts = 0
+  try {
+    const local = await stageHlsPlaylist(
+      list, directory, root, new AbortController().signal,
+      undefined, async url => {
+        attempts++
+        if (attempts === 1) throw new AppError('hls_timeout', 'HLS 请求超时', 504)
+        return { data: Buffer.alloc(188, 0x47), url }
+      }, 2
+    )
+    assert.equal(attempts, 2)
+    assert.deepEqual((await readdir(directory)).filter(name => name.startsWith('segment-')), ['segment-0.ts'])
+    assert.match(await readFile(local, 'utf8'), /segment-0\.ts/)
+  } finally { await rm(directory, { recursive: true, force: true }) }
+})
+
+test('HLS user cancellation stops parallel work and does not write the final playlist', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'hls-parallel-abort-'))
+  const list = parseHlsMediaPlaylist([
+    '#EXTM3U', '#EXT-X-TARGETDURATION:2',
+    ...Array.from({ length: 8 }, (_, i) => '#EXTINF:2,\np-' + i + '.ts'),
+    '#EXT-X-ENDLIST'
+  ].join('\n'), base)
+  const controller = new AbortController()
+  try {
+    await assert.rejects(() => stageHlsPlaylist(list, directory, root, controller.signal,
+      async () => controller.abort(),
+      async url => {
+        await new Promise(resolve => setTimeout(resolve, 10))
+        return { data: Buffer.alloc(188, 0x47), url }
+      }, 3), /中止/)
+    assert.ok(!(await readdir(directory)).includes('local.m3u8'))
   } finally { await rm(directory, { recursive: true, force: true }) }
 })
