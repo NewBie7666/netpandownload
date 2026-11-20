@@ -57,6 +57,23 @@ v0.1.1 在界面添加「**允许 HTTP Spider JAR（仅用于明确可信的源�
 
 Windows 侧保持 `NETPAN_TYPE3_GATEWAY_MODE=always`。如果错误从 HTTPS 校验改为 `Spider jar is missing classes.dex`、`ClassNotFoundException`、`NoClassDefFoundError` 或 `UnsatisfiedLinkError`，说明已跨过 URL 校验，需要进一步完善 Android CatVod Host 或对应 JNI 的加载流程；不能声称这些插件已兼容。
 
+## v0.1.2：修复 Guard 构造期间空 Context
+
+真实设备错误：
+```
+InvocationTargetException
+Caused by: ExceptionInInitializerError
+  at com.github.catvod.spider.DexNative.getSpider
+Caused by: NullPointerException:
+  Context.getCacheDir() on null
+  at com.github.catvod.spider.DexNative.<clinit>
+```
+原因是 v0.1.1 在 `new WexAiJianPianGuard()` 之后才执行实例 `Spider.init(Context, ext)`，但 Guard 构造函数已经调用了 `DexNative`。根据 TVBox 传统 JarLoader 流程，必须在创建任何 `csp_*` 对象之前，调用同一个 `DexClassLoader` 加载的 **静态** `com.github.catvod.spider.Init.init(Context)`，然后再构造并执行实例 init。
+
+v0.1.2 修正初始化顺序并展开反射异常的底层原因。不要把此修复等同于完成 WexGuard 兼容：Guard 可能还需要二级 DexClassLoader、厂商 JNI、本机代理或其他宿主服务。如果出现 native 级别 SIGABRT，日志可能不再以 Java 异常形式出现，应抓取 AndroidRuntime/DEBUG 日志并停止反复重试。
+
+更新 APK 后确认 Gateway 仍在运行；Windows 端继续使用原来的 `127.0.0.1:18777` ADB 转发和令牌设置，只需从已设置环境变量的 PowerShell 重新启动 Windows EXE 进行搜索。
+
 ## 失败诊断
 
 - **无法连接 Gateway**：先测 health，再确认 APK 前台服务和 ADB forward 的设备与端口。
