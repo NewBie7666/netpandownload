@@ -74,6 +74,21 @@ v0.1.2 修正初始化顺序并展开反射异常的底层原因。不要把此�
 
 更新 APK 后确认 Gateway 仍在运行；Windows 端继续使用原来的 `127.0.0.1:18777` ADB 转发和令牌设置，只需从已设置环境变量的 PowerShell 重新启动 Windows EXE 进行搜索。
 
+## v0.1.3：WexGuard 真正搜索阶段缺少 OkHttp
+
+来自真实设备的最新日志确认 `WexAiJianPian.searchContent` 已进入解密后的 `code_cache/sharedb/config.db`，但报告：
+
+```
+NoClassDefFoundError: okhttp3.Request$Builder
+ClassNotFoundException: okhttp3.Request$Builder
+```
+
+v0.1.2 未在宿主 APK 中携带 OkHttp。本版新增 `com.squareup.okhttp3:okhttp:4.12.0`（及 Gradle 自动解析的传递依赖），并在加载 Spider JAR 前用外层 DexClassLoader 检查 `okhttp3.Request$Builder` 是否可见，记录在 `NetPanSpiderGateway` INFO/ERROR 日志中。
+
+**两层验收不可混淆**：构建/依赖校验只能证明 OkHttp 已打包、外层类加载器可见。若 Guard JNI 自行创建的内部 DexClassLoader 没有把应用类加载器作为 parent，这项修复也可能无法使内部 `config.db` DEX 找到 OkHttp；届时必须追踪内部类加载器的父类关系，而不是继续盲目增加依赖。
+
+开发版 APK 由 CI 的临时 Debug 证书签名，不保证与之前安装版本证书一致。如果覆盖安装被拒绝，先备份 Token，并执行 `adb uninstall com.newbie7666.netpandownload.spidergateway` 后安装新版。卸载会清除 Token，随后需在 Windows 的启动 PowerShell 重新设置它；已配对的 ADB 可继续使用。
+
 ## 失败诊断
 
 - **无法连接 Gateway**：先测 health，再确认 APK 前台服务和 ADB forward 的设备与端口。
