@@ -15,6 +15,7 @@ import java.io.InputStream;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.HttpURLConnection;
+import java.net.InetAddress;
 import java.net.URI;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
@@ -132,7 +133,8 @@ final class SpiderRuntime {
     }
 
     private Loaded load(String rawJar, String ext, String className) throws Exception {
-        GatewayContract.JarSpec spec = GatewayContract.parseJar(rawJar);
+        boolean allowHttp = SpiderHttpServer.preferences(context).getBoolean("allow_http_spider_jars", false);
+        GatewayContract.JarSpec spec = GatewayContract.parseJar(rawJar, allowHttp);
         String key = digest("SHA-256", (spec.uri.toString() + "|" + spec.md5 + "|" + className + "|" + ext)
                 .getBytes(StandardCharsets.UTF_8));
         Loaded cached = cache.get(key);
@@ -144,7 +146,7 @@ final class SpiderRuntime {
                 .getBytes(StandardCharsets.UTF_8));
         File jar = new File(privateRoot, artifactKey + ".jar");
         if (!jar.isFile()) {
-            byte[] contents = readHttps(spec.uri, MAX_JAR_BYTES);
+            byte[] contents = readJar(spec.uri, MAX_JAR_BYTES, allowHttp);
             if (!spec.md5.isEmpty() && !digest("MD5", contents).equals(spec.md5))
                 throw new SecurityException("Spider jar MD5 mismatch");
             // Download into an owned directory and rename a read-only file for
@@ -183,9 +185,13 @@ final class SpiderRuntime {
         return loaded;
     }
 
-    private static byte[] readHttps(URI address, int maxBytes) throws Exception {
+    private static byte[] readJar(URI address, int maxBytes, boolean allowHttp) throws Exception {
         URL target = address.toURL();
         for (int redirect = 0; redirect <= 3; redirect++) {
+            GatewayContract.JarSpec checked = GatewayContract.parseJar(target.toString(), allowHttp);
+            // This is defense in depth for Spider JAR download, not a sandbox for
+            // any networking performed later by third-party Spider code.
+            assertPublicJarHost(checked.uri.getHost());
             HttpURLConnection conn = (HttpURLConnection) target.openConnection();
             conn.setInstanceFollowRedirects(false);
             conn.setConnectTimeout(10000);
@@ -196,8 +202,13 @@ final class SpiderRuntime {
                 if (status == 301 || status == 302 || status == 303 || status == 307 || status == 308) {
                     String location = conn.getHeaderField("Location");
                     if (location == null || redirect == 3) throw new IllegalStateException("Too many Spider redirects");
-                    target = new URL(target, location);
-                    GatewayContract.parseJar(target.toString());
+                    URL nextUrl = new URL(target, location);
+                    GatewayContract.JarSpec nextJar = GatewayContract.parseJar(nextUrl.toString(), allowHttp);
+                    if ("https".equalsIgnoreCase(target.getProtocol()) &&
+                        "http".equalsIgnoreCase(nextJar.uri.getScheme())) {
+                        throw new SecurityException("HTTPS Spider JAR cannot redirect to HTTP");
+                    }
+                    target = nextUrl;
                     continue;
                 }
                 if (status != 200) throw new IllegalStateException("Spider jar HTTP status " + status);
@@ -206,6 +217,16 @@ final class SpiderRuntime {
             } finally { conn.disconnect(); }
         }
         throw new IllegalStateException("Spider jar redirect failure");
+    }
+
+    private static void assertPublicJarHost(String host) throws Exception {
+        for (InetAddress address : InetAddress.getAllByName(host)) {
+            if (address.isAnyLocalAddress() || address.isLoopbackAddress() ||
+                address.isLinkLocalAddress() || address.isSiteLocalAddress() ||
+                address.isMulticastAddress()) {
+                throw new SecurityException("Spider JAR host resolves to a local or private address");
+            }
+        }
     }
 
     private static byte[] readLimited(InputStream input, int limit) throws Exception {
