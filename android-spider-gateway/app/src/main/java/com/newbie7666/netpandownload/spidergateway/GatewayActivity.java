@@ -100,6 +100,21 @@ public final class GatewayActivity extends Activity {
         });
         content.addView(allowLan);
 
+        CheckBox allowHttpJars = new CheckBox(this);
+        allowHttpJars.setText("允许 HTTP Spider JAR（仅用于明确可信的源）");
+        allowHttpJars.setChecked(SpiderHttpServer.preferences(this)
+                .getBoolean("allow_http_spider_jars", false));
+        allowHttpJars.setOnCheckedChangeListener((button, checked) -> {
+            SpiderHttpServer.preferences(this).edit()
+                    .putBoolean("allow_http_spider_jars", checked).apply();
+            Toast.makeText(this, checked
+                    ? "已允许 HTTP JAR；请注意下载及执行代码存在被篡改的风险"
+                    : "已恢复仅接受 HTTPS JAR", Toast.LENGTH_LONG).show();
+        });
+        content.addView(allowHttpJars);
+        addText(content, "仅当搜索提示 Spider JAR 不是 HTTPS 时才启用。HTTP 明文下载的插件代码可被网络中间人替换；优先使用 HTTPS 且带校验的源。",
+                13, Color.rgb(130, 62, 34));
+
         addText(content, "推荐 Windows 通过 ADB 转发连接本机端口。手机端无需 Root。\n" +
                 "Windows: adb forward tcp:18777 tcp:" + GatewayContract.PORT + "\n" +
                 "Windows: NETPAN_TYPE3_GATEWAY_URL=http://127.0.0.1:18777\n" +
