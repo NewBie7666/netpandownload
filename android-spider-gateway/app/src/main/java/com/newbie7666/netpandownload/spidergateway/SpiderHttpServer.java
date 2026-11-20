@@ -169,10 +169,9 @@ final class SpiderHttpServer {
                 }
                 respond(out, 200, result.toString());
             } catch (Throwable error) {
-                Throwable cause = error.getCause() == null ? error : error.getCause();
-                String message = cause.getMessage() == null ? cause.getClass().getSimpleName() : cause.getMessage();
-                message = message.replace(token(context), "[redacted]");
-                Log.e(TAG, "Spider execution failed", cause);
+                Throwable cause = SpiderFailure.rootCause(error);
+                String message = SpiderFailure.describe(error).replace(token(context), "[redacted]");
+                Log.e(TAG, "Spider execution failed", error);
                 respond(out, 502, failure(message.substring(0, Math.min(450, message.length()))));
             }
         } catch (IOException e) {
