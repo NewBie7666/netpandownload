@@ -28,6 +28,35 @@ public class GatewayContractTest {
         }
     }
 
+    @Test public void httpJarIsOptInNotDefault() {
+        String url = "http://example.org/spider.jar;md5;0123456789abcdef0123456789abcdef";
+        try {
+            GatewayContract.parseJar(url);
+            fail("HTTP Spider JAR must be disabled by default");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("http"));
+        }
+        GatewayContract.JarSpec allowed = GatewayContract.parseJar(url, true);
+        assertEquals("http://example.org/spider.jar", allowed.uri.toString());
+        assertEquals("0123456789abcdef0123456789abcdef", allowed.md5);
+    }
+
+    @Test public void httpOptInStillRejectsLocalAndCredentialedUrls() {
+        for (String invalid : new String[]{
+            "http://127.0.0.1/spider.jar",
+            "http://localhost/spider.jar",
+            "http://host.local/spider.jar",
+            "http://user:pass@example.org/spider.jar",
+            "http://example.org/spider.jar#fragment",
+            "file:///sdcard/spider.jar"
+        }) {
+            try {
+                GatewayContract.parseJar(invalid, true);
+                fail("Accepted unsafe URL: " + invalid);
+            } catch (IllegalArgumentException expected) {}
+        }
+    }
+
     @Test public void mapsSafeCspClassNames() {
         assertEquals("com.github.catvod.spider.WexAiJianPianGuard",
                 GatewayContract.spiderClassName("csp_WexAiJianPianGuard"));
