@@ -8,7 +8,7 @@
     <application
         android:label="NetPan Spider Gateway"
         android:theme="@android:style/Theme.Material.Light.NoActionBar"
-        android:usesCleartextTraffic="false"
+        android:usesCleartextTraffic="true"
         android:allowBackup="false"
         android:supportsRtl="true"
         android:extractNativeLibs="true">
