@@ -8,6 +8,7 @@ import type { Readable } from 'node:stream'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { openBilibiliLoginWindow } from './auth/BilibiliLoginWindow.js'
+import { resolveType3BrowserMedia } from './type3Browser.js'
 import {
   clearBilibiliCookieStore,
   isValidBilibiliCookie,
@@ -24,6 +25,7 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const appRoot = path.resolve(__dirname, '..', '..')
 const distServerEntry = path.resolve(appRoot, 'dist-server', 'server', 'index.js')
+const sourceNetworkEntry = path.resolve(appRoot, 'dist-server', 'server', 'video-sources', 'network.js')
 const preloadEntry = path.resolve(__dirname, 'preload.cjs')
 const defaultBackendPort = 3000
 const aria2RpcPort = 16800
@@ -433,6 +435,12 @@ async function startBackend() {
 
   try {
     const serverModule = await import(pathToFileURL(distServerEntry).href)
+    const sourceNetwork = await import(pathToFileURL(sourceNetworkEntry).href)
+    sourceNetwork.configureVideoSourceProxyResolver((url: string) => session.defaultSession.resolveProxy(url))
+    const type3 = await import(pathToFileURL(path.resolve(appRoot, 'dist-server/server/video-sources/type3.js')).href)
+    const direct = await import(pathToFileURL(path.resolve(appRoot, 'dist-server/server/downloader/directDownload.js')).href)
+    type3.configureType3BrowserResolver((url: string, headers: Record<string, string>) =>
+      resolveType3BrowserMedia(url, headers, sourceNetwork.validateVideoSourceUrl, direct.isPublicIp))
     const candidatePorts = process.env.ELECTRON_RENDERER_URL
       ? [defaultBackendPort]
       : Array.from({ length: 11 }, (_, index) => defaultBackendPort + index)
@@ -519,6 +527,12 @@ async function waitForBackendReady() {
 
 async function bootstrapDesktop() {
   await ensureServerBuildExists()
+  if (process.platform === 'win32' && !process.env.NETPAN_FFMPEG_PATH) {
+    const ffmpeg = path.resolve(app.isPackaged ? process.resourcesPath : path.join(appRoot, 'resources'), 'ffmpeg', 'win', 'ffmpeg.exe')
+    // Development can use FFmpeg from PATH; the portable build supplies its own copy.
+    const bundledFfmpeg = await access(ffmpeg, fsConstants.F_OK).then(() => true, () => false)
+    if (bundledFfmpeg) process.env.NETPAN_FFMPEG_PATH = ffmpeg
+  }
   await loadStoredBilibiliCookieIntoRuntime()
   await startBackend()
   const health = await runStartupHealthCheck()

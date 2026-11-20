@@ -1,0 +1,96 @@
+{
+  "date": "2026-11-20",
+  "api": "csp_WexAiJianPianGuard",
+  "configurationUrl": "https://9280.kstore.vip/newwex.json",
+  "archiveUrl": "http://oss4liview.moji.com/thd_file/2026/11/17/ff5af105e608d6389b89d59586515c70.jpg",
+  "archives": [
+    {
+      "file": "newwex-plugin.zip",
+      "bytes": 1047475,
+      "md5": "5a934007fb34ec762c2e7d25dbdc865d",
+      "sha256": "620afed882618749e5a9fbb558f8eb847f4a4a4c6f6a5369f6b9099331849138",
+      "nativeLibraries": [
+        {
+          "entry": "assets/wexguard_v7.so",
+          "bytes": 48364,
+          "format": "ELF",
+          "bits": 32,
+          "machine": 40,
+          "architecture": "ARM",
+          "sha256": "0614b7b18ca30b41450fed4dd3ed9150cea1c94dc62960e4151a3a87d43a1b5e"
+        },
+        {
+          "entry": "assets/wexguard_v8.so",
+          "bytes": 48680,
+          "format": "ELF",
+          "bits": 64,
+          "machine": 183,
+          "architecture": "AArch64",
+          "sha256": "646f8bb4dda60536f8d71f537892f4631053e9cc2a21d458015bd0bb143a1fb5"
+        }
+      ]
+    },
+    {
+      "file": "native-loader-output.bin",
+      "bytes": 983479,
+      "md5": "6ac12da2bcc1457b1c6ba5bb6143653d",
+      "sha256": "6644bed20cf19aac6003726da48d6124497840b1e09ad52b97b8c5a8764023f3",
+      "nativeLibraries": [
+        {
+          "entry": "assets/libwex_v7.so",
+          "bytes": 97052,
+          "format": "ELF",
+          "bits": 32,
+          "machine": 40,
+          "architecture": "ARM",
+          "sha256": "ade9b44d3f8730ae2f6cd6471b14a059db965de0099ae3a4597482445a914b2f"
+        },
+        {
+          "entry": "assets/libwex_v8.so",
+          "bytes": 113816,
+          "format": "ELF",
+          "bits": 64,
+          "machine": 183,
+          "architecture": "AArch64",
+          "sha256": "d8f6a739749273bcd0e9ac483a8fea8c39bac7cf535fbba814f7b3db17c7304e"
+        }
+      ]
+    }
+  ],
+  "preflight": {
+    "invocation": "VideoSourceProvider.search in isolated profile; no HTTP handler frame added",
+    "nodeVersion": "v24.15.0",
+    "error": "type3_java_native_unsupported",
+    "message": "该 Spider 包含 Android 原生库（.so），Windows JVM 适配器已拒绝执行；需要原生 Android 兼容层",
+    "stack": "Error: 该 Spider 包含 Android 原生库（.so），Windows JVM 适配器已拒绝执行；需要原生 Android 兼容层\n    at appError (file:///<workspace>/dist-server/server/video-sources/type3-java.js:17:12)\n    at preparedSpider (file:///<workspace>/dist-server/server/video-sources/type3-java.js:448:15)\n    at async invokeJavaSource (file:///<workspace>/dist-server/server/video-sources/type3-java.js:505:11)\n    at async invokeType3 (file:///<workspace>/dist-server/server/video-sources/type3.js:23:15)\n    at async VideoSourceProvider.query (file:///<workspace>/dist-server/server/video-sources/provider.js:37:28)\n    at async VideoSourceProvider.search (file:///<workspace>/dist-server/server/video-sources/provider.js:65:24)\n    at async file:///<workspace>/[eval1]:4:5"
+  },
+  "nativeLoaderExperiment": {
+    "mode": "original Guard + actual DexNative; only reference placeholder excluded",
+    "exitCode": 1,
+    "stdout": "",
+    "stderr": "OpenJDK 64-Bit Server VM warning: Options -Xverify:none and -noverify were deprecated in JDK 13 and will likely be removed in a future release.\n[NetPanSpiderRunner] java.lang.ExceptionInInitializerError: null\njava.lang.ExceptionInInitializerError\n\tat com.github.catvod.spider.Init.init(Unknown Source)\n\tat java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)\n\tat java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(Unknown Source)\n\tat java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(Unknown Source)\n\tat java.base/java.lang.reflect.Method.invoke(Unknown Source)\n\tat NetPanSpiderRunner.initializeContextClass(NetPanSpiderRunner.java:120)\n\tat NetPanSpiderRunner.initializeGlobalSpiderState(NetPanSpiderRunner.java:107)\n\tat NetPanSpiderRunner.main(NetPanSpiderRunner.java:48)\nCaused by: java.lang.RuntimeException: java.lang.UnsatisfiedLinkError: <temp>\\netpan-spider-windows-research\\guard-host-cache\\cache\\.wexfnw463ixookf8: Can't load this .dll (machine code=0x34) on a AMD 64-bit platform\n\tat com.github.catvod.spider.DexNative.<clinit>(Unknown Source)\n\t... 8 more\nCaused by: java.lang.UnsatisfiedLinkError: <temp>\\netpan-spider-windows-research\\guard-host-cache\\cache\\.wexfnw463ixookf8: Can't load this .dll (machine code=0x34) on a AMD 64-bit platform\n\tat java.base/jdk.internal.loader.NativeLibraries.load(Native Method)\n\tat java.base/jdk.internal.loader.NativeLibraries$NativeLibraryImpl.open(Unknown Source)\n\tat java.base/jdk.internal.loader.NativeLibraries.loadLibrary(Unknown Source)\n\tat java.base/jdk.internal.loader.NativeLibraries.loadLibrary(Unknown Source)\n\tat java.base/java.lang.ClassLoader.loadLibrary(Unknown Source)\n\tat java.base/java.lang.Runtime.load0(Unknown Source)\n\tat java.base/java.lang.System.load(Unknown Source)\n\t... 9 more\n",
+    "conditions": [
+      "Standalone JVM diagnostic after DEX-to-JVM conversion, preserving original assets",
+      "Reference stubs DexNative placeholder excluded so original DexNative executes",
+      "Not the product preflight call stack; not a successful native bridge"
+    ],
+    "extractedNativeMatches": [
+      {
+        "extractedName": ".wexfnw463ixookf8",
+        "bytes": 48364,
+        "sha256": "0614b7b18ca30b41450fed4dd3ed9150cea1c94dc62960e4151a3a87d43a1b5e",
+        "matchesOriginalEntry": "assets/wexguard_v7.so"
+      }
+    ]
+  },
+  "publicationRedactions": {
+    "localPaths": true,
+    "userSearchQuery": true
+  },
+  "endToEnd": {
+    "search": "not reached",
+    "detail": "not reached",
+    "resolve": "not reached",
+    "download": "not reached"
+  }
+}

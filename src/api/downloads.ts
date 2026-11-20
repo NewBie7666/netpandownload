@@ -42,6 +42,10 @@ export function addDownloadTask(payload: AddDownloadRequest) {
   return postJson<AddDownloadResult>('/api/downloads/add', payload)
 }
 
+export function addHlsDownloadTask(payload: { url: string; fileName?: string }) {
+  return postJson<{ gid: string; fileName: string }>('/api/downloads/hls', payload)
+}
+
 export function fetchDownloadTasks() {
   return getJson<DownloadTasksResult>('/api/downloads/active')
 }

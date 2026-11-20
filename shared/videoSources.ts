@@ -1,0 +1,48 @@
+/** Video source catalog is independent of the existing Quark/Bilibili Provider API. */
+export interface VideoSource {
+  id: string
+  name: string
+  apiUrl: string
+  enabled: boolean
+  type: 'maccms' | 'type3'
+  runtime?: 'javascript' | 'jvm'
+  key?: string
+  configUrl?: string
+  spider?: string
+  ext?: unknown
+  flags?: string[]
+}
+export interface VideoEpisode {
+  label: string
+  url: string
+  kind: 'mp4' | 'hls' | 'resolve' | 'unsupported'
+}
+export interface VideoPlayLine {
+  name: string
+  episodes: VideoEpisode[]
+}
+export interface VideoItem {
+  id: string
+  title: string
+  cover?: string
+  remarks?: string
+  description?: string
+  lines: VideoPlayLine[]
+}
+export interface VideoSearchResult {
+  sourceId: string
+  keyword: string
+  items: VideoItem[]
+  page: number
+  pageCount: number
+}
+export interface VideoSourceImportResult {
+  imported: number
+  skipped: number
+  total: number
+  alreadyPresent: number
+  unsupported: number
+  invalid: number
+  unsupportedSites: Array<{ name: string, type: string, reason: string }>
+  sources: VideoSource[]
+}

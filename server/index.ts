@@ -14,6 +14,7 @@ import { downloadEngineRouter } from './routes/downloadEngine.js'
 import { productRouter } from './routes/product.js'
 import { providersRouter } from './routes/providers.js'
 import { quarkRouter } from './routes/quark.js'
+import { videoSourcesRouter } from './routes/videoSources.js'
 
 export const app = express()
 const __filename = fileURLToPath(import.meta.url)
@@ -23,6 +24,21 @@ const desktopRuntimeRoot = String(process.env.QUARK_DESKTOP_ROOT || '').trim()
 const desktopStaticDir = desktopRuntimeRoot
   ? path.resolve(desktopRuntimeRoot, 'dist')
   : path.resolve(__dirname, '..', 'dist')
+
+if (desktopRuntimeRoot) {
+  app.use(['/api/video-sources', '/api/downloads/hls'], (req, res, next) => {
+    const host = req.get('host')
+    const origin = req.get('origin')
+    const port = req.socket.localPort
+    const localHosts = [`127.0.0.1:${port}`, `localhost:${port}`]
+    if (!host || !localHosts.includes(host) ||
+        (origin && origin !== `http://${host}` && origin !== process.env.ELECTRON_RENDERER_URL)) {
+      res.status(403).json(fail('video_source_local_only', '请从桌面客户端打开影视源下载'))
+      return
+    }
+    next()
+  })
+}
 
 app.use(cors())
 app.use(express.json({ limit: '1mb' }))
@@ -39,6 +55,7 @@ app.get('/api/health', (_req, res) => {
 
 app.use('/api/quark', quarkRouter)
 app.use('/api/downloads', downloadsRouter)
+app.use('/api/video-sources', videoSourcesRouter)
 app.use('/api/magnets', magnetsRouter)
 app.use('/api/download-engine', downloadEngineRouter)
 app.use('/api/providers', providersRouter)
@@ -77,10 +94,14 @@ app.use(errorHandler)
 export function startServer(port = config.port) {
   return new Promise<Server>((resolve, reject) => {
     setRuntimePort(port)
-    const server = app.listen(port, () => {
+    let server: Server
+    const onListening = () => {
       structuredLogger.info('server', 'Quark parser API listening', { port, url: `http://localhost:${port}` })
       resolve(server)
-    })
+    }
+    server = desktopRuntimeRoot
+      ? app.listen(port, '127.0.0.1', onListening)
+      : app.listen(port, onListening)
 
     server.once('error', reject)
   })

@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import { ok } from '../http.js'
+import { enqueueHls } from '../hls/hlsTasks.js'
 import {
   addDownloadTask,
   getDownloadHealth,
@@ -19,6 +20,14 @@ downloadsRouter.post('/add', async (req, res, next) => {
   try {
     const result = await addDownloadTask(req.body)
     res.json(ok(result))
+  } catch (error) {
+    next(error)
+  }
+})
+
+downloadsRouter.post('/hls', async (req, res, next) => {
+  try {
+    res.json(ok(await enqueueHls(req.body)))
   } catch (error) {
     next(error)
   }

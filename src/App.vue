@@ -22,6 +22,7 @@ import {
 } from './api/providers'
 import DownloadCenter from './views/download-center/DownloadCenter.vue'
 import MagnetSearch from './components/MagnetSearch.vue'
+import VideoSourcePanel from './components/VideoSourcePanel.vue'
 import type {
   DownloadResult,
   DownloadDecision,
@@ -62,10 +63,9 @@ declare global {
   }
 }
 
-type WorkspaceTab = 'magnet' | 'links' | 'downloads'
+type WorkspaceTab = 'magnet' | 'links' | 'video-sources' | 'downloads'
 type DownloadTab = 'tasks' | 'history'
 
-// UI-only navigation: all existing API and download handlers stay unchanged.
 const workspace = ref<WorkspaceTab>('magnet')
 const downloadTab = ref<DownloadTab>('tasks')
 const shareUrl = ref('')
@@ -296,6 +296,17 @@ async function refreshDownloadTasks(silent = false) {
       errorMessage.value = downloaderMessage.value
     }
   }
+}
+
+function showDownloadTasks() {
+  downloadTab.value = 'tasks'
+  workspace.value = 'downloads'
+  void refreshDownloadTasks(true)
+}
+
+function canToggleDownload(task: DownloadTask) {
+  return task.status === 'active' || task.status === 'paused' ||
+    (task.status === 'waiting' && task.gid.startsWith('hls-'))
 }
 
 function stopAuthPolling() {
@@ -774,6 +785,7 @@ onBeforeUnmount(() => {
         <nav class="workspace-tabs" aria-label="工作区">
           <button type="button" :class="{ active: workspace === 'magnet' }" :aria-current="workspace === 'magnet' ? 'page' : undefined" @click="workspace = 'magnet'">磁力搜索</button>
           <button type="button" :class="{ active: workspace === 'links' }" :aria-current="workspace === 'links' ? 'page' : undefined" @click="workspace = 'links'">链接解析</button>
+          <button type="button" :class="{ active: workspace === 'video-sources' }" :aria-current="workspace === 'video-sources' ? 'page' : undefined" @click="workspace = 'video-sources'">影视源下载</button>
           <button type="button" :class="{ active: workspace === 'downloads' }" :aria-current="workspace === 'downloads' ? 'page' : undefined" @click="workspace = 'downloads'">下载管理 <span v-if="downloadTasks.length" class="task-count">{{ downloadTasks.length }}</span></button>
         </nav>
       </header>
@@ -895,6 +907,10 @@ onBeforeUnmount(() => {
       </section>
       </div>
 
+      <div v-show="workspace === 'video-sources'" class="workspace-section">
+        <VideoSourcePanel @task-added="refreshDownloadTasks(true)" @view-downloads="showDownloadTasks" />
+      </div>
+
       <div v-show="workspace === 'downloads'" class="workspace-section">
         <div class="download-tabs" role="group" aria-label="下载管理视图">
           <button type="button" :class="{ active: downloadTab === 'tasks' }" @click="downloadTab = 'tasks'">当前任务</button>
@@ -922,12 +938,15 @@ onBeforeUnmount(() => {
             <tbody>
               <tr v-for="task in downloadTasks" :key="task.gid">
                 <td>{{ task.fileName }}</td>
-                <td>{{ formatTaskStatus(task.status) }}</td>
+                <td>
+                  {{ formatTaskStatus(task.status) }}
+                  <p v-if="task.status === 'error' && task.errorMessage" class="task-error">{{ task.errorMessage }}</p>
+                </td>
                 <td>{{ task.progress }}%</td>
                 <td>{{ formatSpeed(task.downloadSpeed) }}</td>
                 <td>{{ formatSize(task.completedLength) }} / {{ formatSize(task.totalLength) }}</td>
                 <td class="task-actions">
-                  <button class="row-button" type="button" :disabled="taskActionGid === task.gid || !['active', 'paused'].includes(task.status)" @click="toggleDownloadTask(task)">
+                  <button class="row-button" type="button" :disabled="taskActionGid === task.gid || !canToggleDownload(task)" @click="toggleDownloadTask(task)">
                     {{ task.status === 'paused' ? '继续' : '暂停' }}
                   </button>
                   <button class="ghost-button" type="button" :disabled="taskActionGid === task.gid" @click="requestDeleteDownloadTask(task)">删除</button>
@@ -1039,6 +1058,7 @@ onBeforeUnmount(() => {
 }
 .workspace-tabs button:focus-visible, .download-tabs button:focus-visible { outline: 2px solid #059669; outline-offset: 2px; }
 .task-count { display: inline-flex; align-items: center; justify-content: center; border-radius: 12px; background: #e2e8f0; padding: 1px 7px; font-size: 12px; margin-left: 4px; }
+.task-error { max-width: 34ch; color: #b91c1c; margin-top: 4px; overflow-wrap: anywhere; }
 .download-tabs { width: fit-content; margin: 0 0 14px; }
 .workspace-section > .task-panel, .workspace-section > .product-panel { margin-top: 0; }
 .workspace-section > .magnet-panel { margin-top: 0; }

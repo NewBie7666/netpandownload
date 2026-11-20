@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - feat/desktop-code-magnet-search-20261115
+      - codex/windows-tvbox-download
       - 'fix/**'
   workflow_dispatch:
 
@@ -36,6 +37,19 @@ jobs:
       - name: Bundle yt-dlp executable
         shell: pwsh
         run: ./scripts/prepare-ytdlp.ps1
+
+      - name: Bundle FFmpeg and FFprobe
+        shell: pwsh
+        run: ./scripts/prepare-ffmpeg.ps1
+
+      - name: Prepare pinned Type3 Java runtime
+        shell: pwsh
+        run: |
+          $archive = Join-Path $env:RUNNER_TEMP 'TVBoxPC_v1.8.1.zip'
+          Invoke-WebRequest 'https://github.com/1577967449/TVBoxPC/releases/download/v1.8.1/TVBoxPC_v1.8.1.zip' -OutFile $archive
+          $expected = '9E067163D60AD677BD85028D32DCE31B870C5F40DAA5DC07D74311604BBAC4E0'
+          if ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash -ne $expected) { throw 'Type3 runtime SHA256 mismatch' }
+          ./scripts/prepare-type3-java.ps1 -ArchivePath $archive -Force
 
       - name: Magnet search regression
         run: npx tsx tests/release/magnetSearch.test.ts
@@ -87,19 +101,28 @@ jobs:
       - name: BT task deletion and file safety regression
         run: npx tsx tests/release/btDelete.test.ts
 
+      - name: TVBox video source regression
+        run: npm run test:video-sources
+
+      - name: Type3 runtime regression
+        run: npm run test:type3
+
+      - name: HLS VOD regression
+        shell: pwsh
+        run: |
+          $env:Path = "$((Resolve-Path 'resources/ffmpeg/win').Path);$env:Path"
+          npm run test:hls
+
       - name: Build portable Windows EXE
         run: npm run build:desktop
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
 
-      - name: Verify packaged EXE and aria2
+      - name: Record portable executable checksum
         shell: pwsh
         run: |
-          $exe = Get-ChildItem release -Recurse -Filter "*.exe" | Select-Object -First 1
-          if (-not $exe) { throw "EXE artifact not found" }
-          if (-not (Test-Path "resources/aria2/win/aria2c.exe")) { throw "aria2c.exe missing" }
-          Write-Host "Built $($exe.FullName)"
-          Get-FileHash $exe.FullName -Algorithm SHA256 | Format-List
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          Get-FileHash "release/NetPanDownload-$version-windows-x64.exe" -Algorithm SHA256 | Format-List
 
       - name: Upload executable
         uses: actions/upload-artifact@v4
