@@ -9,7 +9,7 @@
 - 基于 Android `DexClassLoader` 真正加载 DEX/JAR、调用常见 CatVod `homeContent/searchContent/detailContent/playerContent` 方法、尝试提取插件中与当前 ABI 相容的 ELF `.so`。不运行 Windows JVM 仿真，也不需要 Root。
 - 精简宿主仅实现最小 CatVod SPI（干净实现，没有复制 MTplayer/FongMi/MarcoMovie 的 GPL 源码）。复杂插件依赖的 `com.github.catvod.net.*`、全局 `Init`、原生 Guard 解包、专有 JNI 和本机 `GoProxy` 等宿主能力**不保证可用**。缺少能力时应返回明确错误，不能宣传成全量 TVBox 兼容。
 - **HTTP API 与 Windows PR #23 的 `type3-gateway.ts` 一致**：`GET /v1/spider/health`、`POST /v1/spider/home|search|detail|player`；POST 必须携带 `Authorization: Bearer <随机令牌>`。每次请求传入 TVBox 的 `site`（含 `api`、`jar`、`ext`），无需提前手工导入配置。
-- HTTPS 下载 JAR、可选校验声明的 MD5；单包限 20 MiB，响应限 2 MiB，请求限 256 KiB；同一个 Spider 串行执行，处理超时；本地仅缓存四个活动实例。
+- 默认 HTTPS 下载 JAR；HTTP JAR 必须在 APP 中显式勾选许可，禁止 HTTPS→HTTP 降级，且拒绝解析到本地/私有 IP 的下载目标；可选校验声明的 MD5；单包限 20 MiB，响应限 2 MiB，请求限 256 KiB；同一个 Spider 串行执行，处理超时；本地仅缓存四个活动实例。
 - Android 前台 Service、启动/停止按钮、令牌复制和轮换、默认仅 `127.0.0.1:18778` 监听、可手工允许可信局域网访问。
 - **目前没有 Android 端本机媒体字节代理**。Windows 收到 `127.0.0.1:9978/media` 之类地址仍应报告不支持；公网直链才可以继续 Windows 下载。
 - **仍需实机验证**：N1 具体 Android ROM 与 CPU ABI、WexGuard 的搜索/详情/播放解析、插件实际 `System.load` 及网络动态域名、媒体字节下载。
@@ -48,6 +48,14 @@ $env:NETPAN_TYPE3_GATEWAY_TOKEN=Read-Host 'Android Gateway token'
 斐讯 N1 若系统已开启 **ADB over TCP**，可以先 `adb connect N1_IP:5555`，再 `adb -s N1_IP:5555 forward tcp:18777 tcp:18778`。请勿擅自开放 5555 到互联网；不同 N1 ROM 的 ADB 设置方式并不统一。
 
 Windows 的 TVBox 源从现有配置中导入，选择 `csp_*` 源后执行搜索。手机端收到的是 site JSON 和参数，由 Android DexClassLoader 加载插件。注意：如果 N1 运行的是 Armbian，则应该使用另一台 Android N1；不要修改 PS5 服务器的系统。
+
+## 修复：Spider JAR 不是 HTTPS
+
+v0.1.0 对任何非 HTTPS 的 JAR 地址直接返回 `Spider jar requires an HTTPS URL without credentials`，即使该源是正常的 `http://` TVBox JAR。这是 Android Gateway 的兼容性限制，不是 ADB 或 Windows JVM 报错。
+
+v0.1.1 在界面添加「**允许 HTTP Spider JAR（仅用于明确可信的源）**」，默认关闭。只有当确知源地址为 HTTP、且信任源的发布者时才勾选；不用重建 ADB 转发。升级 APK 保留原有 Token，但应核对 Windows 启动参数。开启该选项有真实的远程代码篡改风险：HTTP 不能提供来源真实性，即使有 MD5 字段也不能替代 HTTPS。
+
+Windows 侧保持 `NETPAN_TYPE3_GATEWAY_MODE=always`。如果错误从 HTTPS 校验改为 `Spider jar is missing classes.dex`、`ClassNotFoundException`、`NoClassDefFoundError` 或 `UnsatisfiedLinkError`，说明已跨过 URL 校验，需要进一步完善 Android CatVod Host 或对应 JNI 的加载流程；不能声称这些插件已兼容。
 
 ## 失败诊断
 
