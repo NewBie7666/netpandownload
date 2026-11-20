@@ -17,6 +17,10 @@ public final class GatewayContract {
     }
 
     public static JarSpec parseJar(String raw) {
+        return parseJar(raw, false);
+    }
+
+    public static JarSpec parseJar(String raw, boolean allowHttp) {
         if (raw == null || raw.length() > 4096) throw new IllegalArgumentException("Missing Spider jar");
         String value = raw.trim();
         int separator = value.toLowerCase(Locale.ROOT).indexOf(";md5;");
@@ -27,10 +31,21 @@ public final class GatewayContract {
         URI uri;
         try { uri = URI.create(address); }
         catch (IllegalArgumentException e) { throw new IllegalArgumentException("Invalid Spider jar URI"); }
-        if (!"https".equalsIgnoreCase(uri.getScheme()) ||
-            uri.getHost() == null || uri.getHost().isEmpty() ||
+        String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase(Locale.ROOT);
+        if (!"https".equals(scheme) && !("http".equals(scheme) && allowHttp))
+            throw new IllegalArgumentException("Spider JAR scheme " +
+                    (scheme.isEmpty() ? "(missing)" : scheme) +
+                    " is not enabled. In the Android app, enable 'Allow HTTP Spider JARs' only for trusted sources.");
+        if (uri.getHost() == null || uri.getHost().isEmpty() ||
             uri.getUserInfo() != null || uri.getFragment() != null)
-            throw new IllegalArgumentException("Spider jar requires an HTTPS URL without credentials");
+            throw new IllegalArgumentException("Spider JAR URL is malformed or includes credentials");
+        String host = uri.getHost().toLowerCase(Locale.ROOT);
+        if (host.equals("localhost") || host.endsWith(".localhost") ||
+            host.endsWith(".local") || host.equals("127.0.0.1") || host.equals("::1") ||
+            host.equals("[::1]"))
+            throw new IllegalArgumentException("Spider JAR URL points at a local host");
+        if (uri.getPort() > 65535 || uri.getPort() == 0)
+            throw new IllegalArgumentException("Invalid Spider JAR port");
         return new JarSpec(uri, md5);
     }
 
