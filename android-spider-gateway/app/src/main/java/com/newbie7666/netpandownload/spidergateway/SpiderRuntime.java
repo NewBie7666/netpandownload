@@ -2,6 +2,7 @@ package com.newbie7666.netpandownload.spidergateway;
 
 import android.content.Context;
 import android.os.Build;
+import android.util.Log;
 import dalvik.system.DexClassLoader;
 
 import org.json.JSONArray;
@@ -171,6 +172,9 @@ final class SpiderRuntime {
         // DexNative.<clinit>/getSpider, which needs the application Context
         // already stored by that entry point. Spider.init(Context, ext) comes
         // later and cannot fix a constructor-time null Context.
+        // Guard implementations may create a second DexClassLoader at runtime.
+        // Confirm the outer loader can resolve required host dependencies first.
+        verifyOkHttpVisible(loader);
         initializeJarHost(loader);
         Class<?> cls = loader.loadClass(className);
         Object spider;
@@ -188,6 +192,23 @@ final class SpiderRuntime {
         Loaded loaded = new Loaded(spider, cls);
         cache.put(key, loaded);
         return loaded;
+    }
+
+    private static void verifyOkHttpVisible(ClassLoader loader) {
+        // Some protected plugins create an independent, private DexClassLoader.
+        // Loading OkHttp into the host APK helps if that loader delegates to
+        // the app/outer loader, but cannot repair an isolated native loader.
+        try {
+            Class<?> builder = Class.forName("okhttp3.Request$Builder", false, loader);
+            Log.i("NetPanSpiderGateway", "OkHttp visible to outer Spider loader via " +
+                    builder.getClassLoader().getClass().getSimpleName());
+        } catch (ClassNotFoundException error) {
+            Log.e("NetPanSpiderGateway",
+                    "OkHttp absent from outer Spider loader; protected inner DEX may fail", error);
+        } catch (LinkageError error) {
+            Log.e("NetPanSpiderGateway",
+                    "OkHttp present but could not link via outer Spider loader", error);
+        }
     }
 
     private void initializeJarHost(DexClassLoader loader) throws Exception {
