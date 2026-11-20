@@ -166,8 +166,16 @@ final class SpiderRuntime {
         DexClassLoader loader = new DexClassLoader(jar.getAbsolutePath(),
                 context.getCodeCacheDir().getAbsolutePath(), nativeDirectory.getAbsolutePath(),
                 getClass().getClassLoader());
+        // TVBox/CatVod initializes the JAR's *static* Init.init(Context)
+        // BEFORE creating any csp_* spider. Guard constructors can call
+        // DexNative.<clinit>/getSpider, which needs the application Context
+        // already stored by that entry point. Spider.init(Context, ext) comes
+        // later and cannot fix a constructor-time null Context.
+        initializeJarHost(loader);
         Class<?> cls = loader.loadClass(className);
-        Object spider = cls.getDeclaredConstructor().newInstance();
+        Object spider;
+        try { spider = cls.getDeclaredConstructor().newInstance(); }
+        catch (InvocationTargetException error) { throw propagateInvocation(error); }
         try {
             Method init = cls.getMethod("init", Context.class, String.class);
             init.invoke(spider, context, ext);
@@ -175,14 +183,43 @@ final class SpiderRuntime {
             try { cls.getMethod("init", Context.class).invoke(spider, context); }
             catch (NoSuchMethodException ignoredAgain) { /* self-contained Spider */ }
         } catch (InvocationTargetException error) {
-            Throwable cause = error.getCause();
-            if (cause instanceof Exception) throw (Exception) cause;
-            if (cause instanceof Error) throw (Error) cause;
-            throw error;
+            throw propagateInvocation(error);
         }
         Loaded loaded = new Loaded(spider, cls);
         cache.put(key, loaded);
         return loaded;
+    }
+
+    private void initializeJarHost(DexClassLoader loader) throws Exception {
+        Class<?> initClass;
+        try {
+            initClass = loader.loadClass("com.github.catvod.spider.Init");
+        } catch (ClassNotFoundException ignored) {
+            // Older self-contained CatVod spiders may not ship an Init class.
+            // In that case their instance init(Context, ext) is still invoked.
+            return;
+        }
+        Method method;
+        try { method = initClass.getMethod("init", Context.class); }
+        catch (NoSuchMethodException ignored) {
+            // Not all Type3 JARs expose the classic TVBox host-init entry.
+            return;
+        }
+        if (!java.lang.reflect.Modifier.isStatic(method.getModifiers())) {
+            throw new IllegalStateException("Spider JAR Init.init(Context) must be static");
+        }
+        try {
+            method.invoke(null, context);
+        } catch (InvocationTargetException error) {
+            throw propagateInvocation(error);
+        }
+    }
+
+    private static Exception propagateInvocation(InvocationTargetException error) throws Exception {
+        Throwable cause = SpiderFailure.rootCause(error);
+        if (cause instanceof Error) throw (Error) cause;
+        if (cause instanceof Exception) return (Exception) cause;
+        return new IllegalStateException("Spider invocation failed", cause);
     }
 
     private static byte[] readJar(URI address, int maxBytes, boolean allowHttp) throws Exception {
