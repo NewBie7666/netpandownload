@@ -1,0 +1,30 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'com.newbie7666.netpandownload.spidergateway'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'com.newbie7666.netpandownload.spidergateway'
+        minSdk 24
+        targetSdk 34
+        versionCode 4
+        versionName '0.1.3'
+    }
+    buildTypes {
+        release { minifyEnabled false }
+        debug { minifyEnabled false }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    lint { abortOnError true }
+}
+
+dependencies {
+    // CatVod's decrypted Guard DEX resolves okhttp3.Request$Builder via its parent loader.
+    // Keep OkHttp in the host APK rather than duplicating it into untrusted plugin JARs.
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+    testImplementation 'junit:junit:4.13.2'
+}

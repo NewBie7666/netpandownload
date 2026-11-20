@@ -1,0 +1,48 @@
+name: Spider Gateway Android APK
+
+on:
+  push:
+    branches:
+      - codex/android-spider-gateway
+    paths:
+      - 'android-spider-gateway/**'
+      - '.github/workflows/spider-gateway-apk.yml'
+  pull_request:
+    paths:
+      - 'android-spider-gateway/**'
+      - '.github/workflows/spider-gateway-apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-spider-gateway:
+    name: Build lightweight Android API 24+ Spider Gateway
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Unit test and build Android debug APK
+        run: gradle -p android-spider-gateway :app:testDebugUnitTest :app:assembleDebug --no-daemon --stacktrace
+      - name: Verify APK output and checksum
+        shell: bash
+        run: |
+          test -s android-spider-gateway/app/build/outputs/apk/debug/app-debug.apk
+          sha256sum android-spider-gateway/app/build/outputs/apk/debug/app-debug.apk | tee android-spider-gateway/app/build/outputs/apk/debug/SHA256SUMS.txt
+      - name: Upload installable universal Spider Gateway APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: NetPan-Spider-Gateway-N1-debug
+          path: |
+            android-spider-gateway/app/build/outputs/apk/debug/app-debug.apk
+            android-spider-gateway/app/build/outputs/apk/debug/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 30
